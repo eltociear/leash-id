@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Puts the demo leash in place: owner budget, agent gas money, and the policy the inbox is written for.
-//   per payment ≤ 2 MEC, per UTC day ≤ 5 MEC, owner approval above 1.5 MEC,
+//   per payment ≤ 0.02 MEC, per UTC day ≤ 0.05 MEC, owner approval above 0.015 MEC (1 MEC = 10^8 umec),
 //   vendors: Acme (the `vendor` key) + any vendor with a verified ME ID, valid 30 days.
 import { NET, address, balance, fmt, q } from "../lib/chain.mjs";
 import { act, send } from "../lib/agent.mjs";
 
-const MEC = 1_000_000n;
+const MEC = 10n ** 8n; // ME Hub: 1 MEC = 10^8 umec
+const m = (x) => BigInt(Math.round(x * 1e8)); // demo amounts are small, exact in float
 const [owner, agent, vendor] = await Promise.all(["owner", "agent", "vendor"].map(address));
 const must = (r, what) => {
   if (!r.ok) throw new Error(`${what}: ${r.reason}`);
@@ -13,18 +14,18 @@ const must = (r, what) => {
   return r;
 };
 
-const budget = BigInt(process.env.BUDGET_MEC ?? 10) * MEC;
+const budget = m(Number(process.env.BUDGET_MEC ?? 0.5));
 const acct = await q({ owner: { owner } });
 if (BigInt(acct.balance) - BigInt(acct.reserved) < budget) {
   must(await act("owner", { deposit: {} }, [{ denom: NET.denom, amount: String(budget) }]), "deposit");
 }
-if ((await balance(agent)) < MEC / 2n) must(await send("owner", agent, MEC), "agent gas");
+if ((await balance(agent)) < m(0.01)) must(await send("owner", agent, m(0.02)), "agent gas");
 
 const policy = {
   label: "ap-clerk",
-  per_tx_limit: String(2n * MEC),
-  daily_limit: String(5n * MEC),
-  approve_above: String(1_500_000n),
+  per_tx_limit: String(m(0.02)),
+  daily_limit: String(m(0.05)),
+  approve_above: String(m(0.015)),
   vendors: [vendor],
   any_verified_vendor: true,
   expires_at: Math.floor(Date.now() / 1000) + 30 * 86400,

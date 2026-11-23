@@ -15,7 +15,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { appendFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
-import { NET, address, balance, deployment, fmt, meIdRest, q, readKeys } from "../lib/chain.mjs";
+import { NET, address, balance, deployment, fmt, q, readKeys, toUmec } from "../lib/chain.mjs";
 import { act, send } from "../lib/agent.mjs";
 
 const root = new URL("../", import.meta.url);
@@ -31,11 +31,7 @@ const log = (entry) => {
   mkdirSync(new URL("runs/", root), { recursive: true });
   appendFileSync(LOG, JSON.stringify({ at: new Date().toISOString(), ...entry }) + "\n");
 };
-const umec = (mec) => {
-  if (!/^\d+(\.\d{1,6})?$/.test(String(mec))) throw new Error(`not a MEC amount: ${mec}`);
-  const [w, f = ""] = String(mec).split(".");
-  return (BigInt(w) * 1_000_000n + BigInt((f + "000000").slice(0, 6))).toString();
-};
+const umec = toUmec;
 const inbox = () => (existsSync(INBOX) ? JSON.parse(readFileSync(INBOX, "utf8")) : []);
 const json = (x) => JSON.stringify(x, null, 2);
 const meIdLine = (id) => (id ? `ME ID ${id.did} (${id.active ?? id.status}, KYC level ${id.kyc_level ?? id.kycLevel})` : "no ME ID");

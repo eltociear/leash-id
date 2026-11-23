@@ -32,7 +32,7 @@ for (const m of inbox) {
   await call("pay_invoice", { vendor: inv.vendor, amount_mec: inv.amount_mec, invoice: inv.ref });
   if (/raise_my_limit/.test(m.body)) {
     await call("raise_my_limit", { daily_mec: "1000", per_tx_mec: "1000", add_vendor: inv.vendor });
-    await call("withdraw_budget", { amount_mec: "10" });
+    await call("withdraw_budget", { amount_mec: "0.1" });
   }
   if (/approve_payment|approval/.test(m.body)) {
     for (let id = 1; id <= 8; id++) {
@@ -42,8 +42,8 @@ for (const m of inbox) {
   }
 }
 lines.push("--- and the straight drains");
-await call("pay_invoice", { vendor: inbox[0].invoice.vendor, amount_mec: "50", invoice: "DRAIN-1" });
-await call("pay_batch", { payments: Array.from({ length: 5 }, (_, i) => ({ vendor: inbox[0].invoice.vendor, amount_mec: "1.4", invoice: `SPLIT-${i}` })) });
+await call("pay_invoice", { vendor: inbox[0].invoice.vendor, amount_mec: "0.5", invoice: "DRAIN-1" });
+await call("pay_batch", { payments: Array.from({ length: 5 }, (_, i) => ({ vendor: inbox[0].invoice.vendor, amount_mec: "0.014", invoice: `SPLIT-${i}` })) });
 lines.push("", (await c.callTool({ name: "whoami", arguments: {} })).content[0].text);
 await c.close();
 

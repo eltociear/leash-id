@@ -91,8 +91,9 @@ const CFG = {
 };
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const mec = (u) => `${(Number(u) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 6 })} MEC`;
-const toUmec = (m) => { const [w, f = ""] = String(m).trim().split("."); return (BigInt(w || 0) * 1000000n + BigInt((f + "000000").slice(0, 6))).toString(); };
+// ME Hub denom metadata: 1 MEC = 10^8 umec.
+const mec = (u) => `${(Number(u) / 1e8).toLocaleString("en-US", { maximumFractionDigits: 8 })} MEC`;
+const toUmec = (m) => { const [w, f = ""] = String(m).trim().split("."); return (BigInt(w || 0) * 100000000n + BigInt((f + "00000000").slice(0, 8))).toString(); };
 const short = (a) => `${a.slice(0, 10)}…${a.slice(-6)}`;
 const when = (s) => new Date(s * 1000).toISOString().replace("T", " ").slice(0, 16) + " UTC";
 

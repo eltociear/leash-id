@@ -65,9 +65,9 @@ npm run build                 # reproducible wasm + cosmwasm-check with ME Hub's
 node scripts/keygen.mjs       # testnet-only keys in ~/.config/leash-id/keys.env
 node leash.mjs addrs          # balances + ME ID of each role
 node leash.mjs deploy         # store + instantiate on mechain_400-1
-node leash.mjs deposit 10
-node leash.mjs register agent --per-tx 2 --daily 5 --approve-above 1.5 --vendors vendor
-node leash.mjs pay vendor 1 INV-001          # as the agent
+node leash.mjs deposit 0.5            # 1 MEC = 10^8 umec on ME Hub
+node leash.mjs register agent --per-tx 0.02 --daily 0.05 --approve-above 0.015 --vendors vendor
+node leash.mjs pay vendor 0.01 INV-001          # as the agent
 node leash.mjs whois agent
 ```
 

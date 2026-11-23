@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  NET, ROOT, address, balance, contract, deployment, exec, fmt, meIdRest, q, readKeys,
+  NET, ROOT, address, balance, contract, deployment, exec, fmt, meIdRest, q, readKeys, toUmec,
   saveDeployment, signer, txUrl,
 } from "./lib/chain.mjs";
 
@@ -13,11 +13,7 @@ const opt = (name, def) => {
   return i >= 0 ? args[i + 1] : def;
 };
 const flag = (name) => args.includes(`--${name}`);
-/** "1.5" MEC -> "1500000" umec */
-const umec = (mec) => {
-  const [w, f = ""] = String(mec).split(".");
-  return (BigInt(w) * 1_000_000n + BigInt((f + "000000").slice(0, 6))).toString();
-};
+const umec = toUmec;
 const role = () => opt("as", undefined);
 const addrOf = async (x) => (x?.startsWith("me1") ? x : address(x));
 const out = (r) => {
@@ -30,8 +26,8 @@ const out = (r) => {
 
 const policy = async () => ({
   label: opt("label", "ap-clerk"),
-  per_tx_limit: umec(opt("per-tx", "2")),
-  daily_limit: umec(opt("daily", "5")),
+  per_tx_limit: umec(opt("per-tx", "0.02")),
+  daily_limit: umec(opt("daily", "0.05")),
   approve_above: opt("approve-above") ? umec(opt("approve-above")) : null,
   vendors: await Promise.all((opt("vendors", "vendor")).split(",").filter(Boolean).map(addrOf)),
   any_verified_vendor: flag("any-verified-vendor"),
@@ -106,7 +102,7 @@ const cmds = {
 if (!cmds[cmd]) {
   console.log(`usage: node leash.mjs <${Object.keys(cmds).join("|")}> …
   roles: owner agent vendor rogue (keys in ~/.config/leash-id/keys.env), or any me1… address
-  amounts are in MEC (e.g. 1.5)`);
+  amounts are in MEC (1 MEC = 10^8 umec), e.g. 0.015`);
   process.exit(cmd ? 1 : 0);
 }
 cmds[cmd]().catch((e) => { console.error("ERR", e.message ?? e); process.exit(1); });
