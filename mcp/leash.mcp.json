@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "leash-id": { "command": "node", "args": ["mcp/server.mjs"] }
+  }
+}
