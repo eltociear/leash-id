@@ -31,6 +31,10 @@ jobs:
         run: |
           cp artifacts/checksums.txt /tmp/committed.txt
           npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: leash_id.wasm
+          path: artifacts/leash_id.wasm
       - name: Built wasm == committed artifacts/leash_id.wasm
         run: diff /tmp/committed.txt artifacts/checksums.txt && echo "reproducible ✔"
       - name: The committed wasm is what runs on ME Hub testnet
