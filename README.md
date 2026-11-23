@@ -56,11 +56,28 @@ Leash ID is a CosmWasm contract on **ME Hub** that ties every agent to a **live 
 
 Policy: `per_tx_limit`, `daily_limit` (UTC day), `approve_above`, `vendors`, `any_verified_vendor`, `expires_at`.
 
+## The kill switch, on a real ME Hub node
+
+We can't suspend a testnet ME ID ourselves, so `scripts/killswitch.sh` runs against a local ME Hub node built
+from `openmetaearth/me-hub` (see [`devnet/`](devnet/README.md)). Recorded in `runs/devnet-killswitch-*.txt`:
+
+1. The owner's ME ID is active, and the agent pays Acme. **Paid.**
+2. The global DAO sends `MsgUpdateDidStatus` and the owner's ME ID becomes inactive.
+3. In the next block, the same agent, vendor and limits: `whois` shows `verified: false`, and the payment is a
+   failed transaction with `ME ID 1000000000101 is not active`.
+4. The ME ID is re-activated, and the same invoice goes through.
+5. An owner with only real-person verification (KYC level 1) tries to deposit: `has KYC level 1, need 2`.
+6. A batch to Acme plus an unlisted vendor that holds an ME ID settles through ME Hub's `multi_send`. **Paid.**
+
+Running it on a real node found one bug that the unit tests missed: wasmd rejects empty event attribute values,
+so `pay` to a vendor without an ME ID failed. It's fixed, the unit tests now fail on any empty attribute, and the
+testnet contract was redeployed (`deployment.json` → `superseded`).
+
 ## Run
 
 ```bash
 npm install
-npm test                      # 17 contract unit tests (fake DID module behind the Stargate query)
+npm test                      # 17 contract unit tests (fake DID module behind the Stargate query; any empty event attribute fails)
 npm run build                 # reproducible wasm + cosmwasm-check with ME Hub's capabilities
 node scripts/keygen.mjs       # testnet-only keys in ~/.config/leash-id/keys.env
 node leash.mjs addrs          # balances + ME ID of each role

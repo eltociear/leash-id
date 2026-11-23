@@ -1,9 +1,16 @@
 {
   "chainId": "mechain_400-1",
-  "codeId": 28,
-  "contract": "me1s4683e9zlq2pd2en2gnxrqzer0jvq3cj86qgx6r69h4n3j7vcsfszkptkk",
-  "storeTx": "C04EFB5995BFDFEF71695E98D5A07041159D85A12FE023DBB0226446A7A2C23F",
-  "instantiateTx": "630D7AC110B3E868C3145DF439F700B34D3E5FFF6FC6B4E74F51D7D2629C8BB8",
-  "wasmSha256": "26d2495f8ff2da821a9ca27140e4522772d35b04a33793097d75f29ada6d7e4d",
-  "deployedAt": "2026-11-23T12:58:40.010Z"
+  "codeId": 29,
+  "contract": "me1wyt8pvtrr9r8p2flsjcukjxw5rcu95cqusl8h6rfq0elcxlv5v2sg56lc4",
+  "storeTx": "0BB144E12D8F2D9AFD502B5390E37052969D746B7483B96237BC0D663B9E4E91",
+  "instantiateTx": "2DCF2B982A4295F2D887F0EDCC8692100BD8FAD1286B622C02E61462493C6B22",
+  "wasmSha256": "a1368515bd6eef2692edd961969ac97c4e57cca09893f3e38cf7dc2c19c8786f",
+  "deployedAt": "2026-11-23T13:14:35.022Z",
+  "superseded": [
+    {
+      "codeId": 28,
+      "contract": "me1s4683e9zlq2pd2en2gnxrqzer0jvq3cj86qgx6r69h4n3j7vcsfszkptkk",
+      "why": "emitted an empty vendor_did attribute, which wasmd rejects, so every payment to a vendor without an ME ID failed"
+    }
+  ]
 }

@@ -437,9 +437,12 @@ fn pay(
         .add_attribute("owner", &rec.owner)
         .add_attribute("owner_did", &d.owner_did)
         .add_attribute("vendor", &vendor)
-        .add_attribute("vendor_did", d.vendor_did.clone().unwrap_or_default())
         .add_attribute("amount", amount)
         .add_attribute("invoice", &invoice);
+    // wasmd rejects empty attribute values ("Empty attribute value"), so only emit it when present.
+    if let Some(vd) = &d.vendor_did {
+        res = res.add_attribute("vendor_did", vd);
+    }
     if d.needs_approval {
         res = res.add_attribute("status", "pending");
     } else {

@@ -1,0 +1,5 @@
+owner me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq {"@type":"/cosmos.crypto.secp256k1.PubKey","key":"A9r84w5U8K4GGP8B65aKI7MAwn9T8wDn00WVZLUwtrTe"}
+agent me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam {"@type":"/cosmos.crypto.secp256k1.PubKey","key":"Ami8vlISmLNb8nzpDhGdw2QBsJwdRNnvJw6BIAMfMd3w"}
+vendor me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q {"@type":"/cosmos.crypto.secp256k1.PubKey","key":"ArcLZEYeTJswYuTab2VQZFNIw771920VyvyNnNdmMD0a"}
+rogue me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p {"@type":"/cosmos.crypto.secp256k1.PubKey","key":"Ag1KzsnK+1GLfJpS19M8ECGtuPJVI19BrQHFyhTLtAux"}
+lowkyc me1uj8yuu8zchw0gm5gw4w8qf3fzm5l8ctkps48zz {"@type":"/cosmos.crypto.secp256k1.PubKey","key":"An94g2KkfWvGiD95eTB5VDR394h+DcP6kNOwUms7qJjJ"}

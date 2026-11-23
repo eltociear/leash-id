@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# The ME ID kill switch, on a local ME Hub node (testnet DIDs cannot be suspended by us):
+#   agent pays -> global DAO suspends the owner's ME ID -> the agent's next payment fails in the
+#   contract -> ME ID re-activated -> the same payment goes through. Plus the KYC-level gate and a
+#   batch settled through ME Hub's multi_send. Writes runs/devnet-killswitch-<ts>.txt.
+# Needs: ~/workspace/harbor/devnet (reset.sh, start.sh, med.sh fund) and `node leash.mjs deploy`
+#        + `node scripts/scenario.mjs` with ~/workspace/harbor/devnet/env.sh sourced.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+DEV="$(cd "$(dirname "$0")/../devnet" && pwd)"
+source "$DEV/env.sh"
+OWNER_DID=1000000000101
+mkdir -p runs
+OUT="runs/devnet-killswitch-$(date -u +%Y-%m-%dT%H-%M-%SZ).txt"
+log() { echo "$*" | tee -a "$OUT"; }
+step() { log ""; log "## $*"; }
+run() { log "\$ $*"; "$@" 2>&1 | tee -a "$OUT"; }
+inv() { echo "KS-$(date +%s)-$1"; }
+
+log "Leash ID kill-switch run on a LOCAL ME Hub node ($ME_CHAIN_ID, me-hub built from source)"
+log "contract $(jq -r .contract "$LEASH_DEPLOYMENT")"
+
+step "1. owner holds a live ME ID; the agent pays an allow-listed vendor"
+run "$DEV/med.sh" did owner
+run node leash.mjs pay vendor 0.01 "$(inv a)" --as agent
+
+step "2. the global DAO suspends the owner's ME ID (x/did MsgUpdateDidStatus)"
+run "$DEV/med.sh" status "$OWNER_DID" inactive
+run "$DEV/med.sh" did owner
+
+step "3. next block: the same agent, same vendor, same limits"
+run node leash.mjs whois agent
+run node leash.mjs check vendor 0.01 "$(inv b)"
+B=$(inv b)
+run node -e "import('./lib/agent.mjs').then(async ({act}) => { const {address} = await import('./lib/chain.mjs'); console.log(JSON.stringify(await act('agent', {pay:{vendor: await address('vendor'), amount:'1000000', invoice:'$B', memo:null}}))); })"
+
+step "4. ME ID re-activated: the payment goes through again"
+run "$DEV/med.sh" status "$OWNER_DID" active
+run node leash.mjs pay vendor 0.01 "$B" --as agent
+
+step "5. KYC level gate: an owner with only real-person verification (KYC_LEVEL_ONE)"
+run "$DEV/med.sh" did lowkyc
+run node -e "import('./lib/agent.mjs').then(async ({act}) => console.log(JSON.stringify(await act('lowkyc', {deposit:{}}, [{denom:'umec', amount:'1000000'}]))))"
+
+step "6. a batch settled through ME Hub's custom multi_send message (to Acme + DID 0000000000002, a verified ME ID holder not on the list)"
+run node leash.mjs batch "vendor:0.004:$(inv c)" "me1p7s6k4ecrm2kl0rs6399k99pyuk322dc78dcxq:0.003:$(inv d)" --as agent
+run node leash.mjs whois agent
+
+log ""
+log "done -> $OUT"

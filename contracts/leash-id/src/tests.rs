@@ -147,12 +147,19 @@ impl T {
         msg: ExecuteMsg,
         funds: &[cosmwasm_std::Coin],
     ) -> Result<cosmwasm_std::Response<MeMsg>, ContractError> {
-        execute(
+        let r = execute(
             self.deps.as_mut(),
             self.env.clone(),
             mock_info(who.as_str(), funds),
             msg,
-        )
+        );
+        // wasmd refuses the whole tx if any attribute key or value is empty (found live on ME Hub).
+        if let Ok(res) = &r {
+            for a in &res.attributes {
+                assert!(!a.key.trim().is_empty() && !a.value.trim().is_empty(), "empty attribute {:?}", a);
+            }
+        }
+        r
     }
     fn pay(&mut self, vendor: &Addr, amount: u128, inv: &str) -> Result<cosmwasm_std::Response<MeMsg>, ContractError> {
         let a = self.agent.clone();

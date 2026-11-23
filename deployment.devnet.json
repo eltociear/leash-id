@@ -1,0 +1,9 @@
+{
+  "chainId": "mechain_2401-1",
+  "codeId": 1,
+  "contract": "me14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sc0nehr",
+  "storeTx": "64D68B586997FB9359DC9F34A793F003AB06BBE0F4586DF3AF65685D1669627F",
+  "instantiateTx": "4E3CC2462AA7C988A1126F34402B27BC311DB3CFBE626E95E580F3EB14FC4924",
+  "wasmSha256": "a1368515bd6eef2692edd961969ac97c4e57cca09893f3e38cf7dc2c19c8786f",
+  "deployedAt": "2026-11-23T13:16:04.396Z"
+}

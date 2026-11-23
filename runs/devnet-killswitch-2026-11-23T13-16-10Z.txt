@@ -1,0 +1,101 @@
+Leash ID kill-switch run on a LOCAL ME Hub node (mechain_2401-1, me-hub built from source)
+contract me14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sc0nehr
+
+## 1. owner holds a live ME ID; the agent pays an allow-listed vendor
+$ /Users/ikkoashimine/workspace/harbor/leash-id/devnet/med.sh did owner
+{"info":{"did":"1000000000101","address":"me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq","pubkey":"{\"@type\":\"/cosmos.crypto.secp256k1.PubKey\",\"key\":\"A9r84w5U8K4GGP8B65aKI7MAwn9T8wDn00WVZLUwtrTe\"}","status":"DID_STATUS_ACTIVE","regionId":"","kycLevel":"KYC_LEVEL_TWO","sub_account":""}}
+$ node leash.mjs pay vendor 0.01 KS-1795439770-a --as agent
+ok  tx 7BE923264794C7F361648F673F75B32365F79F36BC0596F243C3CCAE546804A9  gas 253792  http://localhost:1317/cosmos/tx/v1beta1/txs/tx/7BE923264794C7F361648F673F75B32365F79F36BC0596F243C3CCAE546804A9
+    action=pay payment_id=1 agent=me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq owner_did=1000000000101 vendor=me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q amount=1000000 invoice=KS-1795439770-a status=paid
+
+## 2. the global DAO suspends the owner's ME ID (x/did MsgUpdateDidStatus)
+$ /Users/ikkoashimine/workspace/harbor/leash-id/devnet/med.sh status 1000000000101 inactive
+tx D0DFF3B3E6F14A4A8D56C4854A6862D2B01F359AEDDD437FFC0D46FC1023CCE1 code=0 
+$ /Users/ikkoashimine/workspace/harbor/leash-id/devnet/med.sh did owner
+{"info":{"did":"1000000000101","address":"me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq","pubkey":"{\"@type\":\"/cosmos.crypto.secp256k1.PubKey\",\"key\":\"A9r84w5U8K4GGP8B65aKI7MAwn9T8wDn00WVZLUwtrTe\"}","status":"DID_STATUS_INACTIVE","regionId":"","kycLevel":"KYC_LEVEL_TWO","sub_account":""}}
+
+## 3. next block: the same agent, same vendor, same limits
+$ node leash.mjs whois agent
+{
+  "agent": "me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam",
+  "owner": "me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq",
+  "owner_me_id": {
+    "did": "1000000000101",
+    "address": "me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq",
+    "active": false,
+    "kyc_level": 2
+  },
+  "verified": false,
+  "policy": {
+    "label": "ap-clerk",
+    "per_tx_limit": "2000000",
+    "daily_limit": "5000000",
+    "approve_above": "1500000",
+    "vendors": [
+      "me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q"
+    ],
+    "any_verified_vendor": true,
+    "expires_at": 1798031767
+  },
+  "spent_today": "1000000",
+  "remaining_today": "4000000",
+  "revoked": false,
+  "expired": false,
+  "owner_balance": "49000000"
+}
+$ node leash.mjs check vendor 0.01 KS-1795439775-b
+{
+  "ok": false,
+  "needs_approval": false,
+  "reason": "ME ID 1000000000101 is not active"
+}
+$ node -e import('./lib/agent.mjs').then(async ({act}) => { const {address} = await import('./lib/chain.mjs'); console.log(JSON.stringify(await act('agent', {pay:{vendor: await address('vendor'), amount:'1000000', invoice:'KS-1795439775-b', memo:null}}))); })
+{"ok":false,"refused":true,"reason":"ME ID 1000000000101 is not active","hash":"4AAF685595CADCC3348D38DF53D98E0F8CF5A325E31E4A656C7C7DA0D6FBABF3","link":"http://localhost:1317/cosmos/tx/v1beta1/txs/tx/4AAF685595CADCC3348D38DF53D98E0F8CF5A325E31E4A656C7C7DA0D6FBABF3"}
+
+## 4. ME ID re-activated: the payment goes through again
+$ /Users/ikkoashimine/workspace/harbor/leash-id/devnet/med.sh status 1000000000101 active
+tx D88349AA1E02B0DDE98ABD782B0CCD1A6DB8D48C5F7864D29927ABEF4851BE49 code=0 
+$ node leash.mjs pay vendor 0.01 KS-1795439775-b --as agent
+ok  tx D9EEC15FD6F74C1663F0F052B6334C2B7AA5F993C08D9B1C9D5904AC7E094209  gas 244022  http://localhost:1317/cosmos/tx/v1beta1/txs/tx/D9EEC15FD6F74C1663F0F052B6334C2B7AA5F993C08D9B1C9D5904AC7E094209
+    action=pay payment_id=2 agent=me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq owner_did=1000000000101 vendor=me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q amount=1000000 invoice=KS-1795439775-b status=paid
+
+## 5. KYC level gate: an owner with only real-person verification (KYC_LEVEL_ONE)
+$ /Users/ikkoashimine/workspace/harbor/leash-id/devnet/med.sh did lowkyc
+{"info":{"did":"1000000000102","address":"me1uj8yuu8zchw0gm5gw4w8qf3fzm5l8ctkps48zz","pubkey":"{\"@type\":\"/cosmos.crypto.secp256k1.PubKey\",\"key\":\"An94g2KkfWvGiD95eTB5VDR394h+DcP6kNOwUms7qJjJ\"}","status":"DID_STATUS_ACTIVE","regionId":"","kycLevel":"KYC_LEVEL_ONE","sub_account":""}}
+$ node -e import('./lib/agent.mjs').then(async ({act}) => console.log(JSON.stringify(await act('lowkyc', {deposit:{}}, [{denom:'umec', amount:'1000000'}]))))
+{"ok":false,"refused":true,"reason":"ME ID 1000000000102 has KYC level 1, need 2","hash":"03BB9C7E4C59BEAA6A8CDC971C34AF48344BC7A6FC56B698042EADE19A8F0C73","link":"http://localhost:1317/cosmos/tx/v1beta1/txs/tx/03BB9C7E4C59BEAA6A8CDC971C34AF48344BC7A6FC56B698042EADE19A8F0C73"}
+
+## 6. a batch settled through ME Hub's custom multi_send message (to Acme + DID 0000000000002, a verified ME ID holder not on the list)
+$ node leash.mjs batch vendor:0.004:KS-1795439787-c me1p7s6k4ecrm2kl0rs6399k99pyuk322dc78dcxq:0.003:KS-1795439787-d --as agent
+ok  tx 92DF443DD44B3F46656C23F2AFC36B697A2FB13E7BE96E5E7F5C8EEC63692DFE  gas 307240  http://localhost:1317/cosmos/tx/v1beta1/txs/tx/92DF443DD44B3F46656C23F2AFC36B697A2FB13E7BE96E5E7F5C8EEC63692DFE
+    action=pay_batch agent=me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq payment_ids=3,4 total=700000
+$ node leash.mjs whois agent
+{
+  "agent": "me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam",
+  "owner": "me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq",
+  "owner_me_id": {
+    "did": "1000000000101",
+    "address": "me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq",
+    "active": true,
+    "kyc_level": 2
+  },
+  "verified": true,
+  "policy": {
+    "label": "ap-clerk",
+    "per_tx_limit": "2000000",
+    "daily_limit": "5000000",
+    "approve_above": "1500000",
+    "vendors": [
+      "me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q"
+    ],
+    "any_verified_vendor": true,
+    "expires_at": 1798031767
+  },
+  "spent_today": "2700000",
+  "remaining_today": "2300000",
+  "revoked": false,
+  "expired": false,
+  "owner_balance": "47300000"
+}
+
+done -> runs/devnet-killswitch-2026-11-23T13-16-10Z.txt
