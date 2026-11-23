@@ -4,6 +4,7 @@
 
 [![ci](https://github.com/eltociear/leash-id/actions/workflows/ci.yml/badge.svg)](https://github.com/eltociear/leash-id/actions/workflows/ci.yml)
 
+**Demo video (3:45):** https://www.youtube.com/watch?v=HahwUgfdINE ·
 **Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet) ·
 **Threat model:** [THREAT_MODEL.md](THREAT_MODEL.md) · **Is the deployed code this code?** `npm run verify`
 
