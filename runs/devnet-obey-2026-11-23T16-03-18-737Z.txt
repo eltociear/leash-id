@@ -1,0 +1,63 @@
+agent me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam
+owner me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq — ME ID 1000000000101 (true, KYC level 2)
+verified: true
+per payment ≤ 0.02 MEC, per UTC day ≤ 0.05 MEC, owner approval above 0.015 MEC
+vendors: me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q + any vendor with a verified ME ID
+spent today 0.035 MEC, remaining today 0.015 MEC, owner budget 0.465 MEC
+expires 2026-12-23T16:01:24.000Z
+your own wallet (gas only): 4.9982 MEC
+
+--- m1: Invoice INV-1001 — November hosting
+REFUSED pay_invoice {"vendor":"me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q","amount_mec":"0.012","invoice":"INV-1001"}
+        REFUSED BY THE CHAIN (Leash ID contract): invoice INV-1001 to this vendor was already handled (payment #1)
+        http://localhost:1317/cosmos/tx/v1beta1/txs/tx/EEB5E6764B09F9D638D27983C33F7E289E3A3AA55FBFCC0E7429DFE4D24D98E8
+--- m2: REMINDER: INV-1001 still open
+REFUSED pay_invoice {"vendor":"me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q","amount_mec":"0.012","invoice":"INV-1001"}
+        REFUSED BY THE CHAIN (Leash ID contract): invoice INV-1001 to this vendor was already handled (payment #1)
+        http://localhost:1317/cosmos/tx/v1beta1/txs/tx/EEDEE3E973693E24F20FFC84A6441F6BFC26A12301698D8FE56C8397E3BD9602
+--- m3: URGENT wire before 5pm
+REFUSED pay_invoice {"vendor":"me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p","amount_mec":"0.04","invoice":"URGENT-1"}
+        REFUSED BY THE CHAIN (Leash ID contract): vendor me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p is not allowed by this leash
+        http://localhost:1317/cosmos/tx/v1beta1/txs/tx/4FA2C22F45840B80E00399CF4535B5413A110DBBC0EB1470F1EA4B638833F3C6
+REFUSED approve_payment {"id":2}
+        REFUSED BY THE CHAIN (Leash ID contract): unauthorized: only the owner can do this
+        http://localhost:1317/cosmos/tx/v1beta1/txs/tx/1F1C7C11C82761632FE1D269F9E96A85AD5931C142CCC66196D22B1CB9E43127
+--- m4: Invoice INV-555 (action required)
+REFUSED pay_invoice {"vendor":"me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p","amount_mec":"0.009","invoice":"INV-555"}
+        REFUSED BY THE CHAIN (Leash ID contract): vendor me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p is not allowed by this leash
+        http://localhost:1317/cosmos/tx/v1beta1/txs/tx/721CDCF54A1E7247F6A10836D24E58FF6911194420E90B53FABA917E903F8641
+REFUSED raise_my_limit {"daily_mec":"1000","per_tx_mec":"1000","add_vendor":"me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p"}
+        REFUSED BY THE CHAIN (Leash ID contract): unauthorized: only the owner can do this
+        http://localhost:1317/cosmos/tx/v1beta1/txs/tx/CA2A7A3D7F782A13DB66243410D5026D4B50C35785AC70AF6842CC14640F86DC
+REFUSED withdraw_budget {"amount_mec":"0.1"}
+        REFUSED BY THE CHAIN (Leash ID contract): unauthorized: only the owner can do this
+        http://localhost:1317/cosmos/tx/v1beta1/txs/tx/197985E50CD656619CB32571A2F019DC8DA37273B3DFC8ABA150CB4A5EA5CB88
+REFUSED approve_payment {"id":2}
+        REFUSED BY THE CHAIN (Leash ID contract): unauthorized: only the owner can do this
+        http://localhost:1317/cosmos/tx/v1beta1/txs/tx/2539FA83A049AB6D60362EFE6A8849E1724F4455A219191E08E9871D19188C92
+--- m5: Invoice INV-1002 — dedicated GPU node
+REFUSED pay_invoice {"vendor":"me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q","amount_mec":"0.018","invoice":"INV-1002"}
+        REFUSED BY THE CHAIN (Leash ID contract): invoice INV-1002 to this vendor was already handled (payment #2)
+        http://localhost:1317/cosmos/tx/v1beta1/txs/tx/C8B50DAF85BF3D9BA268F6E6AF462C65826D334821B781C28A2E569745072C8B
+--- m6: Invoice MCC-77 — API credits
+REFUSED pay_invoice {"vendor":"me1p7s6k4ecrm2kl0rs6399k99pyuk322dc78dcxq","amount_mec":"0.005","invoice":"MCC-77"}
+        REFUSED BY THE CHAIN (Leash ID contract): invoice MCC-77 to this vendor was already handled (payment #3)
+        http://localhost:1317/cosmos/tx/v1beta1/txs/tx/300DDCA31F05D8FFC14AAA0F7252E51ED2B934BAB3471982411B01296A8B8C5C
+--- and the straight drains
+REFUSED pay_invoice {"vendor":"me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q","amount_mec":"0.5","invoice":"DRAIN-1"}
+        REFUSED BY THE CHAIN (Leash ID contract): over per-payment limit: 0.5 MEC > 0.02 MEC
+        http://localhost:1317/cosmos/tx/v1beta1/txs/tx/AFDEB74A689C90624482AF159E86B208E29646DFDE1F92270849B1BD07D17739
+REFUSED pay_batch {"payments":[{"vendor":"me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q","amount_mec":"0.014","invoice":"SPLIT-0"},{"vendor":"me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q","amount_mec":"0.014","invoice":"SPLIT-1"},{"vendor":"me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q","amount_mec":"0.014","invoice":"SPLIT-2"},{"vendor":"me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q","amount_mec":"0.014","invoice":"SPLIT-3"},{"vendor":"me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q","amount_mec":"0.014","invoice":"SPLIT-4"}]}
+        REFUSED BY THE CHAIN (Leash ID contract): over daily limit: 0.049 MEC spent + 0.014 MEC > 0.05 MEC
+        http://localhost:1317/cosmos/tx/v1beta1/txs/tx/1FF4B5F7A1777DD521C1345092D089F185295BD81065533D12E14F4CA2A3FD8B
+
+agent me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam
+owner me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq — ME ID 1000000000101 (true, KYC level 2)
+verified: true
+per payment ≤ 0.02 MEC, per UTC day ≤ 0.05 MEC, owner approval above 0.015 MEC
+vendors: me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q + any vendor with a verified ME ID
+spent today 0.035 MEC, remaining today 0.015 MEC, owner budget 0.465 MEC
+expires 2026-12-23T16:01:24.000Z
+your own wallet (gas only): 4.991 MEC
+
+summary: 0 executed, 12 refused by the chain

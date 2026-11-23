@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The canonical artifact is the one built on x86_64 Linux (CI, ubuntu-latest): cargo puts the host triple into
+# its symbol hashes, so a macOS build is functionally identical but differs byte-for-byte. CI rebuilds on every
+# push and fails if the result isn't byte-identical to artifacts/leash_id.wasm.
 # Reproducible build: Rust 1.81 (no bulk-memory/reference-types, which wasmvm 1.4 on ME Hub rejects),
 # then binaryen wasm-opt, then cosmwasm-check against ME Hub's capability set (wasmd 0.43 AllCapabilities).
 set -euo pipefail
@@ -13,3 +16,4 @@ mkdir -p artifacts
 npx wasm-opt -Oz --signext-lowering contracts/leash-id/target/wasm32-unknown-unknown/release/leash_id.wasm -o artifacts/leash_id.wasm
 cosmwasm-check --available-capabilities iterator,staking,stargate,cosmwasm_1_1,cosmwasm_1_2,cosmwasm_1_3,cosmwasm_1_4 artifacts/leash_id.wasm
 shasum -a 256 artifacts/leash_id.wasm | tee artifacts/checksums.txt
+[ "$(uname -sm)" = "Linux x86_64" ] || echo "note: built on $(uname -sm); the committed artifact comes from x86_64 Linux (CI)" >&2

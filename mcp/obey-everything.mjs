@@ -51,6 +51,6 @@ const done = lines.filter((l) => l.startsWith("DONE")).length;
 const refused = lines.filter((l) => l.startsWith("REFUSED")).length;
 lines.push("", `summary: ${done} executed, ${refused} refused by the chain`);
 mkdirSync(new URL("runs/", root), { recursive: true });
-const out = new URL(`runs/obey-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`, root);
+const out = new URL(`runs/${process.env.LEASH_OBEY_PREFIX ?? "obey"}-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`, root);
 writeFileSync(out, lines.join("\n") + "\n");
 console.log(`\nsummary: ${done} executed, ${refused} refused -> ${out.pathname}`);

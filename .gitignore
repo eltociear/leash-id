@@ -4,3 +4,4 @@ target/
 *.env
 devnet/home/
 devnet/*.log
+inbox/devnet.json

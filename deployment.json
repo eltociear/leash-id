@@ -1,12 +1,17 @@
 {
   "chainId": "mechain_400-1",
-  "codeId": 29,
-  "contract": "me1wyt8pvtrr9r8p2flsjcukjxw5rcu95cqusl8h6rfq0elcxlv5v2sg56lc4",
-  "storeTx": "0BB144E12D8F2D9AFD502B5390E37052969D746B7483B96237BC0D663B9E4E91",
-  "instantiateTx": "2DCF2B982A4295F2D887F0EDCC8692100BD8FAD1286B622C02E61462493C6B22",
-  "wasmSha256": "a1368515bd6eef2692edd961969ac97c4e57cca09893f3e38cf7dc2c19c8786f",
-  "deployedAt": "2026-11-23T13:14:35.022Z",
+  "codeId": 32,
+  "contract": "me13xlavey3hpkj823z7y3gcq9d23ut7829yjjygz3whr2y2kzlprhssfqa2h",
+  "storeTx": "A021527D6C6B03FE6DB31A950B8753755B369EFBD5CD5A650ADC332C2A72340D",
+  "instantiateTx": "A8FCE7C341BF01B03C8A9311F2C0EE282D959FD48AFE68143E96A63C9682282B",
+  "wasmSha256": "72a10a89b0441bf4cc3a8f5b3e8babe6b11bb9b077899870b6f516099edefcd1",
+  "deployedAt": "2026-11-23T15:58:30.579Z",
   "superseded": [
+    {
+      "codeId": 29,
+      "contract": "me1wyt8pvtrr9r8p2flsjcukjxw5rcu95cqusl8h6rfq0elcxlv5v2sg56lc4",
+      "why": "approve did not re-check the owner's ME ID (a suspended owner could still release held payments); duplicate invoices were reported after limit errors; built on macOS, not the canonical Linux build"
+    },
     {
       "codeId": 28,
       "contract": "me1s4683e9zlq2pd2en2gnxrqzer0jvq3cj86qgx6r69h4n3j7vcsfszkptkk",

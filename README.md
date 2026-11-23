@@ -2,7 +2,10 @@
 
 ![Leash ID: every agent payment re-checks the owner's live ME ID on ME Hub](assets/cover.png)
 
-**Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet)
+[![ci](https://github.com/eltociear/leash-id/actions/workflows/ci.yml/badge.svg)](https://github.com/eltociear/leash-id/actions/workflows/ci.yml)
+
+**Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet) ·
+**Threat model:** [THREAT_MODEL.md](THREAT_MODEL.md) · **Is the deployed code this code?** `npm run verify`
 
 AI agents are starting to pay invoices and buy services. Two things are missing:
 
@@ -61,13 +64,18 @@ Policy: `per_tx_limit`, `daily_limit` (UTC day), `approve_above`, `vendors`, `an
 We can't suspend a testnet ME ID ourselves, so `scripts/killswitch.sh` runs against a local ME Hub node built
 from `openmetaearth/me-hub` (see [`devnet/`](devnet/README.md)). Recorded in `runs/devnet-killswitch-*.txt`:
 
-1. The owner's ME ID is active, and the agent pays Acme. **Paid.**
+1. The owner's ME ID is active, and the agent pays Acme. **Paid.** A second, larger invoice is held for approval.
 2. The global DAO sends `MsgUpdateDidStatus` and the owner's ME ID becomes inactive.
 3. In the next block, the same agent, vendor and limits: `whois` shows `verified: false`, and the payment is a
-   failed transaction with `ME ID 1000000000101 is not active`.
-4. The ME ID is re-activated, and the same invoice goes through.
+   failed transaction with `ME ID 1000000000101 is not active`. The owner can't approve the held payment either
+   (rejecting stays possible: a suspended owner can stop money, never move it).
+4. The ME ID is re-activated, and the same invoice goes through. The held payment can now be approved.
 5. An owner with only real-person verification (KYC level 1) tries to deposit: `has KYC level 1, need 2`.
 6. A batch to Acme plus an unlisted vendor that holds an ME ID settles through ME Hub's `multi_send`. **Paid.**
+
+`npm run devnet` (`scripts/devnet-runs.sh`) rebuilds the node from scratch and records every devnet run:
+the kill switch, Claude Code as the agent over MCP (`runs/devnet-claude-*.jsonl`), and the obey-everything
+client (`runs/devnet-obey-*.txt`).
 
 Running it on a real node found one bug that the unit tests missed: wasmd rejects empty event attribute values,
 so `pay` to a vendor without an ME ID failed. It's fixed, the unit tests now fail on any empty attribute, and the
@@ -77,8 +85,9 @@ testnet contract was redeployed (`deployment.json` → `superseded`).
 
 ```bash
 npm install
-npm test                      # 17 contract unit tests (fake DID module behind the Stargate query; any empty event attribute fails)
-npm run build                 # reproducible wasm + cosmwasm-check with ME Hub's capabilities
+npm test                      # 18 contract unit tests (fake DID module behind the Stargate query; any empty event attribute fails)
+npm run build                 # reproducible wasm (local paths remapped) + cosmwasm-check with ME Hub's capabilities
+npm run verify                # on-chain checksum of the deployed code == artifacts/leash_id.wasm; CI runs this too
 node scripts/keygen.mjs       # testnet-only keys in ~/.config/leash-id/keys.env
 node leash.mjs addrs          # balances + ME ID of each role
 node leash.mjs deploy         # store + instantiate on mechain_400-1

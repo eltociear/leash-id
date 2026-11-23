@@ -7,7 +7,7 @@
 #        + `node scripts/scenario.mjs` with ~/workspace/harbor/devnet/env.sh sourced.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-DEV="$(cd "$(dirname "$0")/../devnet" && pwd)"
+DEV=devnet   # relative, so the run record has no local paths
 source "$DEV/env.sh"
 OWNER_DID=1000000000101
 mkdir -p runs
@@ -23,6 +23,7 @@ log "contract $(jq -r .contract "$LEASH_DEPLOYMENT")"
 step "1. owner holds a live ME ID; the agent pays an allow-listed vendor"
 run "$DEV/med.sh" did owner
 run node leash.mjs pay vendor 0.01 "$(inv a)" --as agent
+run node leash.mjs pay vendor 0.018 "$(inv p)" --as agent   # over approve_above: held as payment #2
 
 step "2. the global DAO suspends the owner's ME ID (x/did MsgUpdateDidStatus)"
 run "$DEV/med.sh" status "$OWNER_DID" inactive
@@ -33,10 +34,13 @@ run node leash.mjs whois agent
 run node leash.mjs check vendor 0.01 "$(inv b)"
 B=$(inv b)
 run node -e "import('./lib/agent.mjs').then(async ({act}) => { const {address} = await import('./lib/chain.mjs'); console.log(JSON.stringify(await act('agent', {pay:{vendor: await address('vendor'), amount:'1000000', invoice:'$B', memo:null}}))); })"
+log "# the suspended owner tries to push the held payment out"
+run node -e "import('./lib/agent.mjs').then(async ({act}) => console.log(JSON.stringify(await act('owner', {approve:{id:2}}))))"
 
-step "4. ME ID re-activated: the payment goes through again"
+step "4. ME ID re-activated: the payment goes through again, and the owner can approve #2"
 run "$DEV/med.sh" status "$OWNER_DID" active
 run node leash.mjs pay vendor 0.01 "$B" --as agent
+run node leash.mjs approve 2
 
 step "5. KYC level gate: an owner with only real-person verification (KYC_LEVEL_ONE)"
 run "$DEV/med.sh" did lowkyc
