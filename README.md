@@ -1,5 +1,9 @@
 # Leash ID — KYC-backed AI agents on ME Network
 
+![Leash ID: every agent payment re-checks the owner's live ME ID on ME Hub](assets/cover.png)
+
+**Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet)
+
 AI agents are starting to pay invoices and buy services. Two things are missing:
 
 1. **Counterparties can't tell who stands behind an agent.** An address is just an address.
