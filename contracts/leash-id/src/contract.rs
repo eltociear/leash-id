@@ -104,9 +104,10 @@ fn deposit(deps: DepsMut, info: MessageInfo) -> Res {
 
 fn withdraw(deps: DepsMut, info: MessageInfo, amount: Uint128) -> Res {
     let cfg = CONFIG.load(deps.storage)?;
+    // Only an owner who deposited can withdraw. An agent (or anyone else) gets a plain refusal.
     let mut acct = OWNERS
         .may_load(deps.storage, &info.sender)?
-        .unwrap_or_default();
+        .ok_or(ContractError::Unauthorized {})?;
     let available = acct.balance - acct.reserved;
     if amount.is_zero() || amount > available {
         return Err(ContractError::InsufficientBudget { available, amount });
@@ -269,6 +270,19 @@ fn evaluate(
     // The human behind the agent must still hold a live ME ID. Suspend the ME ID and
     // every agent under it stops paying on the next block.
     let owner_id = verified(deps, cfg, &rec.owner)?;
+    // Duplicates first: "already paid as #N" is the useful answer, even when a limit would also refuse.
+    if let Some(id) = INVOICES.may_load(deps.storage, (&rec.owner, vendor, invoice))? {
+        return Err(ContractError::DuplicateInvoice {
+            invoice: invoice.to_string(),
+            id,
+        });
+    }
+    if in_flight.iter().any(|(v, i)| v == vendor && i == invoice) {
+        return Err(ContractError::DuplicateInvoice {
+            invoice: invoice.to_string(),
+            id: 0,
+        });
+    }
     if vendor == agent {
         return Err(ContractError::SelfDealing {});
     }
@@ -305,18 +319,6 @@ fn evaluate(
     let available = acct.balance - acct.reserved;
     if amount > available {
         return Err(ContractError::InsufficientBudget { available, amount });
-    }
-    if let Some(id) = INVOICES.may_load(deps.storage, (&rec.owner, vendor, invoice))? {
-        return Err(ContractError::DuplicateInvoice {
-            invoice: invoice.to_string(),
-            id,
-        });
-    }
-    if in_flight.iter().any(|(v, i)| v == vendor && i == invoice) {
-        return Err(ContractError::DuplicateInvoice {
-            invoice: invoice.to_string(),
-            id: 0,
-        });
     }
     Ok(Decision {
         needs_approval: rec.policy.approve_above.map_or(false, |t| amount > t),
@@ -529,6 +531,9 @@ fn settle(deps: DepsMut, env: Env, info: MessageInfo, id: u64, approve: bool) ->
         .add_attribute("payment_id", id.to_string())
         .add_attribute("amount", p.amount);
     if approve {
+        // Approving moves money, so the approver must still hold a live ME ID. Rejecting stays open:
+        // a suspended owner can always stop a payment, never push one out.
+        verified(deps.as_ref(), &cfg, &p.owner)?;
         acct.balance -= p.amount;
         p.status = PayStatus::Paid;
         res = res

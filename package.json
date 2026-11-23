@@ -1,15 +1,17 @@
 {
   "name": "leash-id",
   "version": "1.0.0",
-  "description": "",
+  "description": "KYC-backed spending leashes for AI agents on ME Network (ME Hub CosmWasm)",
   "main": "index.js",
   "scripts": {
     "test": "cd contracts/leash-id && cargo +1.81.0 test -q",
-    "build": "bash scripts/build.sh"
+    "build": "bash scripts/build.sh",
+    "verify": "node scripts/verify.mjs",
+    "devnet": "bash scripts/devnet-runs.sh"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
     "@cosmjs/cosmwasm-stargate": "^0.32.4",

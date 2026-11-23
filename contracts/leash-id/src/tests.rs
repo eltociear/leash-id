@@ -341,6 +341,13 @@ fn duplicate_invoice_is_refused() {
         t.pay(&v, 10, "INV-7").unwrap_err(),
         ContractError::DuplicateInvoice { id: 1, .. }
     ));
+    // a re-sent invoice is reported as a duplicate even once the daily limit is used up
+    t.pay(&v, 140, "INV-8").unwrap();
+    t.pay(&v, 140, "INV-9").unwrap();
+    assert!(matches!(
+        t.pay(&v, 140, "INV-8").unwrap_err(),
+        ContractError::DuplicateInvoice { id: 2, .. }
+    ));
 }
 
 #[test]
@@ -371,6 +378,26 @@ fn approval_flow_reserves_funds() {
     t.pay(&v, 160, "BIG-2").unwrap();
     t.exec(&o, ExecuteMsg::Reject { id: 2 }, &[]).unwrap();
     assert_eq!(t.whois().owner_balance, Uint128::new(820));
+}
+
+#[test]
+fn suspended_owner_can_reject_but_not_approve() {
+    let mut t = setup();
+    let (v, o) = (t.vendor.clone(), t.owner.clone());
+    t.pay(&v, 180, "BIG-1").unwrap();
+    t.pay(&v, 100, "BIG-2").unwrap(); // under approve_above: paid, not pending
+    t.env.block.time = Timestamp::from_seconds(101 * DAY);
+    t.pay(&v, 170, "BIG-3").unwrap();
+    t.set_did(&o, "DID_STATUS_INACTIVE", "KYC_LEVEL_TWO");
+    assert!(matches!(
+        t.exec(&o, ExecuteMsg::Approve { id: 1 }, &[]).unwrap_err(),
+        ContractError::MeIdInactive { .. }
+    ));
+    let res = t.exec(&o, ExecuteMsg::Reject { id: 3 }, &[]).unwrap();
+    assert!(sent(&res).is_empty());
+    t.set_did(&o, "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO");
+    let res = t.exec(&o, ExecuteMsg::Approve { id: 1 }, &[]).unwrap();
+    assert_eq!(sent(&res), vec![(v.to_string(), 180)]);
 }
 
 #[test]
@@ -435,11 +462,11 @@ fn agent_cannot_attach_funds_or_drain_via_withdraw() {
             &coins(5, "umec")
         )
         .is_err());
-    // the agent has no balance of its own to withdraw
+    // withdraw is for owners who deposited; the agent is refused outright
     assert!(matches!(
         t.exec(&a, ExecuteMsg::Withdraw { amount: Uint128::new(1) }, &[])
             .unwrap_err(),
-        ContractError::InsufficientBudget { .. }
+        ContractError::Unauthorized {}
     ));
 }
 
