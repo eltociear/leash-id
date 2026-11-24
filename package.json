@@ -5,7 +5,7 @@
   "scripts": {
     "test": "npm run test:contract && npm run test:js",
     "test:contract": "cd contracts/leash-id && cargo +1.81.0 test -q",
-    "test:js": "node --test test/",
+    "test:js": "node --test test/*.test.mjs",
     "build": "bash scripts/build.sh",
     "verify": "node scripts/verify.mjs",
     "devnet": "bash scripts/devnet-runs.sh"
