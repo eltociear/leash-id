@@ -1,5 +1,7 @@
 # Leash ID — KYC-backed spending leashes for AI agents on ME Network
 
+**English** · [简体中文](README.zh-CN.md)
+
 ![Leash ID: every agent payment re-checks the owner's live ME ID on ME Hub](assets/cover.png)
 
 [![ci](https://github.com/eltociear/leash-id/actions/workflows/ci.yml/badge.svg)](https://github.com/eltociear/leash-id/actions/workflows/ci.yml)
@@ -14,6 +16,20 @@ AI agents are starting to pay invoices and buy services. Two things are missing:
 
 1. **Counterparties can't tell who stands behind an agent.** An address is just an address.
 2. **Owners have no hard guarantee the agent can't overspend.** It's "hand over your keys" or "approve everything by hand."
+
+Why now:
+
+- **Accounts payable is where the money is stolen.** Business email compromise drew 21,442 complaints and close to
+  $2.8 billion in reported losses in 2024, and nearly $8.5 billion over 2022-2024 ([FBI IC3 via Nacha](https://www.nacha.org/news/fbis-ic3-finds-almost-85-billion-lost-business-email-compromise-last-three-years)).
+  An AI agent reading invoices inherits that attack: one convincing email away from a wire.
+- **The networks are building agent verification.** Visa's Trusted Agent Protocol helps merchants recognise
+  trusted agents, and Mastercard pairs Agent Pay with "Verifiable Intent" for agent permissions
+  ([Visa](https://hk.review.visa.com/en_HK/about-visa/newsroom/press-releases/the-key-forces-driving-payments-for-2026-from-agentic-commerce-to-interoperable-payments.html),
+  [Mastercard](https://www.mastercard.com/in/en/news-and-trends/stories/2026/mastercard-agentic-commerce-vision.html)).
+  Both are card-network credentials. On a chain, nobody vouches for an agent.
+- **On-chain agent payments can't tell who is paying.** "A scheduled script and an agent produce the same record"
+  ([TRM Labs, Sep 2026](https://www.trmlabs.com/trm-tech-blog/whos-actually-paying-measuring-ai-agent-payments-onchain)).
+  A seller taking x402-style payments can't see whether anyone answers for the payer.
 
 Leash ID is a CosmWasm contract on **ME Hub** that ties every agent to a **live ME ID** (ME Network's native KYC
 identity) and enforces a spending leash on-chain. An MCP server lets Claude, or any other agent, work an
