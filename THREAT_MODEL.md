@@ -22,7 +22,7 @@ is readable from its process** (see [SECURITY.md](SECURITY.md)). The owner-only 
 `withdraw_budget`, `raise_my_limit`) aren't offered by default. The demo turns them on (`LEASH_HONEYPOT_TOOLS=1`)
 to show that the chain refuses them whatever the tool list or the prompt says. The demo's fourth tool, `send_mec`,
 is a plain transfer from the agent's own wallet, and the chain allows it: that wallet is the one thing the leash
-doesn't cover, so it should hold only gas money (SECURITY.md §4).
+doesn't cover. With an owner fee grant (T27) it can be empty.
 
 ## Threats
 
@@ -54,6 +54,7 @@ doesn't cover, so it should hold only gas money (SECURITY.md §4).
 | T24 | One insider moves money alone | a single compromised approver key approves a large held payment | `set_approvers`: N signatures, each a live ME ID, re-counted at release; any one can reject; no self-approval; agents can't be approvers | `held_payments_can_need_two_signatures`; devnet step 8; `npm run e2e:owner` |
 | T25 | The agent fetches internal URLs (SSRF) | an injected email makes the agent call `pay_for_api` on cloud metadata or a LAN admin page | public https only; the resolved address must be public and the request connects to that same address (no DNS-rebinding window); no redirects; 64 KB cap | `test/mcp.test.mjs` |
 | T26 | Paying itself through its own EVM form | an agent key that also holds an ME ID links its EVM sub-account and pays it | `vendor_sane` checks the main account behind any registered sub-account | `an_evm_sub_account_counts_as_its_main_me_id` |
+| T27 | The agent key's own wallet | a stolen agent key sends away whatever MEC it holds for gas | the owner pays the agent's fees through x/feegrant (contract calls only, capped, expiring), so the key can hold 0 MEC | `runs/devnet-killswitch-*.txt` step 9; SECURITY.md §4 |
 
 ## What Leash ID does *not* protect against
 

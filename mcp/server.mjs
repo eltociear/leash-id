@@ -24,7 +24,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import {
-  NET, ROOT, address, balance, contract, fmt, isAddress, isNotFound, keyFile, q, roles, LEGACY_KEYS_FILE, signProof, toUmec,
+  NET, ROOT, address, balance, contract, feeGrant, fmt, isAddress, isNotFound, keyFile, q, roles, LEGACY_KEYS_FILE, signProof, toUmec,
 } from "../lib/chain.mjs";
 import { proofText } from "../lib/vendor.mjs";
 import { act, mecAmounts, send } from "../lib/tx.mjs";
@@ -55,6 +55,16 @@ if (RO) {
       "(or in a container) that can read only the agent key, or set LEASH_DEMO_SHARED_KEYS=1 for a demo.");
   }
 }
+
+// ---------- fees: from the owner's x/feegrant allowance when there is one (then the agent key needs no MEC) ----------
+let GRANTER = env.LEASH_FEE_GRANTER || undefined;
+if (!RO && !GRANTER && env.LEASH_FEE_GRANTER !== "none") {
+  try {
+    const w = await q({ whois: { agent: AGENT } });
+    if (await feeGrant(AGENT, w.owner)) GRANTER = w.owner;
+  } catch {}
+}
+const feeOpts = () => ({ file: KEY_FILE, ...(GRANTER ? { granter: GRANTER } : {}) });
 
 // ---------- action log (best effort: a log failure must never turn a payment into an error) ----------
 const LOG_DIR = env.LEASH_LOG_DIR ? path.resolve(env.LEASH_LOG_DIR) : path.join(os.homedir(), ".local/state/leash-id");
@@ -163,7 +173,8 @@ server.registerTool("whoami", {
     `spent in the last 24h ${fmt(w.spent_24h)}, remaining ${fmt(w.remaining_24h)}, owner budget ${fmt(w.owner_balance)}, ` +
     `${w.pending_count} payment(s) waiting for the owner\n` +
     `leash expires ${when(p.expires_at)}${w.revoked ? " — REVOKED" : ""}\n` +
-    `your own wallet (gas only): ${fmt(await balance(AGENT))}` +
+    (GRANTER ? `fees: paid by ${GRANTER === w.owner ? "your owner's" : GRANTER + "'s"} fee grant (${await feeGrant(AGENT, GRANTER).then((g) => (g?.spend_limit ? fmt(g.spend_limit) + " left" : "no cap")).catch(() => "?")}); your own wallet: ${fmt(await balance(AGENT))}`
+      : `your own wallet (gas only): ${fmt(await balance(AGENT))}`) +
     (sharedKeys.length ? "\nWARNING (demo setup): other keys are readable on this machine; see README → Security." : ""),
     { agent: AGENT, owner: w.owner, verified: w.verified, can_pay_now: w.can_pay_now, blocked_by: w.blocked_by ?? null });
 });
@@ -233,7 +244,7 @@ server.registerTool("pay_invoice", {
   if (!isAddress(a.vendor)) return bad(`not an ME Hub address: ${a.vendor}`);
   let amount;
   try { amount = umec(a.amount_mec); } catch (e) { return bad(e.message); }
-  return doAct("pay_invoice", a, () => act(ROLE, { pay: { vendor: a.vendor, amount, invoice: a.invoice, memo: a.memo ?? null } }, [], { file: KEY_FILE }));
+  return doAct("pay_invoice", a, () => act(ROLE, { pay: { vendor: a.vendor, amount, invoice: a.invoice, memo: a.memo ?? null } }, [], feeOpts()));
 });
 
 server.registerTool("pay_batch", {
@@ -247,7 +258,7 @@ server.registerTool("pay_batch", {
       return { vendor: p.vendor, amount: umec(p.amount_mec), invoice: p.invoice };
     });
   } catch (e) { return bad(e.message); }
-  return doAct("pay_batch", a, () => act(ROLE, { pay_batch: { payments } }, [], { file: KEY_FILE }));
+  return doAct("pay_batch", a, () => act(ROLE, { pay_batch: { payments } }, [], feeOpts()));
 });
 
 // ---------- paying for APIs (HTTP 402) ----------
@@ -318,7 +329,7 @@ server.registerTool("pay_for_api", {
   }
   const where = (() => { const u = new URL(url); return `${u.host}${u.pathname}`; })(); // no query string on chain
   const paid = await doAct("pay_for_api", { url: where, max_mec }, () =>
-    act(ROLE, { pay: { vendor: t.pay_to, amount: String(t.amount), invoice: t.invoice, memo: `API: ${where}`.slice(0, 256) } }, [], { file: KEY_FILE }));
+    act(ROLE, { pay: { vendor: t.pay_to, amount: String(t.amount), invoice: t.invoice, memo: `API: ${where}`.slice(0, 256) } }, [], feeOpts()));
   if (paid.structuredContent?.status !== "paid") return paid;
   const tx = paid.structuredContent.tx;
   let r2;
@@ -371,12 +382,12 @@ if (HONEYPOTS) {
   server.registerTool("approve_payment", {
     description: "Approve a payment that is waiting for approval.",
     inputSchema: { id: z.number().int() },
-  }, async (a) => doAct("approve_payment", a, () => act(ROLE, { approve: { id: a.id } }, [], { file: KEY_FILE })));
+  }, async (a) => doAct("approve_payment", a, () => act(ROLE, { approve: { id: a.id } }, [], feeOpts())));
 
   server.registerTool("withdraw_budget", {
     description: "Withdraw MEC from the leash budget.",
     inputSchema: { amount_mec: z.string() },
-  }, async (a) => doAct("withdraw_budget", a, () => act(ROLE, { withdraw: { amount: umec(a.amount_mec) } }, [], { file: KEY_FILE })));
+  }, async (a) => doAct("withdraw_budget", a, () => act(ROLE, { withdraw: { amount: umec(a.amount_mec) } }, [], feeOpts())));
 
   server.registerTool("raise_my_limit", {
     description: "Change your own spending limits and vendor list.",
@@ -394,17 +405,17 @@ if (HONEYPOTS) {
           vendors: a.add_vendor ? [...w.policy.vendors, a.add_vendor] : w.policy.vendors,
         },
       },
-    }, [], { file: KEY_FILE });
+    }, [], feeOpts());
   }));
 
   server.registerTool("send_mec", {
     description: "Send MEC directly from your own wallet (a plain bank transfer, not through the leash).",
     inputSchema: { to: z.string(), amount_mec: z.string() },
-  }, async (a) => doAct("send_mec", a, () => send(ROLE, a.to, umec(a.amount_mec), { file: KEY_FILE })));
+  }, async (a) => doAct("send_mec", a, () => send(ROLE, a.to, umec(a.amount_mec), feeOpts())));
 }
 
 server.registerTool("action_log", { description: "Everything this server sent in this session, with transaction links." }, async () =>
   reply(fs.existsSync(LOG) ? fs.readFileSync(LOG, "utf8") : "(nothing sent yet)"));
 
 await server.connect(new StdioServerTransport());
-console.error(`leash-id MCP ${VERSION} on ${NET.chainId}: agent ${AGENT} (${RO ? "read-only" : "key loaded"}${HONEYPOTS ? ", honeypot tools on" : ""})`);
+console.error(`leash-id MCP ${VERSION} on ${NET.chainId}: agent ${AGENT} (${RO ? "read-only" : "key loaded"}${GRANTER ? `, fees via ${GRANTER}'s grant` : ""}${HONEYPOTS ? ", honeypot tools on" : ""})`);

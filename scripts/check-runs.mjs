@@ -76,6 +76,9 @@ if (ksFile) {
   check(/ok\s+set_approvers/.test(s8) && appr.length === 2 && /approvals=1 /.test(appr[0]) && !/status=paid/.test(appr[0]) && /approvals=2 /.test(appr[1]),
     "8: with two signatures required, the owner's alone doesn't pay; the co-approver's completes it");
   check(/REFUSED by the contract: unauthorized/.test(s8), "8: the agent can't sign its own held payment");
+  const s9 = steps[9] ?? "";
+  check(/ok\s+accept_leash/.test(s9) && /ok\s+pay \(paid\)/.test(s9) && /the agent's own wallet holds 0 MEC/.test(s9) && /MsgExecuteContract only/.test(s9) && /NOT_SENT: the sending key doesn't hold enough MEC/.test(s9),
+    "9: a key holding 0 MEC accepts its leash and pays on the owner's fee grant; it can't move anything else");
 }
 
 // ---- agent-to-agent commerce

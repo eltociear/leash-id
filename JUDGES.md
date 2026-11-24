@@ -64,6 +64,7 @@ needs the global DAO's key, so it can only be shown on a node we run.
 - EVM sub-accounts (x/kyc `MsgCreateSubAccount`) resolve to their ME ID. This is shown on testnet with real
   records (above) and on the node (step 7).
 - Payments and fees are in MEC, and receipts store the owner's and the vendor's ME ID numbers.
+- The agent key can hold 0 MEC: the owner pays its fees through x/feegrant, contract calls only (step 9).
 
 **Product value (20)**
 - The problem, with sources: [README → Why now](README.md). Business email compromise cost close to $2.8B in

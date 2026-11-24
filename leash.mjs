@@ -6,9 +6,9 @@ import { parseArgs } from "node:util";
 import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
 import {
   KEY_DIR, LEGACY_KEYS_FILE, NET, ROOT, addrOf, address, balance, contract, contractInfo, deployment,
-  fmt, isNotFound, keyFile, meIdRest, q, readKey, reader, roles, saveDeployment, signer, toUmec,
+  feeGrant, fmt, isNotFound, keyFile, meIdRest, q, readKey, reader, roles, saveDeployment, signer, toUmec,
 } from "./lib/chain.mjs";
-import { act, mecAmounts } from "./lib/tx.mjs";
+import { act, grantGasMsg, mecAmounts, revokeGasMsg, sendTx } from "./lib/tx.mjs";
 
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
 
@@ -30,6 +30,7 @@ const OPTS = {
   agent: { type: "string" },
   owner: { type: "string" },
   limit: { type: "string" },
+  "fee-granter": { type: "string" },
   before: { type: "string" },
   "min-kyc": { type: "string" },
   admin: { type: "string" },
@@ -70,6 +71,8 @@ const HELP = {
   history: ["history [--agent a | --owner o] [--limit 20] [--before id] [--csv]", "payments, newest first (--csv: every payment, for accounting)"],
   invoice: ["invoice <vendor> <invoice> [--owner o]", "was this invoice already handled?"],
   approvers: ["approvers <addr,…> --threshold N [--as owner]", "co-approvers for held payments: N signatures (yours included) release one; any one can reject"],
+  "gas-grant": ["gas-grant <agent> --limit <MEC> [--days 30] [--as owner]", "pay an agent's fees from your wallet (contract calls only, capped), so the agent key can hold no MEC at all"],
+  "gas-revoke": ["gas-revoke <agent> [--as owner]", "stop paying an agent's fees"],
   "link-sub": ["link-sub <sub-account> <main>", "record an EVM-form sub-account of an ME ID (anyone can; the contract checks x/did)"],
   bond: ["bond <deposit-id>[,<id>…] [--as owner]", "show ME Hub fixed deposits as your bond (empty list clears it)"],
   identity: ["identity <role|address>", "ME ID (direct or via its main account) and bond, as the contract sees them"],
@@ -120,7 +123,8 @@ function outcome(r) {
   switch (r.status) {
     case "ok":
       console.log(`ok   ${a.action ?? "done"}${a.status ? ` (${a.status})` : ""}${a.payment_id ? ` payment #${a.payment_id}` : ""}  ${r.link}`);
-      console.log("     " + Object.entries(a).filter(([k]) => k !== "action").map(([k, v]) => `${k}=${v}`).join(" "));
+      const rest = Object.entries(a).filter(([k]) => k !== "action").map(([k, v]) => `${k}=${v}`).join(" ");
+      if (rest) console.log("     " + rest);
       return 0;
     case "refused": console.error(`REFUSED by the contract: ${r.reason}${r.hash ? `  ${r.link}` : "  (simulation; nothing sent, no fee)"}`); return 1;
     case "unknown": console.error(`UNKNOWN: tx ${r.hash} was broadcast but not confirmed (${r.reason}). It may have gone through: ${r.link}`); return 3;
@@ -154,7 +158,8 @@ async function policyFrom(base) {
 
 const as = (def) => o.as ?? def;
 // --key-file signs with that file instead of a role's key (e.g. the agent host, which holds only its own key).
-const send = async (role, msg, funds) => outcome(await act(role, msg, funds, { file: o["key-file"] }));
+// --fee-granter <addr|role> (or LEASH_FEE_GRANTER): fees come from that account's x/feegrant allowance.
+const send = async (role, msg, funds) => outcome(await act(role, msg, funds, { file: o["key-file"], ...(o["fee-granter"] ? { granter: await addrOf(o["fee-granter"]) } : {}) }));
 
 const cmds = {
   async keygen() {
@@ -274,6 +279,9 @@ const cmds = {
       const p = w.policy;
       console.log(`agent      ${w.agent} "${p.label}"\nowner      ${w.owner}\nME ID      ${w.owner_me_id ? `${w.owner_me_id.did} ${w.owner_me_id.active ? "active" : "INACTIVE"} KYC ${w.owner_me_id.kyc_level}` : "none"} (needs KYC ≥ ${w.min_kyc_level}) → verified ${w.verified}`);
       console.log(`bond       ${bondLine(w.owner_bond)}`);
+      const g = await feeGrant(agent, w.owner).catch(() => null);
+      const own = fmt(await balance(agent));
+      console.log(`gas        ${g ? `paid by the owner's fee grant: ${g.spend_limit ? fmt(g.spend_limit) : "no cap"} left${g.expiration ? `, until ${g.expiration.slice(0, 10)}` : ""}${g.allowed_messages ? ` (${g.allowed_messages.map((m) => m.split(".").pop()).join(", ")} only)` : ""}; the agent's own wallet holds ${own}` : `from the agent's own wallet: ${own}`}`);
       console.log(`can pay    ${w.can_pay_now ? "yes" : `NO: ${w.blocked_by}`}`);
       console.log(`limits     ≤ ${fmt(p.per_tx_limit)} per payment, ≤ ${fmt(p.daily_limit)} per 24h, approval above ${p.approve_above ? fmt(p.approve_above) : "never"}`);
       console.log(`24h spend  ${fmt(w.spent_24h)} (remaining ${fmt(w.remaining_24h)}); owner budget ${fmt(w.owner_balance)}; ${w.pending_count} held, ${w.approvals_needed} signature(s) release one`);
@@ -357,6 +365,19 @@ cmds.approvers = async () => {
   if (!args.length && !o.threshold) { print(await q({ approvers: { owner: await addrOf(o.owner ?? "owner") } })); return 0; }
   const list = await Promise.all((args[0] ?? "").split(",").filter(Boolean).map(addrOf));
   return send(as("owner"), { set_approvers: { approvers: list, threshold: intArg(o.threshold ?? String(list.length + 1), "--threshold") } });
+};
+cmds["gas-grant"] = async () => {
+  const agent = await addrOf(need(args[0], "agent"));
+  const { addr } = await signer(as("owner"), o["key-file"]);
+  const until = Math.floor(Date.now() / 1000) + intArg(o.days ?? "30", "--days") * 86400;
+  const old = await feeGrant(agent, addr);
+  const msgs = [...(old ? [revokeGasMsg(addr, agent)] : []), grantGasMsg(addr, agent, toUmec(need(o.limit, "--limit")), until)];
+  return outcome(await sendTx(as("owner"), msgs, { file: o["key-file"], granter: null }));
+};
+cmds["gas-revoke"] = async () => {
+  const agent = await addrOf(need(args[0], "agent"));
+  const { addr } = await signer(as("owner"), o["key-file"]);
+  return outcome(await sendTx(as("owner"), [revokeGasMsg(addr, agent)], { file: o["key-file"], granter: null }));
 };
 cmds["link-sub"] = async () => send(as("owner"), { register_sub_account: { sub: await addrOf(need(args[0], "sub-account")), main: await addrOf(need(args[1], "main account")) } });
 cmds.bond = async () => send(as("owner"), { set_bond: { deposit_ids: (args[0] ?? "").split(",").filter(Boolean).map((x) => intArg(x, "deposit id")) } });

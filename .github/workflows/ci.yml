@@ -97,7 +97,7 @@ jobs:
           path: artifacts
       - name: Throwaway keys for this run
         run: |
-          node leash.mjs keygen owner agent vendor rogue lowkyc shop merchant cfo
+          node leash.mjs keygen owner agent vendor rogue lowkyc shop merchant cfo agent0
           node devnet/keys.mjs
       - name: Devnet runs (obey-everything, kill switch, sub-account) from an empty node
         run: rm -f runs/devnet-* && SKIP_CLAUDE=1 bash scripts/devnet-runs.sh   # only this run's records get checked

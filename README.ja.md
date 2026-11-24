@@ -88,8 +88,9 @@ leash info                                    # ネットワーク、コント�
 # オーナー（KYC レベル 2 以上の ME ID を持つ）
 leash deposit 0.5                             # ME Hub では 1 MEC = 10^8 umec
 leash offer agent --per-tx 0.02 --daily 0.05 --approve-above 0.015 --vendors me1acme… --any-verified-vendor yes
+leash gas-grant me1agent… --limit 0.01            # 任意: 手数料をオーナーが肩代わり（コントラクト実行のみ）。エージェントの鍵は 0 MEC のままでよい
 # エージェントの鍵（エージェント自身のホストで。SECURITY.md を参照）
-leash accept me1owner… --key-file /run/secrets/agent.mnemonic
+leash accept me1owner… --key-file /run/secrets/agent.mnemonic --fee-granter me1owner…
 # 誰でも
 leash whois me1agent…                         # オーナー、有効な ME ID、上限、今払えるか
 ```

@@ -69,5 +69,16 @@ run node leash.mjs approve "$HID"                             # the owner's sign
 run node leash.mjs approve "$HID" --as agent                  # the agent can't sign
 run node leash.mjs approve "$HID" --as cfo                    # the co-approver's signature: 2 of 2, paid
 
+step "9. an agent key that holds no MEC at all: the owner's fee grant pays its contract calls, and nothing else"
+A0=$(node -e "import('./lib/chain.mjs').then(async c => console.log(await c.address('agent0')))")
+O=$(node -e "import('./lib/chain.mjs').then(async c => console.log(await c.address('owner')))")
+run node leash.mjs gas-grant "$A0" --limit 0.01 --days 30          # x/feegrant: MsgExecuteContract only, capped
+run node leash.mjs offer "$A0" --per-tx 0.02 --daily 0.05 --vendors vendor --label zero-balance
+run node leash.mjs accept "$O" --as agent0 --fee-granter owner
+run node leash.mjs pay vendor 0.002 "$(inv h)" --as agent0 --fee-granter owner
+run node leash.mjs whois "$A0"
+log "# the same key tries a plain transfer: the grant doesn't cover it, and the key owns nothing"
+run node -e "import('./lib/tx.mjs').then(async ({send}) => { const {address} = await import('./lib/chain.mjs'); const r = await send('agent0', await address('rogue'), 1000, { granter: '$O' }); console.log(r.status.toUpperCase() + ': ' + r.reason); })"
+
 log ""
 log "done -> $OUT"

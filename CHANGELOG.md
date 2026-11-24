@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 (agent side; contract unchanged, still 0.4.0 on testnet)
+
+- **The agent key can hold 0 MEC.** `leash gas-grant <agent> --limit <MEC>` gives the agent an x/feegrant
+  allowance from the owner that covers contract calls only (capped, expiring); `--fee-granter` / the MCP server
+  (automatically) use it. A key that never held MEC accepts its leash and pays, and can't move anything else.
+  Recorded on a real node (kill-switch run, step 9) and checked by `scripts/check-runs.mjs`.
+- RPC failover: `ME_RPC` takes a comma-separated list.
+- About page; a 20-item batch measured at 1.41M gas; a garbage-input test for the DID, deposit and invoice parsers.
+- Claims audit: every overstated or stale statement in the docs corrected (`send_mec`, what CI re-runs, sandbox
+  status, key-isolation scope); `leash --json` exits 3 on an unknown outcome; `pay_for_api` connects to the
+  address it checked (no DNS rebinding); send-path tests with a fake client.
+
 ## 0.4.0
 
 From a second adversarial review (of 0.3), plus what a finance team asks for first.

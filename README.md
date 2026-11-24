@@ -88,8 +88,9 @@ Defaults point at ME Hub testnet and the contract in `deployment.json`. Override
 # owner (holds an ME ID at KYC level ≥ 2)
 leash deposit 0.5                             # 1 MEC = 10^8 umec on ME Hub
 leash offer agent --per-tx 0.02 --daily 0.05 --approve-above 0.015 --vendors me1acme… --any-verified-vendor yes
+leash gas-grant me1agent… --limit 0.01            # optional: you pay its fees (contract calls only), so the agent key holds 0 MEC
 # agent key (on the agent's own host: see SECURITY.md)
-leash accept me1owner… --key-file /run/secrets/agent.mnemonic
+leash accept me1owner… --key-file /run/secrets/agent.mnemonic --fee-granter me1owner…
 # anyone
 leash whois me1agent…                         # owner, live ME ID, limits, can it pay right now?
 ```
