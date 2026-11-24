@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.0
+
+Deeper use of ME Network, the vendor side, and the whole system tested on a real ME Hub node in CI.
+
+- **EVM sub-accounts.** `register_sub_account {sub, main}` (anyone may call it) records an EVM-form sub-account,
+  but only if the main account's ME ID lists it in x/did, and the link is re-checked on every use. A merchant who
+  is paid at its EVM address now counts as "holds an ME ID". Shown on a real node: refused, linked, paid.
+- **Fixed-deposit bonds.** `set_bond {deposit_ids}`: an owner shows ME Hub fixed deposits (x/wstaking, the
+  second of the three Stargate queries ME Hub opens to CosmWasm) as a bond. `whois` reads them live; deposits that
+  unlocked or were withdrawn drop out. The verifier page and owner console show it.
+- **`identity {address}`** query: ME ID (direct or via its main account) and bond for any address.
+- **Agent-to-agent commerce over HTTP 402.** `leash-id/vendor`: `paywall()` and `verifyPayer()` let an API sell
+  to AI agents only when a verified human answers for them (payment read from the chain, one response per tx,
+  invoices issued per request). MCP tool `pay_for_api`: checks the seller's ME ID, pays through the leash within
+  a price cap, retries with the proof. `examples/paid-api` serves real chain data.
+- **Red-team sandbox** (`sandbox/`, `api/`): a real agent key anyone can attack from a web page, including an
+  email that Claude reads and acts on; the contract has the last word.
+- **Tests.** A random-operation test of the accounting invariants (40 seeds × 250 operations, every path
+  exercised). `scripts/check-runs.mjs` asserts every claim in the run records. CI now builds me-hub and runs the
+  devnet suite (attack replay, kill switch, sub-account, commerce) and the owner-console browser test on every
+  push. The build fails on any float instruction (ME Hub's wasmvm refuses them at upload).
+- Region rules were evaluated and dropped: x/did's `regionId` is marked unused in me-hub, so it can't be relied on.
+
 ## 0.2.0
 
 An adversarial review of 0.1 found ways around the leash. All of them are fixed, and each has a test.

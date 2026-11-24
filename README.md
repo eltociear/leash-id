@@ -7,6 +7,7 @@
 **Demo video (3:45):** https://www.youtube.com/watch?v=HahwUgfdINE ·
 **Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet) ·
 **Owner console:** https://eltociear.github.io/leash-id/owner.html (Keplr) ·
+**Red-team it:** [`sandbox/`](sandbox/README.md) (a real agent key you can attack) ·
 **[Threat model](THREAT_MODEL.md)** · **[Security / deployment](SECURITY.md)** · **Is the deployed code this code?** `npm run verify`
 
 AI agents are starting to pay invoices and buy services. Two things are missing:
@@ -36,6 +37,11 @@ accounts-payable inbox under that leash.
 
 ## Why this is ME-native
 
+ME Hub opens exactly three Stargate queries and one custom message to CosmWasm (`app/keepers/wasm_me_query.go`,
+`wasm_me_msg.go`). Leash ID uses all of them that carry meaning: the ME ID (`Did`), fixed deposits
+(`FixedDeposit`) and `multi_send`. The fourth, `Region`, describes a region but x/did's `regionId` is marked
+unused, so nothing ties an account to it.
+
 - **On-chain identity checks, no oracle.** ME Hub whitelists one identity query for CosmWasm:
   `/metaearth.did.Query/Did` (`me-hub/app/keepers/wasm_me_query.go`). Leash ID calls it inside `deposit`, the
   leash offer and acceptance, **every `pay`**, every `approve`, and `whois`. Suspend an owner's ME ID and every
@@ -43,6 +49,9 @@ accounts-payable inbox under that leash.
 - **KYC-aware vendor rules.** A leash can allow "any vendor that holds a live ME ID at KYC level ≥ N", so agents
   can pay verified merchants without a hand-kept allowlist. Approving a held payment re-checks it.
 - **ME Hub's custom `multi_send` message** (`wasm_me_msg.go`) settles batched payouts in one bank message.
+- **EVM sub-accounts count.** A merchant paid at the EVM-form address bound to its ME ID is recognised through
+  x/did's own `sub_account` binding (`register_sub_account`, re-checked on every use).
+- **Bonds.** An owner can show ME Hub fixed deposits as a bond: MEC they can't move before a date, read live.
 - **Receipts carry identities.** Every payment stores the owner's ME ID and the vendor's ME ID (if any) as of
   the moment it was paid, and emits a `wasm-leash_payment` event an indexer or accounting system can consume.
 
@@ -109,9 +118,27 @@ The server loads only the agent key and **refuses to start if the owner key is r
 because a model with shell or file tools could otherwise read it. Read [SECURITY.md](SECURITY.md) before you
 connect real money. `LEASH_READONLY=1 LEASH_AGENT_ADDRESS=me1…` runs it with no key at all (reads and dry runs).
 
+## Sell to agents (vendor side)
+
+```js
+import http from "node:http";
+import { paywall } from "leash-id/vendor";
+
+http.createServer(paywall({ payTo: "me1yourshop…", priceUmec: "100000", minKyc: 2 }, (req, res, paid) => {
+  res.end(JSON.stringify({ data: "…", served_to_owner_me_id: paid.owner_did }));
+})).listen(8080);
+```
+
+An agent that calls it gets `402 Payment Required` with Leash ID terms (pay to, amount, a fresh invoice). It
+pays through its leash and retries with `X-Leash-Payment: <tx>`. The paywall reads that payment from ME Hub,
+checks it is for an invoice it issued and has not been used, and that a live ME ID (KYC ≥ `minKyc`, bond ≥
+`minBondUmec` if you ask) answers for the agent. Our MCP server's `pay_for_api` tool does the agent's half,
+and refuses sellers without an ME ID. Recorded on a real node in `runs/devnet-commerce-*.txt`; a full example
+is in `examples/paid-api`.
+
 ## Contract
 
-`contracts/leash-id` (Rust, cosmwasm-std 1.5, built with Rust 1.81 for wasmvm 1.4). v0.2.
+`contracts/leash-id` (Rust, cosmwasm-std 1.5, built with Rust 1.81 for wasmvm 1.4). v0.3.
 
 | Execute | Who | What |
 |---|---|---|
@@ -126,6 +153,8 @@ connect real money. `LEASH_READONLY=1 LEASH_AGENT_ADDRESS=me1…` runs it with n
 | `pay_batch {payments}` | agent | up to 20 payments via ME `multi_send`, all or nothing |
 | `approve {id}` / `reject {id}` | owner | settle held payments (approve re-checks ME ID, vendor, and age ≤ 7 days) |
 | `release_invoice {vendor, invoice}` | owner | let a handled invoice number be paid again |
+| `register_sub_account {sub, main}` | anyone | record an EVM sub-account x/did binds to `main`'s ME ID |
+| `set_bond {deposit_ids}` | owner (ME ID) | show ME Hub fixed deposits as a bond |
 
 | Query | |
 |---|---|
@@ -133,6 +162,7 @@ connect real money. `LEASH_READONLY=1 LEASH_AGENT_ADDRESS=me1…` runs it with n
 | `check_pay {agent, vendor, amount, invoice, memo}` | dry run; the same `evaluate()` as `pay` |
 | `payments_by_agent`, `payments_by_owner` | history, newest first, paginated |
 | `pending {owner}`, `invoice {owner, vendor, invoice}` | approval queue; "was this invoice handled?" |
+| `identity {address}` | ME ID (direct or via main account) and bond of any address |
 | `owner`, `offers`, `payment`, `payments`, `config`, `version`, `me_id` | state |
 
 Policy: `per_tx_limit`, `daily_limit` (any rolling 24 hours), `approve_above` (< `per_tx_limit`), `vendors`
@@ -160,10 +190,11 @@ client (`runs/devnet-obey-*.txt`).
 
 ```bash
 npm ci
-npm test          # 25 contract tests (fake x/did behind the Stargate query) + JS tests (amounts, errors, MCP, CLI)
+npm test          # 31 contract tests (incl. a random-operation accounting test) + JS tests (amounts, errors, MCP, CLI)
 npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmwasm-check 1.5.8)
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it
-npm run devnet    # local ME Hub node: Claude over MCP, the obey-everything client, the kill switch → runs/
+npm run devnet    # local ME Hub node: Claude over MCP, obey-everything, kill switch, commerce → runs/
+node scripts/check-runs.mjs        # asserts what those records must show (CI runs all of this on a fresh node)
 npm run docs & npm run e2e:owner   # drives the owner console in a real browser against that node
 ```
 
@@ -174,7 +205,7 @@ explorer `https://www.explorer-testnet.me`.
 
 ## Status
 
-v0.2, testnet. Built for the MetaEarth Hackathon 2026 "Harbor" (AI & Trust Infrastructure). The design ideas
+v0.3, testnet. Built for the MetaEarth Hackathon 2026 "Harbor" (AI & Trust Infrastructure). The design ideas
 (agent spending leashes, attack replays, MCP-driven agents) come from our earlier project
 [Invoice Leash](https://github.com/eltociear/invoice-leash), which ran on another chain. See
 [CHANGELOG.md](CHANGELOG.md).

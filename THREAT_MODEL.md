@@ -5,7 +5,7 @@ confused model or a stolen agent key all end up the same way: the agent's key si
 shouldn't. So we don't try to make the agent trustworthy. We limit what its key can do, and we enforce
 those limits in the ME Hub contract, not in the agent, the MCP server or the prompt.
 
-This document describes contract v0.2. Test names refer to `contracts/leash-id/src/tests.rs`.
+This document describes contract v0.3. Test names refer to `contracts/leash-id/src/tests.rs`.
 
 ## Actors and keys
 
@@ -43,6 +43,10 @@ is readable from its process** (see [SECURITY.md](SECURITY.md)). The owner-only 
 | T15 | A forgotten agent | old key in an old server | every leash has a required `expires_at`, at most 366 days ahead | `revoke_sticks_…`, `policy_is_validated` |
 | T16 | The contract's code is swapped | a migrate admin replaces the code with one that pays the escrow out | deployed **without an admin**; `npm run verify` fails if an admin exists, and the verifier page says so | `scripts/verify.mjs`, CI job `testnet` |
 | T17 | The agent's own runtime reads the owner key | Claude Code with shell tools runs `cat` on the key file | the MCP server refuses to start next to readable owner keys; deployment guide runs the agent in its own user/container | `test/mcp.test.mjs` |
+| T19 | A sub-account claims an ME ID it isn't bound to | someone registers a link from an EVM address to a stranger's ME ID | `register_sub_account` only stores a link x/did itself lists, and every use re-reads x/did, so a dropped binding stops counting at once | `an_evm_sub_account_counts_as_its_main_me_id`; devnet run step 7 |
+| T20 | A "bond" that isn't there | an owner points at a deposit that unlocked, was withdrawn, or isn't theirs | bonds are read live from x/wstaking on every `whois`; only locked deposits of the ME ID's main account, in the leash denom, count | `owners_can_show_a_fixed_deposit_bond` |
+| T21 | Selling to an agent nobody answers for, or being paid twice with one proof | a bot replays a payment tx, or forges one, against a paid API | `paywall()` reads the payment from the chain, needs an invoice it issued, accepts each tx once, and checks the payer's owner's live ME ID | `runs/devnet-commerce-*.txt` steps 3-5 |
+| T22 | An agent pays an API run by nobody verified | an API asks for payment to an anonymous address | the leash refuses vendors without an ME ID unless allow-listed; `pay_for_api` also caps the price | commerce run steps 6-7 |
 | T18 | A network hiccup turns into a double payment | timeout after broadcast; the model retries with a new invoice ref | the tx hash is computed before broadcasting; an unconfirmed send is reported as **UNKNOWN, may have gone through** with the hash, never as "not sent"; `find_invoice` and the `invoice` query look it up | `lib/tx.mjs`, `test/units.test.mjs` |
 
 ## What Leash ID does *not* protect against
