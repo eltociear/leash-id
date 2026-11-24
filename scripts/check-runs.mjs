@@ -91,5 +91,16 @@ if (coFile) {
   check(/^\[declined, isError\] NOT PAID/m.test(st[7] ?? ""), "7: the agent's own price cap holds");
 }
 
+// ---- testnet: sub-account resolution against real x/did records (optional: only if a record exists)
+const tnFile = latest(/^testnet-identity-.*\.txt$/);
+if (tnFile) {
+  const st = Object.fromEntries(fs.readFileSync(path.join(dir, tnFile), "utf8").split(/^## /m).slice(1).map((x) => [x[0], x]));
+  check(/"sub_account":"me1/.test(st[1] ?? "") && /DID not found/.test(st[1] ?? ""), "testnet 1: x/did lists the sub-account; the sub-account has no ME ID of its own");
+  check(/^ME ID    none/m.test(st[2] ?? ""), "testnet 2: the contract doesn't know the link yet");
+  check(/REFUSED by the contract: .* is not the sub-account of/.test(st[3] ?? ""), "testnet 3: a false link is refused on chain");
+  check(/ok\s+register_sub_account/.test(st[4] ?? ""), "testnet 4: the true link is recorded");
+  check(/via its main account/.test(st[5] ?? ""), "testnet 5: the contract resolves the EVM address to its ME ID");
+}
+
 console.log(ok ? "\nrun records: all good" : "\nrun records: FAILED");
 process.exit(ok ? 0 : 1);

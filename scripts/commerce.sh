@@ -36,7 +36,7 @@ run api -H "X-Leash-Payment: $TX" -H "X-Leash-Proof: $(proof agent "$TX" "$INV")
 step "4. tx hashes are public: someone watching the chain tries to redeem a fresh payment first"
 INV3=$(curl -s localhost:18790/chain-stats | jq -r .leash_id.invoice)
 run node leash.mjs pay shop 0.001 "$INV3" --as agent
-TX3=$(grep -oE 'txs/tx/[0-9A-F]{64}' "$OUT" | tail -1 | cut -d/ -f3)
+TX3=$(grep -oE 'txs/[0-9A-F]{64}' "$OUT" | tail -1 | cut -d/ -f2)
 run api -H "X-Leash-Payment: $TX3" -H "X-Leash-Proof: $(proof rogue "$TX3" "$INV3")" localhost:18790/chain-stats
 log "# the agent that paid, with its own signature"
 run api -H "X-Leash-Payment: $TX3" -H "X-Leash-Proof: $(proof agent "$TX3" "$INV3")" localhost:18790/chain-stats
@@ -45,7 +45,7 @@ step "5. a made-up payment, and a real leash payment that isn't for an invoice t
 FAKE=$(openssl rand -hex 32 | tr a-f A-F)
 run api -H "X-Leash-Payment: $FAKE" -H "X-Leash-Proof: $(proof agent "$FAKE" x)" localhost:18790/chain-stats
 run node leash.mjs pay shop 0.001 "NOT-ISSUED-$(date +%s)" --as agent
-TX2=$(grep -oE 'txs/tx/[0-9A-F]{64}' "$OUT" | tail -1 | cut -d/ -f3)
+TX2=$(grep -oE 'txs/[0-9A-F]{64}' "$OUT" | tail -1 | cut -d/ -f2)
 INV2=$(grep -oE 'invoice=NOT-ISSUED-[0-9]+' "$OUT" | tail -1 | cut -d= -f2)
 run api -H "X-Leash-Payment: $TX2" -H "X-Leash-Proof: $(proof agent "$TX2" "$INV2")" localhost:18790/chain-stats
 
