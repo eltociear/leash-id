@@ -5,6 +5,8 @@
 //   CHROME=/path/to/chrome node scripts/e2e-owner.mjs
 import puppeteer from "puppeteer-core";
 import { execSync } from "node:child_process";
+import fs from "node:fs";
+import { createRequire } from "node:module";
 
 process.env.LEASH_DEPLOYMENT ??= "deployment.devnet.json"; // before lib/chain.mjs reads it
 const { readKey, deployment } = await import("../lib/chain.mjs");
@@ -86,6 +88,15 @@ await c.waitForFunction(() => /Nothing waits on your signature/.test(document.ge
 expect(true, "the payment left the co-approver's queue: paid");
 execSync(`. devnet/env.sh && node leash.mjs approvers --threshold 1`, { shell: "/bin/bash", stdio: "ignore" });
 expect(errs.length === 0, "no errors in the page", errs.join(" | "));
+
+// accessibility (axe-core, WCAG 2 A/AA + best practice) on the signed-in console and the verifier
+const axeSrc = fs.readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
+for (const [name, page] of [["owner console", p], ["verifier", await b.newPage()]]) {
+  if (name === "verifier") await page.goto(url.replace("/owner.html", "/") + "#" + (await address("agent")), { waitUntil: "networkidle0" });
+  await page.addScriptTag({ content: axeSrc });
+  const r = await page.evaluate(async () => await window.axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "best-practice"] }));
+  expect(r.violations.length === 0, `${name}: no accessibility violations (${r.passes.length} rules pass)`, r.violations.map((v) => `${v.id}×${v.nodes.length}`).join(", "));
+}
 await b.close();
 console.log(ok ? "\nowner console: all good" : "\nowner console: FAILED");
 process.exit(ok ? 0 : 1);
