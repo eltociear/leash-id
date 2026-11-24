@@ -1,5 +1,8 @@
 {
   "mcpServers": {
-    "leash-id": { "command": "node", "args": ["mcp/server.mjs"] }
+    "leash-id": {
+      "command": "leash-mcp",
+      "env": { "LEASH_AGENT_KEY_FILE": "/run/secrets/agent.mnemonic" }
+    }
   }
 }

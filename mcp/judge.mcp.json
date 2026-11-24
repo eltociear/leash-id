@@ -1,5 +1,9 @@
 {
   "mcpServers": {
-    "leash-id": { "command": "node", "args": ["mcp/server.mjs"], "env": { "LEASH_READONLY": "1" } }
+    "leash-id": {
+      "command": "node",
+      "args": ["mcp/server.mjs"],
+      "env": { "LEASH_READONLY": "1", "LEASH_AGENT_ADDRESS": "me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam" }
+    }
   }
 }

@@ -2,8 +2,22 @@
   "chainId": "mechain_2401-1",
   "codeId": 1,
   "contract": "me14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sc0nehr",
-  "storeTx": "DD394F09028D48D17AFEC169E8B37AAB4C8BFE1D4A2B76FD6D92F0783474A0C9",
-  "instantiateTx": "4E3CC2462AA7C988A1126F34402B27BC311DB3CFBE626E95E580F3EB14FC4924",
-  "wasmSha256": "72a10a89b0441bf4cc3a8f5b3e8babe6b11bb9b077899870b6f516099edefcd1",
-  "deployedAt": "2026-11-23T16:03:39.195Z"
+  "version": "0.2.0",
+  "admin": null,
+  "storeTx": "F03E0B9BB13D5BBF8D78199C375CEC7262E16D149D9D064C4D9F075ED9628BB4",
+  "instantiateTx": "5FFBA18B7EB37FF17E0AE11876816AE931ECB7670950205F7E3A117F91E17C8B",
+  "wasmSha256": "a9b3d89dee0db0d5e47d1d46ba56fd3f15e98cac883dc748b3d59e466fb95f53",
+  "deployedAt": "2026-11-24T04:29:16.383Z",
+  "superseded": [
+    {
+      "codeId": 1,
+      "contract": "me14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sc0nehr",
+      "version": "0.2.0"
+    },
+    {
+      "codeId": 1,
+      "contract": "me14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sc0nehr",
+      "version": "0.1.0"
+    }
+  ]
 }

@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 // Is the contract on ME Hub the code in this repo? No keys needed; reads the chain over REST.
-//   node scripts/verify.mjs            # deployment.json (testnet)
+//   node scripts/verify.mjs            # deployment.json (testnet), or LEASH_CONTRACT=me1…
+//   ALLOW_ADMIN=1 node scripts/verify.mjs   # accept a contract that has a migrate admin
 //   npm run build && node scripts/verify.mjs   # rebuild first, then compare
 // Checks: contract -> code id -> on-chain wasm checksum == sha256(artifacts/leash_id.wasm),
-// the contract admin, the configured KYC floor, and that the DID query answers from inside the contract.
+// that nobody can migrate (swap) the code, the configured KYC floor, and that the DID query answers from inside the contract.
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { NET, ROOT, deployment } from "../lib/chain.mjs";
+import { NET, ROOT, contract, deployment } from "../lib/chain.mjs";
 
-const d = deployment();
+const d = { ...deployment(), contract: contract() };
 const get = async (p) => {
   const r = await fetch(NET.rest + p);
   if (!r.ok) throw new Error(`${p}: HTTP ${r.status} ${await r.text()}`);
@@ -32,9 +33,16 @@ const onchain = code.data_hash.toLowerCase();
 
 console.log(`chain     ${NET.chainId}  (${NET.rest})`);
 console.log(`contract  ${d.contract}`);
-check(String(info.code_id) === String(d.codeId), "code id matches deployment.json", `code ${info.code_id}`);
+if (!process.env.LEASH_CONTRACT) check(String(info.code_id) === String(d.codeId), "code id matches deployment.json", `code ${info.code_id}`);
 check(onchain === local, "on-chain wasm == artifacts/leash_id.wasm", `sha256 ${onchain}`);
-console.log(`      admin ${info.admin || "(none)"}, creator ${info.creator}`);
+// An admin can migrate the contract to any other code, including code that pays the escrow to itself.
+// So "the deployed code is this code" only means something when nobody can swap it.
+check(!info.admin || process.env.ALLOW_ADMIN === "1", "no admin: the code can't be swapped",
+  info.admin ? `admin ${info.admin} CAN migrate this contract` : `creator ${info.creator}`);
+try {
+  const v = await smart({ version: {} });
+  console.log(`      version ${v.contract} ${v.version}`);
+} catch { console.log("      version (pre-0.2 contract, no version query)"); }
 
 const cfg = await smart({ config: {} });
 check(cfg.min_kyc_level >= 1, "KYC floor set", `min_kyc_level ${cfg.min_kyc_level}, denom ${cfg.denom}`);

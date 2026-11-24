@@ -169,7 +169,8 @@ fn parse_proto(raw: &[u8]) -> Option<MeId> {
             (1, 2) => id.did = String::from_utf8(s.to_vec()).ok()?,
             (2, 2) => id.address = String::from_utf8(s.to_vec()).ok()?,
             (4, 0) => id.active = v == 1,
-            (6, 0) => id.kyc_level = v.min(5) as u8,
+            // Unknown future levels count as none, the same as the JSON path.
+            (6, 0) => id.kyc_level = if v <= 5 { v as u8 } else { 0 },
             _ => {}
         }
     }
@@ -207,6 +208,14 @@ mod tests {
         raw.append(&mut info);
         let id = parse_response(&raw).unwrap();
         assert_eq!((id.did.as_str(), id.active, id.kyc_level), ("42", true, 3));
+    }
+
+    #[test]
+    fn unknown_proto_kyc_level_counts_as_none() {
+        let mut info = vec![0x0a, 2, b'4', b'2', 0x20, 1, 0x30, 9];
+        let mut raw = vec![0x0a, info.len() as u8];
+        raw.append(&mut info);
+        assert_eq!(parse_response(&raw).unwrap().kyc_level, 0);
     }
 
     #[test]

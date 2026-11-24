@@ -7,15 +7,15 @@ use std::rc::Rc;
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
     coins, from_json, to_json_vec, Addr, BankMsg, Binary, ContractResult, CosmosMsg, Empty, Env,
-    OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError, SystemResult, Timestamp,
-    Uint128,
+    OwnedDeps, Querier, QuerierResult, QueryRequest, Response, SystemError, SystemResult,
+    Timestamp, Uint128,
 };
 
-use crate::contract::{execute, instantiate, query};
+use crate::contract::{execute, instantiate, invoice_key, migrate, query, MAX_PENDING, PENDING_TTL};
 use crate::did::DID_QUERY_PATH;
 use crate::error::ContractError;
 use crate::msg::*;
-use crate::state::{PayStatus, Payment};
+use crate::state::{ContractVersion, PayStatus, Payment, VERSION};
 
 type Dids = Rc<RefCell<HashMap<String, (String, &'static str, &'static str)>>>;
 
@@ -54,6 +54,8 @@ impl Querier for DidQuerier {
     }
 }
 
+type R = Result<Response<MeMsg>, ContractError>;
+
 struct T {
     deps: OwnedDeps<MockStorage, MockApi, DidQuerier>,
     dids: Dids,
@@ -66,6 +68,7 @@ struct T {
 }
 
 const DAY: u64 = 86400;
+const HOUR: u64 = 3600;
 
 fn setup() -> T {
     let api = MockApi::default().with_prefix("me");
@@ -93,7 +96,7 @@ fn setup() -> T {
         custom_query_type: std::marker::PhantomData,
     };
     let mut env = mock_env();
-    env.block.time = Timestamp::from_seconds(100 * DAY + 3600);
+    env.block.time = Timestamp::from_seconds(100 * DAY + HOUR);
     instantiate(
         deps.as_mut(),
         env.clone(),
@@ -114,18 +117,10 @@ fn setup() -> T {
         shop,
         stranger,
     };
-    t.exec(&t.owner.clone(), ExecuteMsg::Deposit {}, &coins(1_000, "umec"))
-        .unwrap();
+    let (o, a) = (t.owner.clone(), t.agent.clone());
+    t.exec(&o, ExecuteMsg::Deposit {}, &coins(1_000, "umec")).unwrap();
     let p = t.policy();
-    t.exec(
-        &t.owner.clone(),
-        ExecuteMsg::RegisterAgent {
-            agent: t.agent.to_string(),
-            policy: p,
-        },
-        &[],
-    )
-    .unwrap();
+    t.leash(&o, &a, p).unwrap();
     t
 }
 
@@ -141,27 +136,27 @@ impl T {
             expires_at: self.env.block.time.seconds() + 30 * DAY,
         }
     }
-    fn exec(
-        &mut self,
-        who: &Addr,
-        msg: ExecuteMsg,
-        funds: &[cosmwasm_std::Coin],
-    ) -> Result<cosmwasm_std::Response<MeMsg>, ContractError> {
-        let r = execute(
-            self.deps.as_mut(),
-            self.env.clone(),
-            mock_info(who.as_str(), funds),
-            msg,
-        );
+    fn exec(&mut self, who: &Addr, msg: ExecuteMsg, funds: &[cosmwasm_std::Coin]) -> R {
+        let r = execute(self.deps.as_mut(), self.env.clone(), mock_info(who.as_str(), funds), msg);
         // wasmd refuses the whole tx if any attribute key or value is empty (found live on ME Hub).
         if let Ok(res) = &r {
-            for a in &res.attributes {
+            let attrs = res.attributes.iter().chain(res.events.iter().flat_map(|e| e.attributes.iter()));
+            for a in attrs {
                 assert!(!a.key.trim().is_empty() && !a.value.trim().is_empty(), "empty attribute {:?}", a);
             }
         }
         r
     }
-    fn pay(&mut self, vendor: &Addr, amount: u128, inv: &str) -> Result<cosmwasm_std::Response<MeMsg>, ContractError> {
+    /// Offer + accept: the two steps that put a leash in force.
+    fn leash(&mut self, owner: &Addr, agent: &Addr, p: PolicyMsg) -> R {
+        self.exec(owner, ExecuteMsg::RegisterAgent { agent: agent.to_string(), policy: p }, &[])?;
+        self.exec(agent, ExecuteMsg::AcceptLeash { owner: owner.to_string() }, &[])
+    }
+    fn set_policy(&mut self, p: PolicyMsg) {
+        let (o, a) = (self.owner.clone(), self.agent.clone());
+        self.exec(&o, ExecuteMsg::UpdatePolicy { agent: a.to_string(), policy: p }, &[]).unwrap();
+    }
+    fn pay(&mut self, vendor: &Addr, amount: u128, inv: &str) -> R {
         let a = self.agent.clone();
         self.exec(
             &a,
@@ -174,13 +169,26 @@ impl T {
             &[],
         )
     }
-    fn q<R: serde::de::DeserializeOwned>(&self, msg: QueryMsg) -> R {
+    fn batch(&mut self, items: &[(&Addr, u128, &str)]) -> R {
+        let a = self.agent.clone();
+        let payments = items
+            .iter()
+            .map(|(v, amt, inv)| PayItem { vendor: v.to_string(), amount: Uint128::new(*amt), invoice: inv.to_string() })
+            .collect();
+        self.exec(&a, ExecuteMsg::PayBatch { payments }, &[])
+    }
+    fn owner_does(&mut self, msg: ExecuteMsg) -> R {
+        let o = self.owner.clone();
+        self.exec(&o, msg, &[])
+    }
+    fn q<Q: serde::de::DeserializeOwned>(&self, msg: QueryMsg) -> Q {
         from_json(query(self.deps.as_ref(), self.env.clone(), msg).unwrap()).unwrap()
     }
     fn whois(&self) -> WhoisResponse {
-        self.q(QueryMsg::Whois {
-            agent: self.agent.to_string(),
-        })
+        self.q(QueryMsg::Whois { agent: self.agent.to_string() })
+    }
+    fn payment(&self, id: u64) -> Payment {
+        self.q(QueryMsg::Payment { id })
     }
     fn check(&self, vendor: &Addr, amount: u128, inv: &str) -> CheckPayResponse {
         self.q(QueryMsg::CheckPay {
@@ -188,6 +196,7 @@ impl T {
             vendor: vendor.to_string(),
             amount: Uint128::new(amount),
             invoice: inv.into(),
+            memo: None,
         })
     }
     fn set_did(&self, addr: &Addr, status: &'static str, level: &'static str) {
@@ -195,9 +204,12 @@ impl T {
         let did = m.get(addr.as_str()).map(|x| x.0.clone()).unwrap_or("1000000000099".into());
         m.insert(addr.to_string(), (did, status, level));
     }
+    fn later(&mut self, secs: u64) {
+        self.env.block.time = Timestamp::from_seconds(self.env.block.time.seconds() + secs);
+    }
 }
 
-fn sent(res: &cosmwasm_std::Response<MeMsg>) -> Vec<(String, u128)> {
+fn sent(res: &Response<MeMsg>) -> Vec<(String, u128)> {
     res.messages
         .iter()
         .filter_map(|m| match &m.msg {
@@ -213,11 +225,15 @@ fn sent(res: &cosmwasm_std::Response<MeMsg>) -> Vec<(String, u128)> {
 fn whois_shows_the_verified_human() {
     let t = setup();
     let w = t.whois();
-    assert!(w.verified);
+    assert!(w.verified && w.can_pay_now && w.blocked_by.is_none());
     assert_eq!(w.owner, t.owner.to_string());
     assert_eq!(w.owner_me_id.unwrap().did, "1000000000001");
-    assert_eq!(w.remaining_today, Uint128::new(300));
+    assert_eq!(w.remaining_24h, Uint128::new(300));
     assert_eq!(w.owner_balance, Uint128::new(1_000));
+    assert_eq!(w.min_kyc_level, 2);
+    // an unknown address gets a clear "not registered", which the verifier page relies on
+    let err = query(t.deps.as_ref(), t.env.clone(), QueryMsg::Whois { agent: t.stranger.to_string() }).unwrap_err();
+    assert!(err.to_string().contains("not registered"), "{err}");
 }
 
 #[test]
@@ -226,7 +242,12 @@ fn pays_allowlisted_vendor_and_records_both_dids() {
     let v = t.vendor.clone();
     let res = t.pay(&v, 100, "INV-1").unwrap();
     assert_eq!(sent(&res), vec![(v.to_string(), 100)]);
-    let p: Payment = t.q(QueryMsg::Payment { id: 1 });
+    let ev = res.events.iter().find(|e| e.ty == "leash_payment").expect("payment event");
+    let get = |k: &str| ev.attributes.iter().find(|a| a.key == k).map(|a| a.value.clone());
+    assert_eq!(get("status").as_deref(), Some("paid"));
+    assert_eq!(get("owner_did").as_deref(), Some("1000000000001"));
+    assert_eq!(get("invoice_key").as_deref(), Some("INV1"));
+    let p = t.payment(1);
     assert_eq!(p.status, PayStatus::Paid);
     assert_eq!(p.owner_did, "1000000000001");
     assert_eq!(p.vendor_did, None);
@@ -236,22 +257,11 @@ fn pays_allowlisted_vendor_and_records_both_dids() {
 #[test]
 fn owner_without_me_id_cannot_leash_anything() {
     let mut t = setup();
-    let s = t.stranger.clone();
-    let err = t
-        .exec(&s, ExecuteMsg::Deposit {}, &coins(10, "umec"))
-        .unwrap_err();
+    let (s, shop) = (t.stranger.clone(), t.shop.clone());
+    let err = t.exec(&s, ExecuteMsg::Deposit {}, &coins(10, "umec")).unwrap_err();
     assert!(matches!(err, ContractError::NoMeId { .. }));
     let p = t.policy();
-    let err = t
-        .exec(
-            &s,
-            ExecuteMsg::RegisterAgent {
-                agent: t.shop.to_string(),
-                policy: p,
-            },
-            &[],
-        )
-        .unwrap_err();
+    let err = t.exec(&s, ExecuteMsg::RegisterAgent { agent: shop.to_string(), policy: p }, &[]).unwrap_err();
     assert!(matches!(err, ContractError::NoMeId { .. }));
 }
 
@@ -260,9 +270,7 @@ fn low_kyc_owner_is_refused() {
     let mut t = setup();
     let s = t.stranger.clone();
     t.set_did(&s, "DID_STATUS_ACTIVE", "KYC_LEVEL_ONE");
-    let err = t
-        .exec(&s, ExecuteMsg::Deposit {}, &coins(10, "umec"))
-        .unwrap_err();
+    let err = t.exec(&s, ExecuteMsg::Deposit {}, &coins(10, "umec")).unwrap_err();
     assert!(matches!(err, ContractError::KycTooLow { have: 1, need: 2, .. }));
 }
 
@@ -271,7 +279,9 @@ fn suspending_the_owner_me_id_freezes_the_agent_immediately() {
     let mut t = setup();
     let (o, v) = (t.owner.clone(), t.vendor.clone());
     t.set_did(&o, "DID_STATUS_INACTIVE ", "KYC_LEVEL_TWO");
-    assert!(!t.whois().verified);
+    let w = t.whois();
+    assert!(!w.verified && !w.can_pay_now);
+    assert!(w.blocked_by.unwrap().contains("not active"));
     let err = t.pay(&v, 10, "INV-2").unwrap_err();
     assert!(matches!(err, ContractError::MeIdInactive { .. }));
     t.set_did(&o, "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO");
@@ -283,191 +293,254 @@ fn vendor_rules() {
     let mut t = setup();
     let (shop, stranger, agent) = (t.shop.clone(), t.stranger.clone(), t.agent.clone());
     // shop has an ME ID but is not on the list and any_verified_vendor is off
-    assert!(matches!(
-        t.pay(&shop, 10, "A").unwrap_err(),
-        ContractError::VendorNotAllowed { .. }
-    ));
+    assert!(matches!(t.pay(&shop, 10, "A").unwrap_err(), ContractError::VendorNotAllowed { .. }));
     let mut p = t.policy();
     p.any_verified_vendor = true;
-    let o = t.owner.clone();
-    t.exec(
-        &o,
-        ExecuteMsg::UpdatePolicy {
-            agent: agent.to_string(),
-            policy: p,
-        },
-        &[],
-    )
-    .unwrap();
+    t.set_policy(p);
     t.pay(&shop, 10, "A").unwrap();
-    let pm: Payment = t.q(QueryMsg::Payment { id: 1 });
-    assert_eq!(pm.vendor_did.as_deref(), Some("1000000000002"));
+    assert_eq!(t.payment(1).vendor_did.as_deref(), Some("1000000000002"));
     // a vendor without ME ID is still refused
-    assert!(matches!(
-        t.pay(&stranger, 10, "B").unwrap_err(),
-        ContractError::VendorNotAllowed { .. }
-    ));
-    // the agent cannot pay itself
-    assert!(matches!(
-        t.pay(&agent, 10, "C").unwrap_err(),
-        ContractError::SelfDealing {}
-    ));
+    assert!(matches!(t.pay(&stranger, 10, "B").unwrap_err(), ContractError::VendorNotAllowed { .. }));
+    // money has to leave the leash: not the agent, not the contract, not another leashed agent
+    assert!(matches!(t.pay(&agent, 10, "C").unwrap_err(), ContractError::SelfDealing { .. }));
+    let contract = t.env.contract.address.clone();
+    assert!(matches!(t.pay(&contract, 10, "C").unwrap_err(), ContractError::SelfDealing { .. }));
+    let o = t.owner.clone();
+    let p = t.policy();
+    t.leash(&o, &shop, p).unwrap(); // shop now also works as an agent of this owner
+    assert!(matches!(t.pay(&shop, 10, "D").unwrap_err(), ContractError::SelfDealing { .. }));
 }
 
 #[test]
-fn limits_and_utc_day_reset() {
+fn daily_limit_is_a_rolling_24_hours() {
     let mut t = setup();
     let v = t.vendor.clone();
-    assert!(matches!(
-        t.pay(&v, 201, "BIG").unwrap_err(),
-        ContractError::OverPerTx { .. }
-    ));
+    assert!(matches!(t.pay(&v, 201, "BIG").unwrap_err(), ContractError::OverPerTx { .. }));
+    // Spend the whole limit just before UTC midnight...
+    t.env.block.time = Timestamp::from_seconds(101 * DAY - 60);
     t.pay(&v, 150, "1").unwrap();
     t.pay(&v, 150, "2").unwrap();
-    assert!(matches!(
-        t.pay(&v, 1, "3").unwrap_err(),
-        ContractError::OverDaily { .. }
-    ));
-    t.env.block.time = Timestamp::from_seconds(101 * DAY);
+    assert!(matches!(t.pay(&v, 1, "3").unwrap_err(), ContractError::OverDaily { .. }));
+    // ...midnight is not a reset: 2 minutes later it is still refused.
+    t.later(120);
+    let err = t.pay(&v, 1, "3").unwrap_err();
+    assert!(err.to_string().contains("in the last 24h"), "{err}");
+    assert_eq!(t.whois().blocked_by.as_deref(), Some("24h limit used up"));
+    t.later(22 * HOUR);
+    assert!(t.pay(&v, 1, "3").is_err());
+    t.later(2 * HOUR);
     t.pay(&v, 1, "3").unwrap();
+    assert_eq!(t.whois().spent_24h, Uint128::new(1));
 }
 
 #[test]
-fn duplicate_invoice_is_refused() {
+fn duplicate_invoice_is_refused_whatever_the_spelling() {
     let mut t = setup();
     let v = t.vendor.clone();
     t.pay(&v, 10, "INV-7").unwrap();
-    assert!(matches!(
-        t.pay(&v, 10, "INV-7").unwrap_err(),
-        ContractError::DuplicateInvoice { id: 1, .. }
-    ));
+    for again in ["INV-7", "inv-7", " INV_7 ", "inv 7", "INV.7", "INV/7"] {
+        assert!(
+            matches!(t.pay(&v, 10, again).unwrap_err(), ContractError::DuplicateInvoice { id: 1, .. }),
+            "{again}"
+        );
+    }
+    // look-alike Unicode can't dodge the match: it is refused outright
+    for odd in ["ＩＮＶ-7", "INV\u{2011}7", "INV-７", "---", "", "   "] {
+        assert!(matches!(t.pay(&v, 10, odd).unwrap_err(), ContractError::Invalid { .. }), "{odd:?}");
+    }
+    assert!(matches!(t.pay(&v, 10, &"9".repeat(65)).unwrap_err(), ContractError::Invalid { .. }));
     // a re-sent invoice is reported as a duplicate even once the daily limit is used up
     t.pay(&v, 140, "INV-8").unwrap();
     t.pay(&v, 140, "INV-9").unwrap();
-    assert!(matches!(
-        t.pay(&v, 140, "INV-8").unwrap_err(),
-        ContractError::DuplicateInvoice { id: 2, .. }
-    ));
+    assert!(matches!(t.pay(&v, 140, "INV-8").unwrap_err(), ContractError::DuplicateInvoice { id: 2, .. }));
+    // and the invoice lookup finds it under any spelling
+    let found: Option<Payment> = t.q(QueryMsg::Invoice {
+        owner: t.owner.to_string(),
+        vendor: v.to_string(),
+        invoice: "inv 8".into(),
+    });
+    assert_eq!(found.unwrap().id, 2);
+    assert_eq!(invoice_key(" inv-1001 ").unwrap(), ("inv-1001".to_string(), "INV1001".to_string()));
 }
 
 #[test]
-fn approval_flow_reserves_funds() {
-    let mut t = setup();
-    let (v, o) = (t.vendor.clone(), t.owner.clone());
-    let res = t.pay(&v, 180, "BIG-1").unwrap();
-    assert!(sent(&res).is_empty());
-    assert_eq!(t.whois().owner_balance, Uint128::new(820));
-    // owner cannot withdraw the reserved part
-    assert!(t
-        .exec(&o, ExecuteMsg::Withdraw { amount: Uint128::new(900) }, &[])
-        .is_err());
-    // agent cannot approve its own payment
-    let a = t.agent.clone();
-    assert_eq!(
-        t.exec(&a, ExecuteMsg::Approve { id: 1 }, &[]).unwrap_err(),
-        ContractError::Unauthorized {}
-    );
-    let res = t.exec(&o, ExecuteMsg::Approve { id: 1 }, &[]).unwrap();
-    assert_eq!(sent(&res), vec![(v.to_string(), 180)]);
-    assert!(matches!(
-        t.exec(&o, ExecuteMsg::Approve { id: 1 }, &[]).unwrap_err(),
-        ContractError::NotPending { id: 1 }
-    ));
-    // reject path returns the reservation
-    t.env.block.time = Timestamp::from_seconds(101 * DAY);
-    t.pay(&v, 160, "BIG-2").unwrap();
-    t.exec(&o, ExecuteMsg::Reject { id: 2 }, &[]).unwrap();
-    assert_eq!(t.whois().owner_balance, Uint128::new(820));
-}
-
-#[test]
-fn suspended_owner_can_reject_but_not_approve() {
-    let mut t = setup();
-    let (v, o) = (t.vendor.clone(), t.owner.clone());
-    t.pay(&v, 180, "BIG-1").unwrap();
-    t.pay(&v, 100, "BIG-2").unwrap(); // under approve_above: paid, not pending
-    t.env.block.time = Timestamp::from_seconds(101 * DAY);
-    t.pay(&v, 170, "BIG-3").unwrap();
-    t.set_did(&o, "DID_STATUS_INACTIVE", "KYC_LEVEL_TWO");
-    assert!(matches!(
-        t.exec(&o, ExecuteMsg::Approve { id: 1 }, &[]).unwrap_err(),
-        ContractError::MeIdInactive { .. }
-    ));
-    let res = t.exec(&o, ExecuteMsg::Reject { id: 3 }, &[]).unwrap();
-    assert!(sent(&res).is_empty());
-    t.set_did(&o, "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO");
-    let res = t.exec(&o, ExecuteMsg::Approve { id: 1 }, &[]).unwrap();
-    assert_eq!(sent(&res), vec![(v.to_string(), 180)]);
-}
-
-#[test]
-fn revoke_expiry_and_ownership() {
-    let mut t = setup();
-    let (v, o, s, a) = (
-        t.vendor.clone(),
-        t.owner.clone(),
-        t.stranger.clone(),
-        t.agent.clone(),
-    );
-    // someone else cannot revoke or steal the agent
-    assert_eq!(
-        t.exec(&s, ExecuteMsg::RevokeAgent { agent: a.to_string() }, &[])
-            .unwrap_err(),
-        ContractError::Unauthorized {}
-    );
-    t.set_did(&s, "DID_STATUS_ACTIVE", "KYC_LEVEL_THREE");
-    let p = t.policy();
-    assert!(matches!(
-        t.exec(
-            &s,
-            ExecuteMsg::RegisterAgent {
-                agent: a.to_string(),
-                policy: p
-            },
-            &[]
-        )
-        .unwrap_err(),
-        ContractError::AgentTaken { .. }
-    ));
-    t.exec(&o, ExecuteMsg::RevokeAgent { agent: a.to_string() }, &[])
-        .unwrap();
-    assert_eq!(t.pay(&v, 1, "R").unwrap_err(), ContractError::Revoked {});
-    let p = t.policy();
-    t.exec(
-        &o,
-        ExecuteMsg::UpdatePolicy {
-            agent: a.to_string(),
-            policy: p,
-        },
-        &[],
-    )
-    .unwrap();
-    t.env.block.time = Timestamp::from_seconds(t.env.block.time.seconds() + 31 * DAY);
-    assert_eq!(t.pay(&v, 1, "R").unwrap_err(), ContractError::Expired {});
-}
-
-#[test]
-fn agent_cannot_attach_funds_or_drain_via_withdraw() {
+fn owner_can_release_an_invoice_number() {
     let mut t = setup();
     let (v, a) = (t.vendor.clone(), t.agent.clone());
-    assert!(t
-        .exec(
-            &a,
-            ExecuteMsg::Pay {
-                vendor: v.to_string(),
-                amount: Uint128::new(1),
-                invoice: "X".into(),
-                memo: None
-            },
-            &coins(5, "umec")
-        )
-        .is_err());
-    // withdraw is for owners who deposited; the agent is refused outright
+    t.pay(&v, 10, "INV-1").unwrap();
+    let release = ExecuteMsg::ReleaseInvoice { vendor: v.to_string(), invoice: "inv-1".into() };
+    // the agent has no invoices of its own to release
+    assert!(t.exec(&a, release.clone(), &[]).is_err());
+    t.owner_does(release).unwrap();
+    t.pay(&v, 10, "INV-1").unwrap();
+}
+
+#[test]
+fn approval_flow_reserves_funds_and_reject_frees_the_invoice() {
+    let mut t = setup();
+    let (v, a) = (t.vendor.clone(), t.agent.clone());
+    let res = t.pay(&v, 180, "BIG-1").unwrap();
+    assert!(sent(&res).is_empty());
+    let w = t.whois();
+    assert_eq!((w.owner_balance, w.pending_count), (Uint128::new(820), 1));
+    // owner cannot withdraw the reserved part
+    assert!(t.owner_does(ExecuteMsg::Withdraw { amount: Uint128::new(900) }).is_err());
+    // agent cannot approve its own payment
+    assert_eq!(t.exec(&a, ExecuteMsg::Approve { id: 1 }, &[]).unwrap_err(), ContractError::Unauthorized {});
+    let pending: PaymentsResponse = t.q(QueryMsg::Pending { owner: t.owner.to_string(), start_after: None, limit: None });
+    assert_eq!(pending.payments.len(), 1);
+    let res = t.owner_does(ExecuteMsg::Approve { id: 1 }).unwrap();
+    assert_eq!(sent(&res), vec![(v.to_string(), 180)]);
+    assert!(matches!(t.owner_does(ExecuteMsg::Approve { id: 1 }).unwrap_err(), ContractError::NotPending { id: 1 }));
+    // reject returns the reservation and frees the invoice number for a corrected invoice
+    t.later(DAY);
+    t.pay(&v, 160, "BIG-2").unwrap();
+    t.owner_does(ExecuteMsg::Reject { id: 2 }).unwrap();
+    let w = t.whois();
+    assert_eq!((w.owner_balance, w.pending_count), (Uint128::new(820), 0));
+    t.later(DAY);
+    t.pay(&v, 155, "big-2").unwrap();
+    assert_eq!(t.payment(3).status, PayStatus::Pending);
+}
+
+#[test]
+fn approval_rechecks_owner_vendor_and_age() {
+    let mut t = setup();
+    let (v, o, shop) = (t.vendor.clone(), t.owner.clone(), t.shop.clone());
+    let mut p = t.policy();
+    p.any_verified_vendor = true;
+    t.set_policy(p);
+    t.pay(&v, 180, "BIG-1").unwrap();
+    t.pay(&v, 100, "SMALL").unwrap(); // under approve_above: paid, not pending
+    t.later(DAY);
+    t.pay(&shop, 170, "SHOP-1").unwrap();
+    // a suspended owner can reject but never approve
+    t.set_did(&o, "DID_STATUS_INACTIVE", "KYC_LEVEL_TWO");
+    assert!(matches!(t.owner_does(ExecuteMsg::Approve { id: 1 }).unwrap_err(), ContractError::MeIdInactive { .. }));
+    t.set_did(&o, "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO");
+    // a "verified vendor" that lost its ME ID meanwhile can't be paid by approving
+    t.set_did(&shop, "DID_STATUS_INACTIVE", "KYC_LEVEL_TWO");
+    assert!(matches!(t.owner_does(ExecuteMsg::Approve { id: 3 }).unwrap_err(), ContractError::VendorNotAllowed { .. }));
+    assert!(sent(&t.owner_does(ExecuteMsg::Reject { id: 3 }).unwrap()).is_empty());
+    // a payment that waited more than 7 days has to be re-sent
+    t.later(PENDING_TTL);
+    assert!(matches!(t.owner_does(ExecuteMsg::Approve { id: 1 }).unwrap_err(), ContractError::PendingExpired { id: 1 }));
+    t.owner_does(ExecuteMsg::Reject { id: 1 }).unwrap();
+}
+
+#[test]
+fn the_approval_queue_is_bounded() {
+    let mut t = setup();
+    let (o, v) = (t.owner.clone(), t.vendor.clone());
+    t.exec(&o, ExecuteMsg::Deposit {}, &coins(100_000, "umec")).unwrap();
+    let mut p = t.policy();
+    p.daily_limit = Uint128::new(100_000);
+    p.approve_above = Some(Uint128::new(1));
+    t.set_policy(p);
+    for i in 0..MAX_PENDING {
+        t.pay(&v, 2, &format!("P{i}")).unwrap();
+    }
+    assert!(matches!(t.pay(&v, 2, "ONE-MORE").unwrap_err(), ContractError::TooManyPending { .. }));
+    // payments that need no approval still go through
+    t.pay(&v, 1, "SMALL").unwrap();
+}
+
+#[test]
+fn revoke_sticks_until_resume_and_clears_the_queue() {
+    let mut t = setup();
+    let (v, s, a) = (t.vendor.clone(), t.stranger.clone(), t.agent.clone());
+    // someone else cannot revoke the agent
+    assert_eq!(t.exec(&s, ExecuteMsg::RevokeAgent { agent: a.to_string() }, &[]).unwrap_err(), ContractError::Unauthorized {});
+    t.pay(&v, 180, "HELD").unwrap();
+    let res = t.owner_does(ExecuteMsg::RevokeAgent { agent: a.to_string() }).unwrap();
+    assert!(res.attributes.iter().any(|x| x.key == "rejected_pending" && x.value == "1"));
+    assert_eq!(t.payment(1).status, PayStatus::Rejected);
+    assert_eq!(t.whois().owner_balance, Uint128::new(1_000));
+    assert_eq!(t.pay(&v, 1, "R").unwrap_err(), ContractError::Revoked {});
+    // tightening the policy of a revoked (e.g. stolen) key must not bring it back
+    let p = t.policy();
+    t.set_policy(p);
+    assert_eq!(t.pay(&v, 1, "R").unwrap_err(), ContractError::Revoked {});
+    assert_eq!(t.whois().blocked_by.as_deref(), Some("revoked by the owner"));
+    t.owner_does(ExecuteMsg::ResumeAgent { agent: a.to_string() }).unwrap();
+    t.pay(&v, 1, "R").unwrap();
+    t.later(31 * DAY);
+    assert_eq!(t.pay(&v, 1, "R2").unwrap_err(), ContractError::Expired {});
+}
+
+#[test]
+fn a_leash_needs_the_agent_to_accept_it() {
+    let mut t = setup();
+    let (o, s, a, shop) = (t.owner.clone(), t.stranger.clone(), t.agent.clone(), t.shop.clone());
+    t.set_did(&s, "DID_STATUS_ACTIVE", "KYC_LEVEL_THREE");
+    let p = t.policy();
+    // an attacker can offer, but can't take over an agent that already accepted a leash
+    t.exec(&s, ExecuteMsg::RegisterAgent { agent: a.to_string(), policy: p.clone() }, &[]).unwrap();
     assert!(matches!(
-        t.exec(&a, ExecuteMsg::Withdraw { amount: Uint128::new(1) }, &[])
-            .unwrap_err(),
-        ContractError::Unauthorized {}
+        t.exec(&a, ExecuteMsg::AcceptLeash { owner: s.to_string() }, &[]).unwrap_err(),
+        ContractError::AgentTaken { .. }
     ));
+    // nor squat a fresh address: an offer alone puts nobody behind it
+    let fresh = t.deps.api.addr_make("fresh");
+    t.exec(&s, ExecuteMsg::RegisterAgent { agent: fresh.to_string(), policy: p.clone() }, &[]).unwrap();
+    assert!(query(t.deps.as_ref(), t.env.clone(), QueryMsg::Whois { agent: fresh.to_string() }).is_err());
+    let offers: OffersResponse = t.q(QueryMsg::Offers { agent: fresh.to_string() });
+    assert_eq!(offers.offers.len(), 1);
+    // the real owner offers too, and the agent picks it
+    t.leash(&o, &fresh, p.clone()).unwrap();
+    let w: WhoisResponse = t.q(QueryMsg::Whois { agent: fresh.to_string() });
+    assert_eq!(w.owner, o.to_string());
+    // accepting needs an offer
+    assert!(matches!(
+        t.exec(&shop, ExecuteMsg::AcceptLeash { owner: o.to_string() }, &[]).unwrap_err(),
+        ContractError::NoOffer { .. }
+    ));
+    // an agent can leave; its held payments are rejected and the budget comes back
+    let v = t.vendor.clone();
+    t.pay(&v, 180, "HELD").unwrap();
+    t.exec(&a, ExecuteMsg::LeaveLeash {}, &[]).unwrap();
+    assert_eq!(t.payment(1).status, PayStatus::Rejected);
+    assert!(matches!(t.pay(&v, 1, "X").unwrap_err(), ContractError::UnknownAgent { .. }));
+    let ow: OwnerResponse = t.q(QueryMsg::Owner { owner: o.to_string() });
+    assert_eq!((ow.reserved, ow.pending_count, ow.agents.len()), (Uint128::zero(), 0, 1));
+    // an agent key can't become an owner
+    let fresh2 = fresh.clone();
+    t.set_did(&fresh2, "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO");
+    assert!(t.exec(&fresh2, ExecuteMsg::Deposit {}, &coins(1, "umec")).is_err());
+}
+
+#[test]
+fn policy_is_validated() {
+    let mut t = setup();
+    let a = t.agent.to_string();
+    let bad = |f: &dyn Fn(&mut PolicyMsg), t: &mut T| {
+        let mut p = t.policy();
+        f(&mut p);
+        let r = t.owner_does(ExecuteMsg::UpdatePolicy { agent: a.clone(), policy: p });
+        assert!(matches!(r.unwrap_err(), ContractError::Invalid { .. }));
+    };
+    bad(&|p| p.approve_above = Some(Uint128::new(200)), &mut t); // == per_tx: would never trigger
+    bad(&|p| p.approve_above = Some(Uint128::zero()), &mut t);
+    bad(&|p| p.per_tx_limit = Uint128::new(301), &mut t);
+    bad(&|p| p.expires_at += 400 * DAY, &mut t);
+    bad(&|p| p.label = " ".into(), &mut t);
+    bad(&|p| { p.vendors.clear(); p.any_verified_vendor = false; }, &mut t);
+}
+
+#[test]
+fn only_deposit_takes_funds() {
+    let mut t = setup();
+    let (v, a, o) = (t.vendor.clone(), t.agent.clone(), t.owner.clone());
+    let pay = ExecuteMsg::Pay { vendor: v.to_string(), amount: Uint128::new(1), invoice: "X".into(), memo: None };
+    assert_eq!(t.exec(&a, pay, &coins(5, "umec")).unwrap_err(), ContractError::NonPayable {});
+    let p = t.policy();
+    assert_eq!(
+        t.exec(&o, ExecuteMsg::UpdatePolicy { agent: a.to_string(), policy: p }, &coins(5, "umec")).unwrap_err(),
+        ContractError::NonPayable {}
+    );
+    assert_eq!(t.exec(&o, ExecuteMsg::Withdraw { amount: Uint128::new(1) }, &coins(5, "umec")).unwrap_err(), ContractError::NonPayable {});
+    // withdraw is for owners who deposited; the agent is refused outright
+    assert_eq!(t.exec(&a, ExecuteMsg::Withdraw { amount: Uint128::new(1) }, &[]).unwrap_err(), ContractError::Unauthorized {});
 }
 
 #[test]
@@ -479,7 +552,8 @@ fn check_pay_matches_pay() {
         (v.clone(), 180, "PENDING"),
         (shop.clone(), 10, "NOTLISTED"),
         (v.clone(), 500, "TOOBIG"),
-        (v.clone(), 10, "OK1"),
+        (v.clone(), 10, "ok-1"),
+        (v.clone(), 10, "ＮＯ"),
     ];
     for (vendor, amt, inv) in cases {
         let c = t.check(&vendor, amt, inv);
@@ -491,6 +565,34 @@ fn check_pay_matches_pay() {
             assert_eq!(c.needs_approval, inv == "PENDING");
         }
     }
+    // memo length is part of the dry run too
+    let long: CheckPayResponse = t.q(QueryMsg::CheckPay {
+        agent: t.agent.to_string(),
+        vendor: v.to_string(),
+        amount: Uint128::new(1),
+        invoice: "M".into(),
+        memo: Some("x".repeat(257)),
+    });
+    assert!(!long.ok);
+}
+
+#[test]
+fn history_is_per_agent_and_newest_first() {
+    let mut t = setup();
+    let (o, v, shop) = (t.owner.clone(), t.vendor.clone(), t.shop.clone());
+    let p = t.policy();
+    t.leash(&o, &shop, p).unwrap();
+    for i in 0..5 {
+        t.pay(&v, 1, &format!("A{i}")).unwrap();
+        t.exec(&shop, ExecuteMsg::Pay { vendor: v.to_string(), amount: Uint128::new(1), invoice: format!("S{i}"), memo: None }, &[]).unwrap();
+    }
+    let mine: PaymentsResponse = t.q(QueryMsg::PaymentsByAgent { agent: t.agent.to_string(), start_before: None, limit: Some(3) });
+    assert_eq!(mine.payments.iter().map(|p| p.id).collect::<Vec<_>>(), vec![9, 7, 5]);
+    let next: PaymentsResponse = t.q(QueryMsg::PaymentsByAgent { agent: t.agent.to_string(), start_before: Some(5), limit: None });
+    assert_eq!(next.payments.iter().map(|p| p.id).collect::<Vec<_>>(), vec![3, 1]);
+    let all: PaymentsResponse = t.q(QueryMsg::PaymentsByOwner { owner: o.to_string(), start_before: None, limit: None });
+    assert_eq!(all.payments.len(), 10);
+    assert_eq!(all.payments[0].id, 10);
 }
 
 #[test]
@@ -498,80 +600,32 @@ fn batch_uses_me_multi_send() {
     let mut t = setup();
     let mut p = t.policy();
     p.any_verified_vendor = true;
-    let (o, a, v, shop) = (
-        t.owner.clone(),
-        t.agent.clone(),
-        t.vendor.clone(),
-        t.shop.clone(),
-    );
-    t.exec(
-        &o,
-        ExecuteMsg::UpdatePolicy {
-            agent: a.to_string(),
-            policy: p,
-        },
-        &[],
-    )
-    .unwrap();
-    let res = t
-        .exec(
-            &a,
-            ExecuteMsg::PayBatch {
-                payments: vec![
-                    PayItem {
-                        vendor: v.to_string(),
-                        amount: Uint128::new(40),
-                        invoice: "B1".into(),
-                    },
-                    PayItem {
-                        vendor: shop.to_string(),
-                        amount: Uint128::new(60),
-                        invoice: "B2".into(),
-                    },
-                ],
-            },
-            &[],
-        )
-        .unwrap();
-    let msg = &res.messages[0].msg;
-    let json = String::from_utf8(to_json_vec(msg).unwrap()).unwrap();
+    t.set_policy(p);
+    let (v, shop) = (t.vendor.clone(), t.shop.clone());
+    let res = t.batch(&[(&v, 40, "B1"), (&shop, 60, "B2")]).unwrap();
+    let json = String::from_utf8(to_json_vec(&res.messages[0].msg).unwrap()).unwrap();
     assert!(json.starts_with(r#"{"custom":{"multi_send":{"amount":[{"denom":"umec","amount":"100"}]"#), "{json}");
-    assert_eq!(t.whois().spent_today, Uint128::new(100));
-    // the same invoice twice inside one batch is refused
-    let err = t
-        .exec(
-            &a,
-            ExecuteMsg::PayBatch {
-                payments: vec![
-                    PayItem {
-                        vendor: v.to_string(),
-                        amount: Uint128::new(1),
-                        invoice: "D".into(),
-                    },
-                    PayItem {
-                        vendor: v.to_string(),
-                        amount: Uint128::new(1),
-                        invoice: "D".into(),
-                    },
-                ],
-            },
-            &[],
-        )
-        .unwrap_err();
-    assert!(matches!(err, ContractError::DuplicateInvoice { .. }));
+    assert_eq!(res.events.iter().filter(|e| e.ty == "leash_payment").count(), 2);
+    assert_eq!(t.whois().spent_24h, Uint128::new(100));
+    // the same invoice twice inside one batch is refused, under any spelling
+    assert!(matches!(t.batch(&[(&v, 1, "D-1"), (&v, 1, "d1")]).unwrap_err(), ContractError::DuplicateInBatch { .. }));
     // and a batch can never smuggle a payment that needs approval
-    let err = t
-        .exec(
-            &a,
-            ExecuteMsg::PayBatch {
-                payments: vec![PayItem {
-                    vendor: v.to_string(),
-                    amount: Uint128::new(180),
-                    invoice: "E".into(),
-                }],
-            },
-            &[],
-        )
-        .unwrap_err();
-    assert!(matches!(err, ContractError::Invalid { .. }));
+    assert!(matches!(t.batch(&[(&v, 180, "E")]).unwrap_err(), ContractError::Invalid { .. }));
+}
+
+#[test]
+fn migrate_only_moves_forward() {
+    let mut t = setup();
+    let env = t.env.clone();
+    assert!(migrate(t.deps.as_mut(), env.clone(), MigrateMsg {}).is_err()); // same version
+    VERSION
+        .save(&mut t.deps.storage, &ContractVersion { contract: "crates.io:leash-id".into(), version: "0.1.0".into() })
+        .unwrap();
+    migrate(t.deps.as_mut(), env.clone(), MigrateMsg {}).unwrap();
+    VERSION
+        .save(&mut t.deps.storage, &ContractVersion { contract: "crates.io:other".into(), version: "0.0.1".into() })
+        .unwrap();
+    assert!(migrate(t.deps.as_mut(), env, MigrateMsg {}).is_err());
+    let v: ContractVersion = from_json(query(t.deps.as_ref(), t.env.clone(), QueryMsg::Version {}).unwrap()).unwrap();
+    assert_eq!(v.contract, "crates.io:other");
 }

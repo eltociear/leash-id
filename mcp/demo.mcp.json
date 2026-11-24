@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "leash-id": {
+      "command": "node",
+      "args": ["mcp/server.mjs"],
+      "env": { "LEASH_DEMO_SHARED_KEYS": "1", "LEASH_HONEYPOT_TOOLS": "1", "LEASH_ONCHAIN_REFUSALS": "1", "LEASH_LOG_DIR": "runs" }
+    }
+  }
+}

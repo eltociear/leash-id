@@ -4,15 +4,18 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   contract:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Rust 1.81 + wasm32 (wasmvm 1.4 on ME Hub rejects newer wasm features)
         run: |
-          rustup toolchain install 1.81.0 --profile minimal --target wasm32-unknown-unknown
-      - uses: actions/cache@v4
+          rustup toolchain install 1.81.0 --profile minimal --target wasm32-unknown-unknown --component clippy
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/bin/cosmwasm-check
@@ -21,21 +24,45 @@ jobs:
           key: cargo-${{ hashFiles('contracts/leash-id/Cargo.lock') }}-check-1.5.8
       - name: cosmwasm-check 1.5.8
         run: command -v cosmwasm-check || cargo +1.81.0 install cosmwasm-check --version 1.5.8 --locked
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       - run: npm ci
-      - name: Unit tests (fake x/did behind the Stargate query)
-        run: npm test
+      - name: Contract unit tests (fake x/did behind the Stargate query)
+        run: npm run test:contract
+      - name: Clippy, warnings are errors
+        run: cd contracts/leash-id && cargo +1.81.0 clippy --all-targets -- -D warnings
+      - name: JS syntax
+        run: for f in leash.mjs lib/*.mjs mcp/*.mjs scripts/*.mjs test/*.mjs; do node --check "$f"; done
+      - name: JS tests (amounts, error reading, MCP tool set, key isolation, CLI)
+        run: npm run test:js
+      - name: npm audit (production deps)
+        run: npm audit --omit=dev --audit-level=high
       - name: Reproducible build + cosmwasm-check with ME Hub capabilities
         run: |
           cp artifacts/checksums.txt /tmp/committed.txt
           npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: leash_id.wasm
           path: artifacts/leash_id.wasm
       - name: Built wasm == committed artifacts/leash_id.wasm
         run: diff /tmp/committed.txt artifacts/checksums.txt && echo "reproducible ✔"
-      - name: The committed wasm is what runs on ME Hub testnet
+      - name: The verifier page points at the deployed contract
+        run: |
+          want=$(node -p 'require("./deployment.json").contract')
+          grep -q "contract: \"$want\"" docs/index.html || { echo "docs/index.html does not use $want"; exit 1; }
+
+  # Talks to the public testnet, so it is kept apart: an outage there shouldn't fail the build.
+  testnet:
+    needs: contract
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: The committed wasm is what runs on ME Hub testnet, and nobody can swap it
         run: node scripts/verify.mjs

@@ -10,7 +10,7 @@ mod tests;
 #[cfg(not(feature = "library"))]
 pub mod entry {
     use crate::contract::{self, Res};
-    use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+    use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
     use cosmwasm_std::{entry_point, Binary, Deps, DepsMut, Env, MessageInfo, StdResult};
 
     #[entry_point]
@@ -21,6 +21,11 @@ pub mod entry {
     #[entry_point]
     pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> Res {
         contract::execute(deps, env, info, msg)
+    }
+
+    #[entry_point]
+    pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Res {
+        contract::migrate(deps, env, msg)
     }
 
     #[entry_point]

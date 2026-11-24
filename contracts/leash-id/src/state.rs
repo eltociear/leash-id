@@ -8,10 +8,18 @@ pub struct Config {
     pub denom: String,
 }
 
+/// Same storage key and shape as cw2, so standard tooling can read the contract version.
+#[cw_serde]
+pub struct ContractVersion {
+    pub contract: String,
+    pub version: String,
+}
+
 #[cw_serde]
 pub struct Policy {
     pub label: String,
     pub per_tx_limit: Uint128,
+    /// Limit over any rolling 24 hours (not a calendar day, so midnight can't double it).
     pub daily_limit: Uint128,
     pub approve_above: Option<Uint128>,
     pub vendors: Vec<Addr>,
@@ -23,10 +31,16 @@ pub struct Policy {
 pub struct AgentRec {
     pub owner: Addr,
     pub policy: Policy,
-    /// UTC day number (`block_time / 86400`) that `spent` belongs to.
-    pub day: u64,
-    pub spent: Uint128,
+    /// Spend per hour, `(unix_hour, amount)`, only the last 24 hours are kept.
+    pub spend: Vec<(u64, Uint128)>,
     pub revoked: bool,
+}
+
+/// A leash the owner offered; it only takes effect once the agent key accepts it.
+#[cw_serde]
+pub struct Offer {
+    pub owner: Addr,
+    pub policy: Policy,
 }
 
 #[cw_serde]
@@ -35,6 +49,8 @@ pub struct OwnerAcct {
     pub balance: Uint128,
     /// Held for payments that are waiting for approval.
     pub reserved: Uint128,
+    /// Number of payments waiting for approval (capped, so the queue stays bounded).
+    pub pending: u32,
 }
 
 #[cw_serde]
@@ -55,7 +71,9 @@ pub struct Payment {
     /// The vendor's ME ID, when it has one.
     pub vendor_did: Option<String>,
     pub amount: Uint128,
+    /// As the agent sent it (trimmed). Duplicates are matched on `invoice_key`.
     pub invoice: String,
+    pub invoice_key: String,
     pub memo: Option<String>,
     pub status: PayStatus,
     pub created_at: u64,
@@ -63,10 +81,17 @@ pub struct Payment {
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");
+pub const VERSION: Item<ContractVersion> = Item::new("contract_info");
 pub const OWNERS: Map<&Addr, OwnerAcct> = Map::new("owners");
 pub const AGENTS: Map<&Addr, AgentRec> = Map::new("agents");
+/// (agent, owner) -> offered leash, waiting for the agent's AcceptLeash.
+pub const OFFERS: Map<(&Addr, &Addr), Offer> = Map::new("offers");
 pub const OWNER_AGENTS: Map<(&Addr, &Addr), ()> = Map::new("owner_agents");
 pub const PAYMENTS: Map<u64, Payment> = Map::new("payments");
 pub const NEXT_ID: Item<u64> = Item::new("next_id");
-/// (owner, vendor, invoice) -> payment id: one invoice is paid at most once.
+/// (owner, vendor, invoice_key) -> payment id: one invoice is paid at most once.
 pub const INVOICES: Map<(&Addr, &Addr, &str), u64> = Map::new("invoices");
+/// Indexes for newest-first history and the approval queue.
+pub const AGENT_PAYMENTS: Map<(&Addr, u64), ()> = Map::new("agent_payments");
+pub const OWNER_PAYMENTS: Map<(&Addr, u64), ()> = Map::new("owner_payments");
+pub const OWNER_PENDING: Map<(&Addr, u64), ()> = Map::new("owner_pending");

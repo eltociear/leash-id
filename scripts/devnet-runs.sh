@@ -8,6 +8,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 source devnet/env.sh
 export LEASH_INBOX=inbox/devnet.json
+# never leave a local node running behind, even when a step fails
+trap 'pkill -f "build/med start" || true' EXIT
 mkdir -p runs
 
 fresh() {
@@ -31,4 +33,3 @@ LEASH_OBEY_PREFIX=devnet-obey node mcp/obey-everything.mjs | tail -1
 
 fresh
 bash scripts/killswitch.sh | tail -1
-pkill -f "build/med start" || true

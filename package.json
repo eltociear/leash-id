@@ -1,15 +1,24 @@
 {
   "name": "leash-id",
-  "version": "1.0.0",
-  "description": "KYC-backed spending leashes for AI agents on ME Network (ME Hub CosmWasm)",
-  "main": "index.js",
+  "version": "0.2.0",
+  "description": "KYC-backed spending leashes for AI agents on ME Network: a CosmWasm contract on ME Hub, an MCP server and a CLI",
   "scripts": {
-    "test": "cd contracts/leash-id && cargo +1.81.0 test -q",
+    "test": "npm run test:contract && npm run test:js",
+    "test:contract": "cd contracts/leash-id && cargo +1.81.0 test -q",
+    "test:js": "node --test test/",
     "build": "bash scripts/build.sh",
     "verify": "node scripts/verify.mjs",
     "devnet": "bash scripts/devnet-runs.sh"
   },
-  "keywords": [],
+  "keywords": [
+    "me-network",
+    "me-hub",
+    "cosmwasm",
+    "mcp",
+    "ai-agents",
+    "kyc",
+    "spending-limits"
+  ],
   "author": "",
   "license": "Apache-2.0",
   "type": "module",
@@ -24,5 +33,36 @@
   },
   "devDependencies": {
     "binaryen": "^116.0.0"
+  },
+  "bin": {
+    "leash": "leash.mjs",
+    "leash-mcp": "mcp/server.mjs"
+  },
+  "exports": {
+    ".": "./lib/chain.mjs",
+    "./chain": "./lib/chain.mjs",
+    "./tx": "./lib/tx.mjs"
+  },
+  "files": [
+    "leash.mjs",
+    "lib/",
+    "mcp/server.mjs",
+    "mcp/*.mcp.json",
+    "inbox/demo.json",
+    "artifacts/leash_id.wasm",
+    "artifacts/checksums.txt",
+    "deployment.json",
+    "docs/",
+    "README.md",
+    "SECURITY.md",
+    "THREAT_MODEL.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eltociear/leash-id.git"
   }
 }
