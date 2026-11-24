@@ -60,5 +60,14 @@ run node leash.mjs link-sub "$M" shop --as vendor   # anyone may record it; the 
 run node leash.mjs identity "$M"
 run node leash.mjs pay "$M" 0.002 "$(inv e)" --as agent     # now paid, with vendor_did 1000000000103 on the receipt
 
+step "8. two signatures: the owner adds a co-approver (ME ID 1000000000104); a held payment needs both"
+run node leash.mjs policy agent --daily 0.2                    # only the 24h limit changes; everything else stays
+run node leash.mjs approvers cfo --threshold 2
+run node leash.mjs pay vendor 0.018 "$(inv g)" --as agent     # held
+HID=$(grep -oE 'pay \(pending\) payment #[0-9]+' "$OUT" | tail -1 | grep -oE '[0-9]+$')
+run node leash.mjs approve "$HID"                             # the owner's signature: 1 of 2, nothing paid yet
+run node leash.mjs approve "$HID" --as agent                  # the agent can't sign
+run node leash.mjs approve "$HID" --as cfo                    # the co-approver's signature: 2 of 2, paid
+
 log ""
 log "done -> $OUT"

@@ -1,0 +1,1 @@
+{"at":"2026-11-24T06:26:11.190Z","tool":"pay_for_api","args":{"url":"http://localhost:18791/chain-stats","max_mec":"0.002"},"status":"refused","reason":"vendor me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p is not allowed by this leash","simulated":true}

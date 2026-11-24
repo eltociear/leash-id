@@ -5,3 +5,4 @@ rogue me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p {"@type":"/cosmos.crypto.secp256
 lowkyc me1uj8yuu8zchw0gm5gw4w8qf3fzm5l8ctkps48zz {"@type":"/cosmos.crypto.secp256k1.PubKey","key":"An94g2KkfWvGiD95eTB5VDR394h+DcP6kNOwUms7qJjJ"}
 shop me13esx9gwc65ctg6a9h2fappkwegvqg9y63kcp8d {"@type":"/cosmos.crypto.secp256k1.PubKey","key":"AyFOsXlL/P0PAShL0k/2KlfWMmuCSe657cccAyEMon8u"}
 merchant me1lrcr30j8xcjajd59upcgskxkztv7exdzqt42rd {"@type":"/cosmos.crypto.secp256k1.PubKey","key":"AyhyFJSjvfI/8/wEJ4wJIsceO0qDbnLVYEACC8znXjfO"}
+cfo me1twwg4sjfaknnxsan006stvkl6jn0fg8uc6ha78 {"@type":"/cosmos.crypto.secp256k1.PubKey","key":"A1zo3Uh23k6/ZwmiOOQR8mqgU18g+SqBdoRrjG4ctSf2"}

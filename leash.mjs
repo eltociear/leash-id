@@ -34,8 +34,10 @@ const OPTS = {
   "min-kyc": { type: "string" },
   admin: { type: "string" },
   webhook: { type: "string" },
+  threshold: { type: "string" },
   from: { type: "string" },
   once: { type: "boolean" },
+  csv: { type: "boolean" },
   interval: { type: "string" },
   help: { type: "boolean", short: "h" },
 };
@@ -65,8 +67,9 @@ const HELP = {
   release: ["release <vendor> <invoice> [--as owner]", "let an already-handled invoice number be paid again"],
   whois: ["whois <agent>", "who stands behind an agent, its leash, and whether it can pay now"],
   owner: ["owner [owner]", "an owner's budget, reserved funds and agents"],
-  history: ["history [--agent a | --owner o] [--limit 20] [--before id]", "payments, newest first"],
+  history: ["history [--agent a | --owner o] [--limit 20] [--before id] [--csv]", "payments, newest first (--csv: every payment, for accounting)"],
   invoice: ["invoice <vendor> <invoice> [--owner o]", "was this invoice already handled?"],
+  approvers: ["approvers <addr,…> --threshold N [--as owner]", "co-approvers for held payments: N signatures (yours included) release one; any one can reject"],
   "link-sub": ["link-sub <sub-account> <main>", "record an EVM-form sub-account of an ME ID (anyone can; the contract checks x/did)"],
   bond: ["bond <deposit-id>[,<id>…] [--as owner]", "show ME Hub fixed deposits as your bond (empty list clears it)"],
   identity: ["identity <role|address>", "ME ID (direct or via its main account) and bond, as the contract sees them"],
@@ -102,6 +105,10 @@ try {
 const { values: o, positionals } = argv;
 const [cmd, ...args] = positionals;
 
+const CSV_HEAD = "id,status,created_utc,settled_utc,amount_mec,vendor,vendor_me_id,invoice,agent,owner,owner_me_id,approved_by,memo";
+const csvCell = (v) => { const t = String(v ?? ""); return /[",\n]|^[=+\-@]/.test(t) ? `"${t.replace(/"/g, '""').replace(/^([=+\-@])/, "'$1")}"` : t; };
+const iso = (s) => (s ? new Date(s * 1000).toISOString() : "");
+const csvRow = (p) => [p.id, p.status, iso(p.created_at), iso(p.settled_at), fmt(p.amount).replace(" MEC", ""), p.vendor, p.vendor_did, p.invoice, p.agent, p.owner, p.owner_did, (p.approved_by ?? []).join(" "), p.memo].map(csvCell).join(",");
 const print = (x) => console.log(o.json ? JSON.stringify(x, null, 2) : x);
 const when = (s) => new Date(s * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC";
 const payLine = (p) => `#${String(p.id).padEnd(5)} ${p.status.padEnd(8)} ${fmt(p.amount).padStart(14)}  ${p.vendor}  ${JSON.stringify(p.invoice)}  ${when(p.created_at)}`;
@@ -269,7 +276,7 @@ const cmds = {
       console.log(`bond       ${bondLine(w.owner_bond)}`);
       console.log(`can pay    ${w.can_pay_now ? "yes" : `NO: ${w.blocked_by}`}`);
       console.log(`limits     ≤ ${fmt(p.per_tx_limit)} per payment, ≤ ${fmt(p.daily_limit)} per 24h, approval above ${p.approve_above ? fmt(p.approve_above) : "never"}`);
-      console.log(`24h spend  ${fmt(w.spent_24h)} (remaining ${fmt(w.remaining_24h)}); owner budget ${fmt(w.owner_balance)}; ${w.pending_count} held`);
+      console.log(`24h spend  ${fmt(w.spent_24h)} (remaining ${fmt(w.remaining_24h)}); owner budget ${fmt(w.owner_balance)}; ${w.pending_count} held, ${w.approvals_needed} signature(s) release one`);
       console.log(`vendors    ${p.vendors.join(", ") || "(none)"}${p.any_verified_vendor ? " + any verified ME ID holder" : ""}\nexpires    ${when(p.expires_at)}${w.revoked ? "  REVOKED" : ""}`);
       return 0;
     } catch (e) {
@@ -279,6 +286,17 @@ const cmds = {
   },
   async owner() { print(await q({ owner: { owner: await addrOf(args[0] ?? "owner") } })); return 0; },
   async history() {
+    if (o.csv) {
+      const who = o.owner ? { payments_by_owner: { owner: await addrOf(o.owner) } } : { payments_by_agent: { agent: await addrOf(o.agent ?? "agent") } };
+      const k = Object.keys(who)[0];
+      console.log(CSV_HEAD);
+      for (let before = null; ;) {
+        const page = (await q({ [k]: { ...who[k], start_before: before, limit: 100 } })).payments;
+        for (const p of page) console.log(csvRow(p));
+        if (page.length < 100) return 0;
+        before = page[page.length - 1].id;
+      }
+    }
     const limit = intArg(o.limit ?? "20", "--limit"), start_before = o.before ? intArg(o.before, "--before") : null;
     const r = o.owner
       ? await q({ payments_by_owner: { owner: await addrOf(o.owner), start_before, limit } })
@@ -334,6 +352,11 @@ cmds.watch = async () => {
     if (o.once) return 0;
     await new Promise((res) => setTimeout(res, every));
   }
+};
+cmds.approvers = async () => {
+  if (!args.length && !o.threshold) { print(await q({ approvers: { owner: await addrOf(o.owner ?? "owner") } })); return 0; }
+  const list = await Promise.all((args[0] ?? "").split(",").filter(Boolean).map(addrOf));
+  return send(as("owner"), { set_approvers: { approvers: list, threshold: intArg(o.threshold ?? String(list.length + 1), "--threshold") } });
 };
 cmds["link-sub"] = async () => send(as("owner"), { register_sub_account: { sub: await addrOf(need(args[0], "sub-account")), main: await addrOf(need(args[1], "main account")) } });
 cmds.bond = async () => send(as("owner"), { set_bond: { deposit_ids: (args[0] ?? "").split(",").filter(Boolean).map((x) => intArg(x, "deposit id")) } });

@@ -96,7 +96,8 @@ leash whois me1agent…                         # owner, live ME ID, limits, can
 
 Day to day, in the browser: the **[owner console](https://eltociear.github.io/leash-id/owner.html)** (connect Keplr)
 lists what's waiting for your approval with Approve / Reject buttons, shows each agent's 24h spend, and has
-Revoke / Resume and a form to change limits and vendors. Every button is a transaction your wallet signs. The page
+Revoke / Resume, a form to change limits and vendors, co-approvers (e.g. owner + CFO: two signatures release a
+held payment, either can reject), and a CSV export for accounting. Every button is a transaction your wallet signs. The page
 is static and loads nothing from third parties (the signing library is bundled, and CI rebuilds it byte for byte).
 
 From a terminal: `leash pending`, `leash approve <id>`, `leash reject <id>`, `leash history`, `leash policy <agent>
@@ -145,16 +146,17 @@ http.createServer(paywall({ payTo: "me1yourshop…", priceUmec: "100000", minKyc
 })).listen(8080);
 ```
 
-An agent that calls it gets `402 Payment Required` with Leash ID terms (pay to, amount, a fresh invoice). It
-pays through its leash and retries with `X-Leash-Payment: <tx>`. The paywall reads that payment from ME Hub,
-checks it is for an invoice it issued and has not been used, and that a live ME ID (KYC ≥ `minKyc`, bond ≥
-`minBondUmec` if you ask) answers for the agent. Our MCP server's `pay_for_api` tool does the agent's half,
+An agent that calls it gets `402 Payment Required` with Leash ID terms (pay to, amount, a fresh signed invoice).
+It pays through its leash and retries with `X-Leash-Payment: <tx>` and `X-Leash-Proof`, its own key's ADR-36
+signature over the tx and invoice (tx hashes are public; the proof stops anyone else redeeming the payment).
+The paywall reads that payment from ME Hub, checks it is for a live invoice it issued and has not been used,
+and that a live ME ID (KYC ≥ `minKyc`, bond ≥ `minBondUmec` if you ask) answers for the agent. Our MCP server's `pay_for_api` tool does the agent's half,
 and refuses sellers without an ME ID. Recorded on a real node in `runs/devnet-commerce-*.txt`; a full example
 is in `examples/paid-api`.
 
 ## Contract
 
-`contracts/leash-id` (Rust, cosmwasm-std 1.5, built with Rust 1.81 for wasmvm 1.4). v0.3.
+`contracts/leash-id` (Rust, cosmwasm-std 1.5, built with Rust 1.81 for wasmvm 1.4). v0.4.
 
 | Execute | Who | What |
 |---|---|---|
@@ -171,6 +173,7 @@ is in `examples/paid-api`.
 | `release_invoice {vendor, invoice}` | owner | let a handled invoice number be paid again |
 | `register_sub_account {sub, main}` | anyone | record an EVM sub-account x/did binds to `main`'s ME ID |
 | `set_bond {deposit_ids}` | owner (ME ID) | show ME Hub fixed deposits as a bond |
+| `set_approvers {approvers, threshold}` | owner (ME ID) | two-person (up to 6) approval for held payments; any signer can reject |
 
 | Query | |
 |---|---|
@@ -179,6 +182,7 @@ is in `examples/paid-api`.
 | `payments_by_agent`, `payments_by_owner` | history, newest first, paginated |
 | `pending {owner}`, `invoice {owner, vendor, invoice}` | approval queue; "was this invoice handled?" |
 | `identity {address}` | ME ID (direct or via main account) and bond of any address |
+| `approvers {owner}`, `approver_of {approver}` | an owner's signers; the owners an address co-signs for |
 | `owner`, `offers`, `payment`, `payments`, `config`, `version`, `me_id` | state |
 
 Policy: `per_tx_limit`, `daily_limit` (any rolling 24 hours), `approve_above` (< `per_tx_limit`), `vendors`
@@ -206,7 +210,7 @@ client (`runs/devnet-obey-*.txt`).
 
 ```bash
 npm ci
-npm test          # 31 contract tests (incl. a random-operation accounting test) + JS tests (amounts, errors, MCP, CLI)
+npm test          # 32 contract tests (incl. a random-operation accounting test) + 14 JS tests (amounts, errors, MCP, paywall, SSRF, CLI)
 npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmwasm-check 1.5.8)
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it
 npm run devnet    # local ME Hub node: Claude over MCP, obey-everything, kill switch, commerce → runs/
@@ -216,12 +220,15 @@ npm run docs & npm run e2e:owner   # drives the owner console in a real browser 
 
 The canonical `artifacts/leash_id.wasm` is the x86_64 Linux build from CI; CI rebuilds it byte for byte.
 
+Costs: a payment is about 260k gas, roughly 0.00036 MEC in fees at testnet prices; refusals cost nothing.
+See [docs/GAS.md](docs/GAS.md).
+
 Endpoints (testnet): RPC `https://beta-hub-26657.explorer-testnet.me`, REST `https://beta-hub-1317.explorer-testnet.me`,
 explorer `https://www.explorer-testnet.me`.
 
 ## Status
 
-v0.3, testnet. Built for the MetaEarth Hackathon 2026 "Harbor" (AI & Trust Infrastructure). The design ideas
+v0.4, testnet. Built for the MetaEarth Hackathon 2026 "Harbor" (AI & Trust Infrastructure). The design ideas
 (agent spending leashes, attack replays, MCP-driven agents) come from our earlier project
 [Invoice Leash](https://github.com/eltociear/invoice-leash), which ran on another chain. See
 [CHANGELOG.md](CHANGELOG.md).

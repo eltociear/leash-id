@@ -76,6 +76,9 @@ pub struct Payment {
     pub invoice_key: String,
     pub memo: Option<String>,
     pub status: PayStatus,
+    /// Who has approved a held payment so far (owner and/or co-approvers).
+    #[serde(default)]
+    pub approved_by: Vec<Addr>,
     pub created_at: u64,
     pub settled_at: Option<u64>,
 }
@@ -99,3 +102,12 @@ pub const OWNER_PENDING: Map<(&Addr, u64), ()> = Map::new("owner_pending");
 pub const SUB_ACCOUNTS: Map<&Addr, Addr> = Map::new("sub_accounts");
 /// Owner -> ME Hub fixed deposit ids they put up as a bond (read live on every whois).
 pub const BONDS: Map<&Addr, Vec<u64>> = Map::new("bonds");
+/// Owner -> co-approvers for held payments, and how many signatures (owner included) release one.
+#[cw_serde]
+pub struct Approvers {
+    pub list: Vec<Addr>,
+    pub threshold: u8,
+}
+pub const APPROVERS: Map<&Addr, Approvers> = Map::new("approvers");
+/// (approver, owner): lets an approver find the owners whose payments wait on them.
+pub const APPROVER_OF: Map<(&Addr, &Addr), ()> = Map::new("approver_of");

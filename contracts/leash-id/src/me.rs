@@ -133,7 +133,7 @@ pub fn rfc3339_seconds(s: &str) -> Option<u64> {
     if b.len() < 20 || b[4] != b'-' || b[7] != b'-' || (b[10] != b'T' && b[10] != b't') || b[13] != b':' || b[16] != b':' {
         return None;
     }
-    let num = |r: std::ops::Range<usize>| -> Option<i64> { std::str::from_utf8(&b[r]).ok()?.parse().ok() };
+    let num = |r: std::ops::Range<usize>| -> Option<i64> { std::str::from_utf8(b.get(r)?).ok()?.parse().ok() };
     let (y, mo, d, h, mi, se) = (num(0..4)?, num(5..7)?, num(8..10)?, num(11..13)?, num(14..16)?, num(17..19)?);
     if !(1..=12).contains(&mo) || !(1..=31).contains(&d) || h > 23 || mi > 59 || se > 60 {
         return None;
@@ -199,6 +199,7 @@ mod tests {
         assert_eq!(rfc3339_seconds("1969-12-31T23:59:59Z"), None);
         assert_eq!(rfc3339_seconds("2026-13-01T00:00:00Z"), None);
         assert_eq!(rfc3339_seconds("garbage"), None);
+        assert_eq!(rfc3339_seconds("2026-04-16T08:18:12+0"), None); // truncated offset: no panic
         assert!(parse_response(br#"{"FixedDeposit":{"account":"","principal":{"denom":"umec","amount":"1"},"end_time":"2026-01-01T00:00:00Z"}}"#).is_none());
     }
 }

@@ -75,6 +75,9 @@ pub enum ExecuteMsg {
     RegisterSubAccount { sub: String, main: String },
     /// Owner: ME Hub fixed deposits (ids) to show as their bond. Up to 5; each must belong to the owner's ME ID.
     SetBond { deposit_ids: Vec<u64> },
+    /// Owner: co-approvers (each with a live ME ID, up to 5) and how many signatures, the owner's included,
+    /// release a held payment. Any one of them can reject. `threshold: 1` with no approvers = owner alone.
+    SetApprovers { approvers: Vec<String>, threshold: u8 },
 }
 
 #[cw_serde]
@@ -143,6 +146,12 @@ pub enum QueryMsg {
     /// Everything the contract can vouch for about any address: ME ID (direct or via its main account) and bond.
     #[returns(IdentityResponse)]
     Identity { address: String },
+    /// An owner's co-approvers and threshold.
+    #[returns(crate::state::Approvers)]
+    Approvers { owner: String },
+    /// The owners whose held payments this address can co-approve.
+    #[returns(Vec<String>)]
+    ApproverOf { approver: String },
 }
 
 #[cw_serde]
@@ -181,6 +190,8 @@ pub struct WhoisResponse {
     /// Owner's budget not reserved for pending payments.
     pub owner_balance: Uint128,
     pub pending_count: u32,
+    /// Signatures (owner included) that release a held payment.
+    pub approvals_needed: u8,
     /// Could this agent pay anything at all right now? If not, `blocked_by` says why.
     pub can_pay_now: bool,
     pub blocked_by: Option<String>,

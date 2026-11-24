@@ -22,7 +22,8 @@ info() { # role did level
 }
 jq --argjson o "$(info owner 1000000000101 KYC_LEVEL_TWO)" --argjson l "$(info lowkyc 1000000000102 KYC_LEVEL_ONE)" \
    --argjson s "$(info shop 1000000000103 KYC_LEVEL_TWO)" --arg sub "$(awk '$1=="merchant"{print $2}' "$D/keys.txt")" \
-   '.app_state.did.infos += [$o, $l, ($s | .sub_account = $sub)]
+   --argjson c "$(info cfo 1000000000104 KYC_LEVEL_TWO)" \
+   '.app_state.did.infos += [$o, $l, ($s | .sub_account = $sub), $c]
     | .app_state.feemarket.params.no_base_fee = true | .app_state.feemarket.params.base_fee = "0"' "$G" > "$G.tmp"
 mv "$G.tmp" "$G"
 C="$HOME/.mechain/config/config.toml"

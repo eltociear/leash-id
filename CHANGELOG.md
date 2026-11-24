@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.0
+
+From a second adversarial review (of 0.3), plus what a finance team asks for first.
+
+- **Two-person approval.** `set_approvers {approvers, threshold}`: up to 5 co-approvers, each with a live ME ID;
+  a held payment is released by `threshold` signatures (the owner's included), any one signer can reject.
+  Signatures are re-counted at release: a co-approver whose ME ID was suspended no longer counts. An agent key
+  can't be a co-approver, a co-approver key can't become an agent, and nobody can approve a payment to
+  themselves. Owner console: progress per payment, a "waiting for your co-approval" queue, settings.
+- **Fixed:** an agent whose key also held an ME ID could pay itself through its registered EVM sub-account.
+  `vendor_sane` now applies to the main account behind a sub-account too.
+- **Fixed (vendor paywall):** a tx hash is public, so anyone watching the chain could redeem another agent's
+  payment. Redemption now needs the paying agent key's ADR-36 signature over the tx and invoice. Two concurrent
+  requests can no longer redeem one payment. Invoices are HMAC-signed with an expiry (no per-request state).
+- **Fixed (`pay_for_api`):** public https URLs only (no localhost, LAN, link-local or metadata addresses, no
+  redirects); 64 KB response cap; the seller must name our contract and hold an ME ID (or be allow-listed); a
+  seller that took payment and didn't deliver isn't paid again; only host and path go into the on-chain memo.
+- **Fixed (sandbox):** only the fixed control payment is broadcast (daily cap); everything else is answered in
+  simulation. Claude runs are capped (3 rounds, 3 tool calls, no parallel calls, 1024 tokens); budgets can be
+  shared through Upstash; same-origin JSON only; generic errors; `.vercelignore`.
+- **Accounting:** CSV export (`leash history --csv`, owner console), with spreadsheet formulas defused.
+- **Gas table** (`docs/GAS.md`, `scripts/gas-report.mjs`): a payment is about 260k gas.
+- `scripts/check-runs.mjs` now demands the exact set of payments that may go through and the specific refusal
+  reason for each attack. The devnet suite records the two-signature flow and the front-running attempt.
+
 ## 0.3.0
 
 Deeper use of ME Network, the vendor side, and the whole system tested on a real ME Hub node in CI.

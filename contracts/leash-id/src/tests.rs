@@ -698,6 +698,17 @@ fn an_evm_sub_account_counts_as_its_main_me_id() {
     assert_eq!(t.payment(1).vendor_did.as_deref(), Some("1000000000002"));
     let idr: IdentityResponse = t.q(QueryMsg::Identity { address: shop_evm.to_string() });
     assert_eq!(idr.via_main.as_deref(), Some(shop.as_str()));
+    // an agent whose key also holds an ME ID can't pay itself through its own EVM form
+    let (o, a) = (t.owner.clone(), t.agent.clone());
+    let p = t.policy();
+    t.leash(&o, &shop, p).unwrap(); // shop's key is now a leashed agent
+    let a_pay = ExecuteMsg::Pay { vendor: shop_evm.to_string(), amount: Uint128::new(10), invoice: "S-SELF".into(), memo: None };
+    assert!(matches!(t.exec(&a, a_pay, &[]).unwrap_err(), ContractError::SelfDealing { .. }));
+    t.exec(&shop, ExecuteMsg::LeaveLeash {}, &[]).unwrap();
+    // x/did may hold the sub-account in upper case; it still matches
+    t.subs.borrow_mut().insert(shop.to_string(), shop_evm.to_string().to_uppercase());
+    t.pay(&shop_evm, 10, "S-UPPER").unwrap();
+    t.subs.borrow_mut().insert(shop.to_string(), shop_evm.to_string());
     // if x/did drops the binding, the link stops counting immediately
     t.subs.borrow_mut().remove(shop.as_str());
     assert!(matches!(t.pay(&shop_evm, 10, "S-2").unwrap_err(), ContractError::VendorNotAllowed { .. }));
@@ -765,12 +776,19 @@ fn accounting_invariants_hold_under_random_operations() {
         t.exec(&owner2, ExecuteMsg::Deposit {}, &coins(2_000, "umec")).unwrap();
         t.leash(&owner2, &agent2, p.clone()).unwrap();
         t.leash(&o1, &agent3, p.clone()).unwrap();
+        // owner2 needs two signatures: themselves and a co-approver
+        let cfo2 = api.addr_make("cfo2");
+        t.dids.borrow_mut().insert(cfo2.to_string(), ("1000000000004".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
+        t.exec(&owner2, ExecuteMsg::SetApprovers { approvers: vec![cfo2.to_string()], threshold: 2 }, &[]).unwrap();
         let mut bank: u128 = 3_000;
         let owners = [o1.clone(), owner2.clone()];
         let agents = [a1.clone(), agent2.clone(), agent3.clone()];
         let vendors = [v.clone(), shop.clone()];
         for step in 0..250 {
-            let op = rng.pick(12);
+            let op = match rng.pick(15) {
+                12..=14 => 6, // approvals need more tries now that some owners need two signatures
+                x => x,
+            };
             let owner = owners[rng.pick(2) as usize].clone();
             let agent = agents[rng.pick(3) as usize].clone();
             let vendor = vendors[rng.pick(2) as usize].clone();
@@ -786,7 +804,8 @@ fn accounting_invariants_hold_under_random_operations() {
                 ] }, &[]),
                 6 | 7 => {
                     let id = 1 + rng.pick(30);
-                    t.exec(&owner, if op == 6 { ExecuteMsg::Approve { id } } else { ExecuteMsg::Reject { id } }, &[])
+                    let signer = if rng.pick(3) == 0 { cfo2.clone() } else { owner.clone() };
+                    t.exec(&signer, if op == 6 { ExecuteMsg::Approve { id } } else { ExecuteMsg::Reject { id } }, &[])
                 }
                 8 => t.exec(&owner, ExecuteMsg::RevokeAgent { agent: agent.to_string() }, &[]),
                 9 => t.exec(&owner, ExecuteMsg::ResumeAgent { agent: agent.to_string() }, &[]),
@@ -834,4 +853,65 @@ fn accounting_invariants_hold_under_random_operations() {
     for (op, name) in [(0, "deposit"), (1, "withdraw"), (2, "pay"), (5, "batch"), (6, "approve"), (7, "reject"), (8, "revoke"), (9, "resume"), (10, "release")] {
         assert!(ok_ops[op] >= 5, "only {} successful {name}", ok_ops[op]);
     }
+}
+
+#[test]
+fn held_payments_can_need_two_signatures() {
+    let mut t = setup();
+    let (o, v, s, a) = (t.owner.clone(), t.vendor.clone(), t.stranger.clone(), t.agent.clone());
+    let cfo = t.deps.api.addr_make("cfo");
+    let set = |list: Vec<&Addr>, threshold: u8| ExecuteMsg::SetApprovers { approvers: list.iter().map(|x| x.to_string()).collect(), threshold };
+    // co-approvers must be verified humans, not agent keys, and the threshold must be reachable
+    assert!(matches!(t.owner_does(set(vec![&cfo], 2)).unwrap_err(), ContractError::NoMeId { .. }));
+    t.dids.borrow_mut().insert(cfo.to_string(), ("1000000000007".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
+    assert!(matches!(t.owner_does(set(vec![&a], 2)).unwrap_err(), ContractError::Invalid { .. }));
+    assert!(matches!(t.owner_does(set(vec![&cfo], 3)).unwrap_err(), ContractError::Invalid { .. }));
+    assert!(matches!(t.owner_does(set(vec![&cfo], 0)).unwrap_err(), ContractError::Invalid { .. }));
+    t.owner_does(set(vec![&cfo], 2)).unwrap();
+    assert_eq!(t.whois().approvals_needed, 2);
+    let owners: Vec<String> = t.q(QueryMsg::ApproverOf { approver: cfo.to_string() });
+    assert_eq!(owners, vec![o.to_string()]);
+
+    // one signature isn't enough; the same signer twice doesn't count; outsiders can't sign
+    t.pay(&v, 180, "BIG-1").unwrap();
+    let res = t.owner_does(ExecuteMsg::Approve { id: 1 }).unwrap();
+    assert!(sent(&res).is_empty());
+    assert_eq!(t.payment(1).status, PayStatus::Pending);
+    assert!(matches!(t.owner_does(ExecuteMsg::Approve { id: 1 }).unwrap_err(), ContractError::AlreadyApproved { have: 1, need: 2, .. }));
+    assert_eq!(t.exec(&s, ExecuteMsg::Approve { id: 1 }, &[]).unwrap_err(), ContractError::Unauthorized {});
+    assert_eq!(t.exec(&a, ExecuteMsg::Approve { id: 1 }, &[]).unwrap_err(), ContractError::Unauthorized {});
+    let res = t.exec(&cfo, ExecuteMsg::Approve { id: 1 }, &[]).unwrap();
+    assert_eq!(sent(&res), vec![(v.to_string(), 180)]);
+    assert_eq!(t.payment(1).approved_by, vec![o.clone(), cfo.clone()]);
+
+    // a signature stops counting if the signer's ME ID is suspended before the payment is released
+    t.later(DAY);
+    t.pay(&v, 170, "BIG-2").unwrap();
+    t.exec(&cfo, ExecuteMsg::Approve { id: 2 }, &[]).unwrap();
+    t.set_did(&cfo, "DID_STATUS_INACTIVE", "KYC_LEVEL_TWO");
+    let res = t.owner_does(ExecuteMsg::Approve { id: 2 }).unwrap();
+    assert!(sent(&res).is_empty(), "the suspended co-approver's earlier signature must not count");
+    assert!(matches!(t.exec(&cfo, ExecuteMsg::Approve { id: 2 }, &[]).unwrap_err(), ContractError::MeIdInactive { .. }));
+    // ...but any one signer can still stop it, suspended or not
+    t.exec(&cfo, ExecuteMsg::Reject { id: 2 }, &[]).unwrap();
+    assert_eq!(t.payment(2).status, PayStatus::Rejected);
+    t.set_did(&cfo, "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO");
+
+    // a co-approver can't approve a payment to themselves, and can't become an agent
+    let mut p = t.policy();
+    p.vendors.push(cfo.to_string());
+    t.set_policy(p.clone());
+    t.later(DAY);
+    t.pay(&cfo, 170, "TO-CFO").unwrap();
+    t.owner_does(ExecuteMsg::Approve { id: 3 }).unwrap();
+    assert!(matches!(t.exec(&cfo, ExecuteMsg::Approve { id: 3 }, &[]).unwrap_err(), ContractError::SelfDealing { .. }));
+    t.owner_does(ExecuteMsg::RegisterAgent { agent: cfo.to_string(), policy: t.policy() }).unwrap();
+    assert!(matches!(t.exec(&cfo, ExecuteMsg::AcceptLeash { owner: o.to_string() }, &[]).unwrap_err(), ContractError::Invalid { .. }));
+
+    // back to the owner alone
+    t.owner_does(set(vec![], 1)).unwrap();
+    assert_eq!(t.whois().approvals_needed, 1);
+    let owners: Vec<String> = t.q(QueryMsg::ApproverOf { approver: cfo.to_string() });
+    assert!(owners.is_empty());
+    assert_eq!(t.exec(&cfo, ExecuteMsg::Reject { id: 3 }, &[]).unwrap_err(), ContractError::Unauthorized {});
 }

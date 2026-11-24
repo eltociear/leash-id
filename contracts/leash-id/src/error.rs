@@ -76,6 +76,9 @@ pub enum ContractError {
     #[error("fixed deposit #{id}: {why}")]
     BadBond { id: u64, why: String },
 
+    #[error("you already approved payment #{id} ({have} of {need} approvals)")]
+    AlreadyApproved { id: u64, have: u8, need: u8 },
+
     #[error("invalid input: {msg}")]
     Invalid { msg: String },
 }

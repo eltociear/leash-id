@@ -29,7 +29,7 @@ case "$1" in
   fund)
     G=$("$MED" keys show global_dao -a --keyring-backend test)
     "$MED" tx bank send user "$G" 1000000000umec "${TX[@]}" | wait_tx
-    for r in owner agent vendor rogue lowkyc; do "$MED" tx bank send user "$(addr $r)" 500000000umec "${TX[@]}" | wait_tx; done ;;
+    for r in owner agent vendor rogue lowkyc cfo; do "$MED" tx bank send user "$(addr $r)" 500000000umec "${TX[@]}" | wait_tx; done ;;
   approve)
     G=$("$MED" keys show global_dao -a --keyring-backend test)
     "$MED" tx kyc approve "$3" experience_region "$(addr "$2")" "$(pub "$2")" "$4" "https://example.invalid/kyc/$3" "demo-$3" "$G" --from global_dao "${TX[@]}" | wait_tx ;;

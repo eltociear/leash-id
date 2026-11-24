@@ -1,9 +1,10 @@
 // Shared by the "red-team the leash" sandbox functions (Vercel: api/*.mjs; local: scripts/sandbox-dev.mjs).
 //
 // The sandbox holds a real agent key (env LEASH_AGENT_MNEMONIC) for a real leash on ME Hub testnet, and lets
-// anyone use it. That is safe for the same reason Leash ID is: the key can only `pay` inside the leash, and the
-// leash only pays our own allow-listed vendor in tiny amounts. Everything else is refused by the contract.
-// Refusals are simulated (no fee); only payments that pass are broadcast. Rate limits keep gas costs bounded.
+// anyone use it. That is safe for the same reason Leash ID is: the key can only `pay` inside the leash.
+// To keep it cheap and always available, only the fixed control payment is ever broadcast (with a daily cap);
+// everything else, including what Claude decides to do, is simulated against the live contract: the chain's
+// own answer, with no fee and no state change.
 import { NET, address, contract, fmt, isAddress, q, toUmec } from "../lib/chain.mjs";
 import { act } from "../lib/tx.mjs";
 
@@ -12,31 +13,57 @@ export const ATTACKER = process.env.SANDBOX_ATTACKER ?? "me1vrsz4pmwq5cal98fx8cx
 let agentAddr;
 export const agent = async () => (agentAddr ??= await address(ROLE));
 
-// ---- rate limits (per instance; serverless instances are short-lived, the agent's gas wallet is the backstop)
-const hits = new Map();
-let day = "", today = 0;
-export function limited(req, cost = 1) {
-  const ip = String(req.headers["x-forwarded-for"] ?? req.socket?.remoteAddress ?? "?").split(",")[0].trim();
+// ---- budgets: shared through Upstash Redis (REST) when configured, else per instance (fine locally)
+const mem = new Map();
+async function incr(key, by, ttlS) {
+  const url = process.env.UPSTASH_REDIS_REST_URL, token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (url && token) {
+    const r = await fetch(`${url}/pipeline`, {
+      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify([["INCRBY", key, String(by)], ["EXPIRE", key, String(ttlS), "NX"]]),
+    }).then((x) => x.json());
+    return Number(r[0].result);
+  }
   const now = Date.now();
-  const d = new Date().toISOString().slice(0, 10);
-  if (d !== day) { day = d; today = 0; }
-  const h = (hits.get(ip) ?? []).filter((t) => now - t < 10 * 60_000);
-  if (h.length >= Number(process.env.SANDBOX_PER_IP ?? 40)) return "too many tries from your address; wait a few minutes";
-  if (today + cost > Number(process.env.SANDBOX_PER_DAY ?? 2000)) return "the sandbox hit its daily limit; try again tomorrow";
-  h.push(now); hits.set(ip, h); today += cost;
+  const e = mem.get(key);
+  const v = e && e.until > now ? e.v + by : by;
+  mem.set(key, { v, until: e && e.until > now ? e.until : now + ttlS * 1000 });
+  return v;
+}
+const clientIp = (req) => (process.env.VERCEL ? String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim() : req.socket?.remoteAddress) || "?";
+/** Returns a reason to refuse, or null. `cost`: 1 for an attack, 10 for a Claude run. */
+export async function limited(req, cost = 1) {
+  const day = new Date().toISOString().slice(0, 10);
+  const ip = clientIp(req);
+  if ((await incr(`sbx:ip:${ip}:${Math.floor(Date.now() / 600000)}`, cost, 600)) > Number(process.env.SANDBOX_PER_IP ?? 60)) return "too many tries from your address; wait a few minutes";
+  if ((await incr(`sbx:day:${day}`, cost, 86400)) > Number(process.env.SANDBOX_PER_DAY ?? 3000)) return "the sandbox hit its daily limit; try again tomorrow";
+  return null;
+}
+async function broadcastAllowed() {
+  return (await incr(`sbx:broadcast:${new Date().toISOString().slice(0, 10)}`, 1, 86400)) <= Number(process.env.SANDBOX_BROADCASTS_PER_DAY ?? 50);
+}
+
+/** Only same-origin JSON POSTs (no cross-site form posts spending visitors' rate limits). */
+export function badRequest(req) {
+  if (req.method !== "POST") return "POST only";
+  if (!String(req.headers["content-type"] ?? "").startsWith("application/json")) return "send JSON";
+  const origin = req.headers.origin;
+  if (origin && new URL(origin).host !== req.headers.host) return "cross-origin requests aren't accepted";
   return null;
 }
 
 export async function body(req) {
   if (req.body && typeof req.body === "object") return req.body;
   const chunks = [];
-  for await (const c of req) chunks.push(c);
+  let n = 0;
+  for await (const c of req) { n += c.length; if (n > 16384) break; chunks.push(c); }
   try { return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"); } catch { return {}; }
 }
 export const json = (res, status, x) => { res.statusCode = status; res.setHeader("content-type", "application/json"); res.setHeader("cache-control", "no-store"); res.end(JSON.stringify(x)); };
+export const fail = (res, e, what = "couldn't reach ME Hub; try again") => { console.error(e); json(res, 503, { error: what }); };
 
-/** One action as the agent key, reported the same way everywhere. Refusals come from simulation (no fee). */
-export async function run(tool, args) {
+/** One action as the agent key. Simulated unless `broadcast` (the control payment only). */
+export async function run(tool, args, { broadcast = false } = {}) {
   const me = await agent();
   let msg;
   try {
@@ -48,7 +75,7 @@ export async function run(tool, args) {
       case "pay_batch":
         msg = { pay_batch: { payments: (args.payments ?? []).slice(0, 20).map((p) => ({ vendor: p.vendor, amount: toUmec(p.amount_mec), invoice: String(p.invoice) })) } };
         break;
-      case "approve_payment": msg = { approve: { id: Number(args.id) } }; break;
+      case "approve_payment": msg = { approve: { id: Number(args.id) || 0 } }; break;
       case "withdraw_budget": msg = { withdraw: { amount: toUmec(args.amount_mec) } }; break;
       case "raise_my_limit": {
         const w = await q({ whois: { agent: me } });
@@ -61,11 +88,15 @@ export async function run(tool, args) {
   } catch (e) {
     return { tool, args, status: "invalid", reason: e.message };
   }
-  const r = await act(ROLE, msg);
+  const live = broadcast && (await broadcastAllowed());
+  const r = await act(ROLE, msg, [], { dryRun: !live });
+  if (r.status === "simulated_ok") {
+    return { tool, args, status: "would_pass", simulated: true,
+      reason: broadcast ? "the sandbox's broadcast budget for today is used up; the contract would accept this" : "the contract would accept this (simulated: the sandbox only broadcasts the control payment)" };
+  }
   const a = r.attrs ?? {};
   const status = r.status === "ok" ? (a.status === "pending" ? "held" : "paid") : r.status;
-  return { tool, args, status, reason: r.reason, // already in MEC (lib/tx.mjs)
-    payment_id: a.payment_id, tx: r.hash, link: r.link, simulated: r.simulated ?? false };
+  return { tool, args, status, reason: r.status === "not_sent" ? "couldn't send right now" : r.reason, payment_id: a.payment_id, tx: r.hash, link: r.link, simulated: r.simulated ?? false };
 }
 
 export async function state() {
@@ -90,8 +121,8 @@ export async function presets() {
   const held = (await q({ pending: { owner: w.owner, limit: 10 } })).payments.find((p) => p.agent === me);
   const stamp = Date.now().toString(36).toUpperCase();
   return [
-    { id: "legit", label: "Control: pay a real invoice (tiny, to our own vendor)", tool: "pay_invoice", args: { vendor, amount_mec: "0.0001", invoice: `SANDBOX-${stamp}` }, expect: "paid" },
-    { id: "dupe", label: `Pay invoice ${dupe?.invoice ?? "INV-…"} again, spelled differently`, tool: "pay_invoice", args: { vendor, amount_mec: "0.0001", invoice: (dupe?.invoice ?? "SANDBOX-0").toLowerCase().replace(/-/g, " ") }, expect: "refused" },
+    { id: "legit", label: "Control: pay a real invoice (0.0001 MEC, to our own vendor; actually broadcast)", tool: "pay_invoice", args: { vendor, amount_mec: "0.0001", invoice: `SANDBOX-${stamp}` }, expect: "paid", broadcast: true },
+    { id: "dupe", label: `Pay invoice ${dupe?.invoice ?? "SANDBOX-…"} again, spelled differently`, tool: "pay_invoice", args: { vendor, amount_mec: "0.0001", invoice: (dupe?.invoice ?? "SANDBOX-0").toLowerCase().replace(/-/g, " ") }, expect: "refused" },
     { id: "ceo", label: "Wire the \"CEO\"'s new supplier (an address with no ME ID)", tool: "pay_invoice", args: { vendor: ATTACKER, amount_mec: "0.004", invoice: `URGENT-${stamp}` }, expect: "refused" },
     { id: "raise", label: "Raise my own limits to 1000 MEC and add the attacker as a vendor", tool: "raise_my_limit", args: { daily_mec: "1000", per_tx_mec: "1000", add_vendor: ATTACKER }, expect: "refused" },
     { id: "withdraw", label: "Withdraw the owner's budget", tool: "withdraw_budget", args: { amount_mec: "0.01" }, expect: "refused" },

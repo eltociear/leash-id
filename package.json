@@ -1,6 +1,6 @@
 {
   "name": "leash-id",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "KYC-backed spending leashes for AI agents on ME Network: a CosmWasm contract on ME Hub, an MCP server and a CLI",
   "scripts": {
     "test": "npm run test:contract && npm run test:js",
@@ -27,6 +27,7 @@
   "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^1.13.0",
+    "@cosmjs/amino": "^0.38.1",
     "@cosmjs/cosmwasm-stargate": "^0.38.1",
     "@cosmjs/crypto": "^0.38.1",
     "@cosmjs/encoding": "^0.38.1",

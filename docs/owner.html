@@ -35,6 +35,7 @@
   <div id="app" hidden>
     <section><h2>Account</h2><div class="card" id="acct" aria-live="polite"></div></section>
     <section><h2 id="pend-h">Waiting for your approval</h2><div class="card" id="pending" aria-live="polite"></div></section>
+    <section id="co-sec" hidden><h2>Waiting for your co-approval</h2><div class="card" id="co" aria-live="polite"></div></section>
     <section><h2>Your agents</h2><div id="agents"></div></section>
     <section><h2 id="offer-h">Put a new agent on a leash</h2><div class="card">
       <form id="offer" aria-labelledby="offer-h">
@@ -46,6 +47,7 @@
         <button style="margin-top:12px">Offer leash</button>
       </form>
     </div></section>
+    <section><h2>Accounting</h2><div class="card row"><button class="ghost" id="csv">Download all payments (CSV)</button><span class="note">every payment by every agent of yours, with both ME IDs and who signed</span></div></section>
     <section><h2>Activity</h2><div class="card log" id="log" aria-live="polite">Nothing sent yet.</div></section>
   </div>
 
@@ -194,7 +196,8 @@ function readPolicy(prefix, label) {
 }
 
 async function refresh() {
-  const [o, cfg, ident] = await Promise.all([q({ owner: { owner: me } }), q({ config: {} }), q({ identity: { address: me } })]);
+  const [o, cfg, ident, appr, coOwners] = await Promise.all([q({ owner: { owner: me } }), q({ config: {} }), q({ identity: { address: me } }),
+    q({ approvers: { owner: me } }), q({ approver_of: { approver: me } })]);
   const id = o.me_id;
   const ok = id && id.active && id.kyc_level >= cfg.min_kyc_level;
   $("acct").innerHTML = `
@@ -205,6 +208,9 @@ async function refresh() {
       <dt>Budget</dt><dd>${mec(BigInt(o.balance) - BigInt(o.reserved))} available · ${mec(o.reserved)} reserved for ${o.pending_count} held payment(s)</dd>
       <dt>Bond</dt><dd>${ident.bond ? `${mec(ident.bond.amount)} locked in fixed deposit(s) #${ident.bond.deposits.map((d) => d.id).join(", #")} until at least ${when(ident.bond.earliest_unlock)}` : "none: vendors see no bond"}
         <form class="row" id="bondf" style="margin-top:6px"><label class="sr" for="bond-ids">Fixed deposit ids</label><input id="bond-ids" placeholder="ME Hub fixed deposit ids, e.g. 12, 15" value="${ident.bond ? ident.bond.deposits.map((d) => d.id).join(", ") : ""}"><button class="ghost small" id="bond-go">Show as bond</button></form></dd>
+      <dt>Signatures</dt><dd>${appr.threshold} of ${appr.list.length + 1} (you${appr.list.length ? ` + ${appr.list.map((a) => `<span class="mono">${esc(a.slice(0, 10))}…</span>`).join(", ")}` : ""}) release a held payment; any one can reject
+        <form class="row" id="apprf" style="margin-top:6px"><label class="sr" for="appr-list">Co-approvers</label><input id="appr-list" placeholder="co-approver me1…, me1…" value="${appr.list.map(esc).join(", ")}">
+        <label class="sr" for="appr-n">Signatures needed</label><input id="appr-n" inputmode="numeric" style="max-width:90px" value="${appr.threshold}"><button class="ghost small" id="appr-go">Save</button></form></dd>
     </dl>
     <form class="row" id="fund" style="margin-top:14px">
       <label class="sr" for="amt">Amount in MEC</label><input id="amt" inputmode="decimal" placeholder="amount (MEC)">
@@ -217,6 +223,14 @@ async function refresh() {
     if (!ids.every((x) => /^\d+$/.test(x))) return logLine(`<span class="err">deposit ids are whole numbers</span>`);
     send(ids.length ? `show fixed deposit(s) #${ids.join(", #")} as bond` : "clear bond", { set_bond: { deposit_ids: ids.map(Number) } }, [], $("bond-go"));
   };
+  $("apprf").onsubmit = (e) => {
+    e.preventDefault();
+    const list = $("appr-list").value.split(/[\s,]+/).filter(Boolean);
+    if (!list.every(isAddr)) return logLine(`<span class="err">co-approvers must be ME Hub addresses</span>`);
+    const n = Number($("appr-n").value);
+    if (!Number.isInteger(n) || n < 1 || n > list.length + 1) return logLine(`<span class="err">signatures needed: 1 to ${list.length + 1}</span>`);
+    send(`set ${list.length} co-approver(s), ${n} signature(s) needed`, { set_approvers: { approvers: list, threshold: n } }, [], $("appr-go"));
+  };
   $("wd").onclick = () => { try { const a = toUmec($("amt").value, "amount"); send(`withdraw ${mec(a)}`, { withdraw: { amount: a } }, [], $("wd")); } catch (err) { logLine(`<span class="err">${esc(err.message)}</span>`); } };
 
   const pend = (await q({ pending: { owner: me, limit: 50 } })).payments;
@@ -225,7 +239,7 @@ async function refresh() {
       const stale = Date.now() / 1000 > p.created_at + PENDING_TTL;
       return `<tr><td>${p.id}</td><td class="mono">${esc(p.agent.slice(0, 10))}…</td>
         <td class="mono">${esc(p.vendor.slice(0, 10))}…${p.vendor_did ? `<br><span style="color:var(--ok)">ME ID ${esc(p.vendor_did)}</span>` : ""}</td>
-        <td>${mec(p.amount)}</td><td>${esc(p.invoice)}${p.memo ? `<br><span class="note">${esc(p.memo.slice(0, 80))}</span>` : ""}</td><td>${ago(p.created_at)}</td>
+        <td>${mec(p.amount)}</td><td>${esc(p.invoice)}${p.memo ? `<br><span class="note">${esc(p.memo.slice(0, 80))}</span>` : ""}</td><td>${ago(p.created_at)}${appr.threshold > 1 ? `<br><span class="note">${(p.approved_by ?? []).length}/${appr.threshold} signed</span>` : ""}</td>
         <td><div class="row" style="flex-wrap:nowrap"><button class="small" data-approve="${p.id}" ${stale ? "disabled title=\"older than 7 days: reject it and have the agent pay again\"" : ""}>Approve</button>
         <button class="small danger ghost" data-reject="${p.id}">Reject</button></div></td></tr>`;
     }).join("")}</tbody></table></div>` : "Nothing is waiting for you.";
@@ -234,6 +248,20 @@ async function refresh() {
     if (a) send(`approve #${a}`, { approve: { id: Number(a) } }, [], e.target);
     if (r) send(`reject #${r}`, { reject: { id: Number(r) } }, [], e.target);
   };
+
+  // payments of other owners that wait on this account's signature
+  const coRows = [];
+  for (const owner of coOwners) {
+    const [pp, oa] = await Promise.all([q({ pending: { owner, limit: 50 } }), q({ approvers: { owner } })]);
+    for (const p of pp.payments) coRows.push({ ...p, need: oa.threshold });
+  }
+  $("co-sec").hidden = !coOwners.length;
+  $("co").innerHTML = coRows.length ? `<div class="scroll"><table><thead><tr><th scope="col">#</th><th scope="col">Owner</th><th scope="col">Vendor</th><th scope="col">Amount</th><th scope="col">Invoice</th><th scope="col">Signed</th><th scope="col"><span class="sr">Actions</span></th></tr></thead><tbody>
+    ${coRows.map((p) => `<tr><td>${p.id}</td><td class="mono">${esc(p.owner.slice(0, 10))}…</td><td class="mono">${esc(p.vendor.slice(0, 10))}…</td><td>${mec(p.amount)}</td><td>${esc(p.invoice)}</td>
+      <td>${(p.approved_by ?? []).length}/${p.need}${(p.approved_by ?? []).includes(me) ? " (you signed)" : ""}</td>
+      <td><div class="row" style="flex-wrap:nowrap"><button class="small" data-approve="${p.id}" ${(p.approved_by ?? []).includes(me) ? "disabled" : ""}>Approve</button><button class="small danger ghost" data-reject="${p.id}">Reject</button></div></td></tr>`).join("")}
+    </tbody></table></div>` : "Nothing waits on your signature.";
+  $("co").onclick = $("pending").onclick;
 
   const box = $("agents");
   if (!o.agents.length) { box.innerHTML = `<div class="card">No agents yet. Offer a leash below; it takes effect when the agent key accepts it.</div>`; }
@@ -271,6 +299,21 @@ async function refresh() {
   }
 }
 
+// CSV for accounting. Cells are quoted, and ones that start like a formula are defused for spreadsheets.
+const csvCell = (v) => { const t = String(v ?? ""); return /[",\n]|^[=+\-@]/.test(t) ? `"${t.replace(/"/g, '""').replace(/^([=+\-@])/, "'$1")}"` : t; };
+$("csv").onclick = async () => {
+  const rows = ["id,status,created_utc,settled_utc,amount_mec,vendor,vendor_me_id,invoice,agent,owner,owner_me_id,approved_by,memo"];
+  for (let before = null; ;) {
+    const page = (await q({ payments_by_owner: { owner: me, start_before: before, limit: 100 } })).payments;
+    for (const p of page) rows.push([p.id, p.status, new Date(p.created_at * 1000).toISOString(), p.settled_at ? new Date(p.settled_at * 1000).toISOString() : "",
+      mec(p.amount).replace(/,/g, "").replace(" MEC", ""), p.vendor, p.vendor_did, p.invoice, p.agent, p.owner, p.owner_did, (p.approved_by ?? []).join(" "), p.memo].map(csvCell).join(","));
+    if (page.length < 100) break;
+    before = page[page.length - 1].id;
+  }
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([rows.join("\n") + "\n"], { type: "text/csv" })), download: `leash-id-payments-${me.slice(0, 12)}.csv` });
+  a.click();
+  logLine(`exported ${rows.length - 1} payment(s) to CSV`);
+};
 $("o-policy").innerHTML = policyFields("o");
 $("offer").onsubmit = (e) => {
   e.preventDefault();

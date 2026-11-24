@@ -1,0 +1,15 @@
+# The sandbox needs api/, lib/, sandbox/, docs/ (shared CSS), package files and deployment.json. Nothing else.
+runs/
+inbox/
+devnet/
+contracts/
+artifacts/
+test/
+scripts/
+examples/
+web/
+mcp/
+assets/
+*.md
+!sandbox/README.md
+.github/

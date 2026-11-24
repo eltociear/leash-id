@@ -12,7 +12,7 @@ use crate::msg::{
     Output, OwnerResponse, PayItem, PaymentsResponse, PolicyMsg, QueryMsg, WhoisResponse,
 };
 use crate::state::{
-    AgentRec, Config, ContractVersion, Offer, OwnerAcct, PayStatus, Payment, Policy, AGENTS, BONDS, SUB_ACCOUNTS,
+    AgentRec, Approvers, Config, ContractVersion, Offer, OwnerAcct, PayStatus, Payment, Policy, AGENTS, APPROVERS, APPROVER_OF, BONDS, SUB_ACCOUNTS,
     AGENT_PAYMENTS, CONFIG, INVOICES, NEXT_ID, OFFERS, OWNERS, OWNER_AGENTS, OWNER_PAYMENTS,
     OWNER_PENDING, PAYMENTS, VERSION,
 };
@@ -34,6 +34,7 @@ const WINDOW_HOURS: u64 = 24;
 const MAX_INVOICE: usize = 64;
 const MAX_MEMO: usize = 256;
 const MAX_BONDS: usize = 5;
+const MAX_APPROVERS: usize = 5;
 
 pub fn instantiate(deps: DepsMut, _env: Env, info: MessageInfo, msg: InstantiateMsg) -> Res {
     nonpayable(&info)?;
@@ -120,6 +121,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> R
         ExecuteMsg::ReleaseInvoice { vendor, invoice } => release_invoice(deps, info, vendor, invoice),
         ExecuteMsg::RegisterSubAccount { sub, main } => register_sub(deps, sub, main),
         ExecuteMsg::SetBond { deposit_ids } => set_bond(deps, env, info, deposit_ids),
+        ExecuteMsg::SetApprovers { approvers, threshold } => set_approvers(deps, info, approvers, threshold),
     }
 }
 
@@ -148,7 +150,8 @@ pub fn resolve(deps: Deps, addr: &str) -> Option<(MeId, Option<String>)> {
     let a = Addr::unchecked(addr);
     let main = SUB_ACCOUNTS.may_load(deps.storage, &a).ok()??;
     let id = did::lookup(deps, main.as_str())?;
-    (id.sub_account == addr).then(|| (id, Some(main.to_string())))
+    // x/did keeps sub_account as the user typed it; bech32 is case-insensitive.
+    id.sub_account.eq_ignore_ascii_case(addr).then(|| (id, Some(main.to_string())))
 }
 
 fn me_id_of(deps: Deps, addr: &str) -> Option<MeId> {
@@ -340,17 +343,22 @@ fn build_policy(deps: Deps, env: &Env, agent: &Addr, p: PolicyMsg) -> Result<Pol
 }
 
 /// Money must leave the leash: not to the agent itself, the contract, or another leashed agent.
+/// The same holds for a registered EVM sub-account: it is the same key as its main account.
 fn vendor_sane(deps: Deps, env: &Env, agent: &Addr, vendor: &Addr) -> Result<(), ContractError> {
-    let why = if vendor == agent {
-        "an agent cannot pay itself"
-    } else if vendor == env.contract.address {
-        "the contract cannot be a vendor"
-    } else if AGENTS.has(deps.storage, vendor) {
-        "a leashed agent cannot be a vendor"
-    } else {
-        return Ok(());
-    };
-    Err(ContractError::SelfDealing { why: why.into() })
+    let main = SUB_ACCOUNTS.may_load(deps.storage, vendor)?;
+    for who in std::iter::once(vendor).chain(main.as_ref()) {
+        let why = if who == agent {
+            "an agent cannot pay itself"
+        } else if *who == env.contract.address {
+            "the contract cannot be a vendor"
+        } else if AGENTS.has(deps.storage, who) {
+            "a leashed agent cannot be a vendor"
+        } else {
+            continue;
+        };
+        return Err(ContractError::SelfDealing { why: why.into() });
+    }
+    Ok(())
 }
 
 fn offer(deps: DepsMut, env: Env, info: MessageInfo, agent: String, p: PolicyMsg) -> Res {
@@ -409,6 +417,9 @@ fn accept(deps: DepsMut, env: Env, info: MessageInfo, owner: String) -> Res {
     }
     if OWNERS.has(deps.storage, &agent) {
         return Err(invalid("an owner account cannot be leashed as an agent"));
+    }
+    if APPROVER_OF.prefix(&agent).keys(deps.storage, None, None, Order::Ascending).next().is_some() {
+        return Err(invalid("a co-approver key cannot be leashed as an agent"));
     }
     let off = OFFERS
         .may_load(deps.storage, (&agent, &owner))?
@@ -580,7 +591,7 @@ fn register_sub(deps: DepsMut, sub: String, main: String) -> Res {
     let id = did::lookup(deps.as_ref(), main.as_str()).ok_or_else(|| ContractError::NoMeId {
         addr: main.to_string(),
     })?;
-    if id.sub_account != sub.as_str() {
+    if !id.sub_account.eq_ignore_ascii_case(sub.as_str()) {
         return Err(ContractError::NotSubAccount {
             sub: sub.to_string(),
             main: main.to_string(),
@@ -598,6 +609,9 @@ fn register_sub(deps: DepsMut, sub: String, main: String) -> Res {
 /// main account. Deposits that were withdrawn simply stop answering and drop out.
 fn bond_deposit(deps: Deps, env: &Env, cfg: &Config, me: &MeId, id: u64) -> Result<me::Deposit, String> {
     let d = me::fixed_deposit(deps, &me.address, id).ok_or("not found on ME Hub (withdrawn, or not this ME ID's)")?;
+    if d.id != id {
+        return Err("ME Hub answered with a different deposit".into());
+    }
     if d.account != me.address {
         return Err("belongs to another account".into());
     }
@@ -800,6 +814,7 @@ fn record(
         } else {
             PayStatus::Paid
         },
+        approved_by: vec![],
         created_at: now,
         settled_at: if d.needs_approval { None } else { Some(now) },
     };
@@ -936,12 +951,60 @@ fn pay_batch(deps: DepsMut, env: Env, info: MessageInfo, items: Vec<PayItem>) ->
         .add_events(events))
 }
 
+fn approvers_of(storage: &dyn Storage, owner: &Addr) -> StdResult<Approvers> {
+    Ok(APPROVERS.may_load(storage, owner)?.unwrap_or(Approvers { list: vec![], threshold: 1 }))
+}
+
+fn set_approvers(deps: DepsMut, info: MessageInfo, list: Vec<String>, threshold: u8) -> Res {
+    let cfg = CONFIG.load(deps.storage)?;
+    let owner = info.sender;
+    verified(deps.as_ref(), &cfg, &owner)?;
+    if list.len() > MAX_APPROVERS {
+        return Err(invalid("at most 5 co-approvers"));
+    }
+    let mut addrs: Vec<Addr> = vec![];
+    for a in list {
+        let a = deps.api.addr_validate(&a)?;
+        if a == owner || addrs.contains(&a) {
+            continue;
+        }
+        if AGENTS.has(deps.storage, &a) {
+            return Err(invalid("an agent key cannot be a co-approver"));
+        }
+        // Each co-approver is a verified human too, checked now and again whenever they sign.
+        verified(deps.as_ref(), &cfg, &a)?;
+        addrs.push(a);
+    }
+    if threshold == 0 || threshold as usize > addrs.len() + 1 {
+        return Err(invalid("threshold must be between 1 and the number of signers (co-approvers + you)"));
+    }
+    let old = approvers_of(deps.storage, &owner)?;
+    for a in &old.list {
+        APPROVER_OF.remove(deps.storage, (a, &owner));
+    }
+    for a in &addrs {
+        APPROVER_OF.save(deps.storage, (a, &owner), &())?;
+    }
+    if addrs.is_empty() && threshold == 1 {
+        APPROVERS.remove(deps.storage, &owner);
+    } else {
+        APPROVERS.save(deps.storage, &owner, &Approvers { list: addrs.clone(), threshold })?;
+    }
+    Ok(Response::new()
+        .add_attribute("action", "set_approvers")
+        .add_attribute("owner", owner)
+        .add_attribute("approvers", addrs.len().to_string())
+        .add_attribute("threshold", threshold.to_string()))
+}
+
 fn settle(deps: DepsMut, env: Env, info: MessageInfo, id: u64, approve: bool) -> Res {
     let cfg = CONFIG.load(deps.storage)?;
     let mut p = PAYMENTS
         .may_load(deps.storage, id)?
         .ok_or_else(|| invalid("no such payment"))?;
-    if p.owner != info.sender {
+    let signers = approvers_of(deps.storage, &p.owner)?;
+    let signer = info.sender;
+    if p.owner != signer && !signers.list.contains(&signer) {
         return Err(ContractError::Unauthorized {});
     }
     if p.status != PayStatus::Pending {
@@ -952,33 +1015,57 @@ fn settle(deps: DepsMut, env: Env, info: MessageInfo, id: u64, approve: bool) ->
         .add_attribute("action", if approve { "approve" } else { "reject" })
         .add_attribute("payment_id", id.to_string())
         .add_attribute("owner", &p.owner)
+        .add_attribute("signer", &signer)
         .add_attribute("vendor", &p.vendor)
         .add_attribute("amount", p.amount);
-    if approve {
-        if env.block.time.seconds() > p.created_at + PENDING_TTL {
-            return Err(ContractError::PendingExpired { id });
-        }
-        // Approving moves money, so the approver must still hold a live ME ID. Rejecting stays open:
-        // a suspended owner can always stop a payment, never push one out.
-        verified(deps.as_ref(), &cfg, &p.owner)?;
-        // The vendor must still be one this leash may pay (a "verified vendor" may have lost its ME ID).
-        let rec = load_agent(deps.as_ref(), &p.agent)?;
-        let vid = me_id_of(deps.as_ref(), p.vendor.as_str());
-        if !vendor_allowed(&cfg, &rec.policy, &p.vendor, vid.as_ref()) {
-            return Err(ContractError::VendorNotAllowed {
-                vendor: p.vendor.to_string(),
-            });
-        }
-        close_pending(deps.storage, &mut acct, &mut p, &env, true)?;
-        res = res.add_message(BankMsg::Send {
+    if !approve {
+        // Any one signer can stop money, even with a suspended ME ID; nobody can move it alone.
+        close_pending(deps.storage, &mut acct, &mut p, &env, false)?;
+        OWNERS.save(deps.storage, &p.owner, &acct)?;
+        return Ok(res.add_event(payment_event("rejected", &p)));
+    }
+    if env.block.time.seconds() > p.created_at + PENDING_TTL {
+        return Err(ContractError::PendingExpired { id });
+    }
+    if signer == p.vendor {
+        return Err(ContractError::SelfDealing { why: "a signer cannot approve a payment to themselves".into() });
+    }
+    // Approving moves money, so the signer, and the owner whose budget it is, must hold a live ME ID.
+    verified(deps.as_ref(), &cfg, &signer)?;
+    verified(deps.as_ref(), &cfg, &p.owner)?;
+    if p.approved_by.contains(&signer) {
+        return Err(ContractError::AlreadyApproved { id, have: p.approved_by.len() as u8, need: signers.threshold });
+    }
+    p.approved_by.push(signer);
+    // Count only signatures that still stand: still a signer, ME ID still live.
+    let standing = p
+        .approved_by
+        .iter()
+        .filter(|a| (**a == p.owner || signers.list.contains(a)) && verified(deps.as_ref(), &cfg, a).is_ok())
+        .count();
+    res = res
+        .add_attribute("approvals", standing.to_string())
+        .add_attribute("needed", signers.threshold.to_string());
+    if standing < signers.threshold as usize {
+        PAYMENTS.save(deps.storage, id, &p)?;
+        return Ok(res.add_event(payment_event("approval", &p)));
+    }
+    // The vendor must still be one this leash may pay (a "verified vendor" may have lost its ME ID).
+    let rec = load_agent(deps.as_ref(), &p.agent)?;
+    let vid = me_id_of(deps.as_ref(), p.vendor.as_str());
+    if !vendor_allowed(&cfg, &rec.policy, &p.vendor, vid.as_ref()) {
+        return Err(ContractError::VendorNotAllowed {
+            vendor: p.vendor.to_string(),
+        });
+    }
+    close_pending(deps.storage, &mut acct, &mut p, &env, true)?;
+    OWNERS.save(deps.storage, &p.owner, &acct)?;
+    Ok(res
+        .add_message(BankMsg::Send {
             to_address: p.vendor.to_string(),
             amount: coins(p.amount.u128(), cfg.denom),
-        });
-    } else {
-        close_pending(deps.storage, &mut acct, &mut p, &env, false)?;
-    }
-    OWNERS.save(deps.storage, &p.owner, &acct)?;
-    Ok(res.add_event(payment_event(if approve { "approved" } else { "rejected" }, &p)))
+        })
+        .add_event(payment_event("approved", &p)))
 }
 
 // ---------------- queries ----------------
@@ -1099,6 +1186,17 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_json_binary(&found)
         }
         QueryMsg::MeId { address } => to_json_binary(&me_id_of(deps, &address)),
+        QueryMsg::Approvers { owner } => to_json_binary(&approvers_of(deps.storage, &deps.api.addr_validate(&owner)?)?),
+        QueryMsg::ApproverOf { approver } => {
+            let a = deps.api.addr_validate(&approver)?;
+            let owners = APPROVER_OF
+                .prefix(&a)
+                .keys(deps.storage, None, None, Order::Ascending)
+                .take(MAX_LIMIT as usize)
+                .map(|k| k.map(|o| o.to_string()))
+                .collect::<StdResult<Vec<_>>>()?;
+            to_json_binary(&owners)
+        }
         QueryMsg::Identity { address } => {
             let a = deps.api.addr_validate(&address)?;
             let r = resolve(deps, a.as_str());
@@ -1162,6 +1260,7 @@ fn whois(deps: Deps, env: &Env, agent: String) -> StdResult<WhoisResponse> {
         expired,
         owner_balance: available,
         pending_count: acct.pending,
+        approvals_needed: approvers_of(deps.storage, &rec.owner)?.threshold,
         can_pay_now: blocked_by.is_none(),
         blocked_by,
         policy: rec.policy,

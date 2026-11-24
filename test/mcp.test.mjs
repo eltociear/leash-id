@@ -45,6 +45,17 @@ test("structured results carry the full message (clients may show only structure
   assert.equal(r.structuredContent.message, r.content[0].text);
 });
 
+test("pay_for_api won't call local, private or non-https URLs", async () => {
+  const c = new Client({ name: "test", version: "1" });
+  await c.connect(new StdioClientTransport({ command: process.execPath, args: [SERVER], env: { ...base, LEASH_READONLY: "1", LEASH_AGENT_ADDRESS: AGENT }, stderr: "ignore" }));
+  for (const url of ["http://localhost:8080/x", "https://127.0.0.1/x", "https://169.254.169.254/latest/meta-data/", "https://10.0.0.5/", "https://[::1]/", "file:///etc/passwd", "https://user:pw@example.com/"]) {
+    const r = await c.callTool({ name: "pay_for_api", arguments: { url, max_mec: "0.01" } });
+    assert.equal(r.isError, true, url);
+    assert.match(r.content[0].text, /won't call/, url);
+  }
+  await c.close();
+});
+
 test("read-only mode needs an agent address", () => {
   const r = spawnSync(process.execPath, [SERVER], { env: { ...base, LEASH_READONLY: "1" }, input: "" });
   assert.equal(r.status, 1);

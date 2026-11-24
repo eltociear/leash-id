@@ -21,4 +21,4 @@ http.createServer(async (req, res) => {
   if (!fs.existsSync(file)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { "content-type": types[path.extname(file)] ?? "application/octet-stream" });
   res.end(fs.readFileSync(file));
-}).listen(port, () => console.error(`sandbox on http://localhost:${port}/`));
+}).listen(port, "127.0.0.1", () => console.error(`sandbox on http://localhost:${port}/ (this machine only)`));
