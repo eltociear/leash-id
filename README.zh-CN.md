@@ -1,6 +1,6 @@
 # Leash ID：为 AI 代理加上由 ME ID 担保的支付“牵引绳”
 
-[English](README.md) · **简体中文**
+[English](README.md) · **简体中文** · [日本語](README.ja.md)
 
 **演示视频：** 见 [README](README.md) · **查询代理（无需钱包）：** https://eltociear.github.io/leash-id/ ·
 **所有者控制台（Keplr）：** https://eltociear.github.io/leash-id/owner.html ·

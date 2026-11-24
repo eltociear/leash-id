@@ -1,6 +1,6 @@
 # Leash ID — KYC-backed spending leashes for AI agents on ME Network
 
-**English** · [简体中文](README.zh-CN.md) · **Judges: start with [JUDGES.md](JUDGES.md)** (a 10-minute tour with evidence for each criterion)
+**English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · **Judges: start with [JUDGES.md](JUDGES.md)** (a 10-minute tour with evidence for each criterion)
 
 ![Leash ID: every agent payment re-checks the owner's live ME ID on ME Hub](assets/cover.png)
 
