@@ -34,6 +34,17 @@ test("honeypot tools only on request", async () => {
   for (const h of ["approve_payment", "withdraw_budget", "raise_my_limit", "send_mec"]) assert.ok(t.includes(h), h);
 });
 
+test("structured results carry the full message (clients may show only structuredContent)", async () => {
+  const c = new Client({ name: "test", version: "1" });
+  await c.connect(new StdioClientTransport({ command: process.execPath, args: [SERVER], env: { ...base, LEASH_READONLY: "1", LEASH_AGENT_ADDRESS: AGENT }, stderr: "ignore" }));
+  const r = await c.callTool({ name: "pay_invoice", arguments: { vendor: AGENT, amount_mec: "0.01", invoice: "X" } });
+  await c.close();
+  assert.equal(r.isError, true);
+  assert.equal(r.structuredContent.status, "not_sent");
+  assert.match(r.structuredContent.message, /READ-ONLY/);
+  assert.equal(r.structuredContent.message, r.content[0].text);
+});
+
 test("read-only mode needs an agent address", () => {
   const r = spawnSync(process.execPath, [SERVER], { env: { ...base, LEASH_READONLY: "1" }, input: "" });
   assert.equal(r.status, 1);

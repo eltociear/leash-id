@@ -74,9 +74,11 @@ const UNTRUSTED = (s) =>
 
 // ---------- output helpers ----------
 const json = (x) => JSON.stringify(x, null, 2);
+// Some clients (Claude Code among them) show the model structuredContent instead of the text, so the
+// structured result always carries the full human-readable message as well.
 const reply = (text, structured, isError = false) => ({
   content: [{ type: "text", text }],
-  ...(structured ? { structuredContent: structured } : {}),
+  ...(structured ? { structuredContent: { message: text, ...structured } } : {}),
   ...(isError ? { isError: true } : {}),
 });
 const meIdLine = (id) => (id ? `ME ID ${id.did} (${id.active === false ? "INACTIVE" : "active"}, KYC level ${id.kyc_level})` : "no ME ID");

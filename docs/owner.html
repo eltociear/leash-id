@@ -218,8 +218,8 @@ async function refresh() {
       return `<tr><td>${p.id}</td><td class="mono">${esc(p.agent.slice(0, 10))}…</td>
         <td class="mono">${esc(p.vendor.slice(0, 10))}…${p.vendor_did ? `<br><span style="color:var(--ok)">ME ID ${esc(p.vendor_did)}</span>` : ""}</td>
         <td>${mec(p.amount)}</td><td>${esc(p.invoice)}${p.memo ? `<br><span class="note">${esc(p.memo.slice(0, 80))}</span>` : ""}</td><td>${ago(p.created_at)}</td>
-        <td class="row"><button class="small" data-approve="${p.id}" ${stale ? "disabled title=\"older than 7 days: reject it and have the agent pay again\"" : ""}>Approve</button>
-        <button class="small danger ghost" data-reject="${p.id}">Reject</button></td></tr>`;
+        <td><div class="row" style="flex-wrap:nowrap"><button class="small" data-approve="${p.id}" ${stale ? "disabled title=\"older than 7 days: reject it and have the agent pay again\"" : ""}>Approve</button>
+        <button class="small danger ghost" data-reject="${p.id}">Reject</button></div></td></tr>`;
     }).join("")}</tbody></table></div>` : "Nothing is waiting for you.";
   $("pending").onclick = (e) => {
     const a = e.target.dataset.approve, r = e.target.dataset.reject;
