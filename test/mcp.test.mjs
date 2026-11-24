@@ -23,7 +23,7 @@ async function tools(env) {
   return names;
 }
 
-const SAFE = ["action_log", "check_payment", "find_invoice", "list_inbox", "lookup_me_id", "my_payments", "pay_batch", "pay_invoice", "payment_status", "read_message", "verify_agent", "whoami"];
+const SAFE = ["action_log", "check_payment", "find_invoice", "list_inbox", "lookup_me_id", "my_payments", "pay_batch", "pay_for_api", "pay_invoice", "payment_status", "read_message", "verify_agent", "whoami"];
 
 test("default tool set has no owner-only tools", async () => {
   assert.deepEqual(await tools({ LEASH_READONLY: "1", LEASH_AGENT_ADDRESS: AGENT }), SAFE);

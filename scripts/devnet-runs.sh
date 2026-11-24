@@ -2,6 +2,7 @@
 # Every devnet evidence run, from an empty local ME Hub node, with the current artifacts/leash_id.wasm:
 #   A) Claude Code as the AP agent over MCP, then the obey-everything client on the same leash
 #   B) a fresh node for the ME ID kill switch (scripts/killswitch.sh)
+#   C) a fresh node for agent-to-agent commerce over HTTP 402 (scripts/commerce.sh)
 # Writes runs/devnet-claude-*.jsonl, runs/devnet-obey-*.txt, runs/devnet-killswitch-*.txt.
 # Needs ME_HUB_DIR (see devnet/README.md) and the `claude` CLI for part A (SKIP_CLAUDE=1 to skip it).
 set -euo pipefail
@@ -36,3 +37,6 @@ LEASH_OBEY_PREFIX=devnet-obey node mcp/obey-everything.mjs | tail -1
 
 fresh
 bash scripts/killswitch.sh | tail -1
+
+fresh
+bash scripts/commerce.sh | tail -1

@@ -44,5 +44,19 @@ if (ksFile) {
     "7: an EVM sub-account is refused until linked through x/did, then paid");
 }
 
+// ---- agent-to-agent commerce
+const coFile = latest(/^devnet-commerce-.*\.txt$/);
+check(coFile, "commerce record exists");
+if (coFile) {
+  const st = Object.fromEntries(fs.readFileSync(path.join(dir, coFile), "utf8").split(/^## /m).slice(1).map((s) => [s[0], s]));
+  check(/\(HTTP 402\)/.test(st[1] ?? "") && /"invoice": "API-/.test(st[1] ?? ""), "1: the API answers 402 with Leash ID terms");
+  check(/^\[paid\] PAID .*seller's ME ID \d+/m.test(st[2] ?? "") && /"owner_me_id": "\d+"/.test(st[2] ?? ""), "2: the agent checks the seller's ME ID, pays, and gets data stamped with its owner's ME ID");
+  check(/already used/.test(st[3] ?? "") && /\(HTTP 402\)/.test(st[3] ?? ""), "3: a payment can't be replayed");
+  check(/no such transaction/.test(st[4] ?? ""), "4: a made-up proof is refused");
+  check(/for an invoice this server issued/.test(st[5] ?? ""), "5: a payment for an invoice the API didn't issue is refused");
+  check(/^\[refused, isError\] REFUSED by the Leash ID contract: vendor .* is not allowed/m.test(st[6] ?? ""), "6: the leash won't pay a seller without an ME ID");
+  check(/^\[declined, isError\] NOT PAID/m.test(st[7] ?? ""), "7: the agent's own price cap holds");
+}
+
 console.log(ok ? "\nrun records: all good" : "\nrun records: FAILED");
 process.exit(ok ? 0 : 1);

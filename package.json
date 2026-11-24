@@ -47,7 +47,8 @@
   "exports": {
     ".": "./lib/chain.mjs",
     "./chain": "./lib/chain.mjs",
-    "./tx": "./lib/tx.mjs"
+    "./tx": "./lib/tx.mjs",
+    "./vendor": "./lib/vendor.mjs"
   },
   "files": [
     "leash.mjs",
@@ -63,7 +64,8 @@
     "SECURITY.md",
     "CHANGELOG.md",
     "THREAT_MODEL.md",
-    "LICENSE"
+    "LICENSE",
+    "examples/"
   ],
   "engines": {
     "node": ">=20"
