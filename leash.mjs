@@ -115,7 +115,7 @@ const payLine = (p) => `#${String(p.id).padEnd(5)} ${p.status.padEnd(8)} ${fmt(p
 
 /** Prints a send outcome; exit code 0 only when it went through. */
 function outcome(r) {
-  if (o.json) { console.log(JSON.stringify({ ...r, events: undefined }, null, 2)); return r.status === "ok" ? 0 : 1; }
+  if (o.json) { console.log(JSON.stringify({ ...r, events: undefined }, null, 2)); return r.status === "ok" ? 0 : r.status === "unknown" ? 3 : 1; }
   const a = r.attrs ?? {};
   switch (r.status) {
     case "ok":

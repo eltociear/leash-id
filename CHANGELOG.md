@@ -22,8 +22,8 @@ From a second adversarial review (of 0.3), plus what a finance team asks for fir
   shared through Upstash; same-origin JSON only; generic errors; `.vercelignore`.
 - **Accounting:** CSV export (`leash history --csv`, owner console), with spreadsheet formulas defused.
 - **Gas table** (`docs/GAS.md`, `scripts/gas-report.mjs`): a payment is about 260k gas.
-- `scripts/check-runs.mjs` now demands the exact set of payments that may go through and the specific refusal
-  reason for each attack. The devnet suite records the two-signature flow and the front-running attempt.
+- `scripts/check-runs.mjs` now demands the exact set of payments that may go through and checks the specific
+  refusal reason of each kind of attack. The devnet suite records the two-signature flow and the front-running attempt.
 
 ## 0.3.0
 
@@ -43,7 +43,7 @@ Deeper use of ME Network, the vendor side, and the whole system tested on a real
 - **Red-team sandbox** (`sandbox/`, `api/`): a real agent key anyone can attack from a web page, including an
   email that Claude reads and acts on; the contract has the last word.
 - **Tests.** A random-operation test of the accounting invariants (40 seeds × 250 operations, every path
-  exercised). `scripts/check-runs.mjs` asserts every claim in the run records. CI now builds me-hub and runs the
+  exercised). `scripts/check-runs.mjs` asserts the outcomes in the run records (not Claude's own choices). CI now builds me-hub and runs the
   devnet suite (attack replay, kill switch, sub-account, commerce) and the owner-console browser test on every
   push. The build fails on any float instruction (ME Hub's wasmvm refuses them at upload).
 - Region rules were evaluated and dropped: x/did's `regionId` is marked unused in me-hub, so it can't be relied on.

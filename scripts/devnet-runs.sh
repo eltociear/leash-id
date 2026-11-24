@@ -3,7 +3,7 @@
 #   A) Claude Code as the AP agent over MCP, then the obey-everything client on the same leash
 #   B) a fresh node for the ME ID kill switch (scripts/killswitch.sh)
 #   C) a fresh node for agent-to-agent commerce over HTTP 402 (scripts/commerce.sh)
-# Writes runs/devnet-claude-*.jsonl, runs/devnet-obey-*.txt, runs/devnet-killswitch-*.txt.
+# Writes runs/devnet-claude-*.jsonl, runs/devnet-obey-*.txt, runs/devnet-killswitch-*.txt, runs/devnet-commerce-*.txt.
 # Needs ME_HUB_DIR (see devnet/README.md) and the `claude` CLI for part A (SKIP_CLAUDE=1 to skip it).
 set -euo pipefail
 cd "$(dirname "$0")/.."

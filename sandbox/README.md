@@ -1,9 +1,12 @@
 # Red-team sandbox
 
-A page that hands visitors a real agent key on ME Hub testnet and lets them attack it: one-click attacks, their
-own payments, and an email that Claude (with the agent key behind its tools) reads and acts on. The Leash ID
-contract refuses everything outside the leash. Refusals are simulated against the live contract (no fee);
-payments the leash allows are broadcast and go to our own vendor address.
+A page that hands visitors a real agent key and lets them attack it: one-click attacks, their own payments, and an
+email that Claude (with the agent key behind its tools) reads and acts on. The Leash ID contract refuses everything
+outside the leash. Everything is answered by simulating against the live contract (same code path, no fee), except
+one fixed control payment to our own vendor address, which is broadcast under a daily cap.
+
+Status: runs locally against a devnet (`node scripts/sandbox-dev.mjs`). Hosting it on testnet needs a leash, and a
+leash needs an owner with a testnet ME ID; ours is pending.
 
 ## Deploy on Vercel
 

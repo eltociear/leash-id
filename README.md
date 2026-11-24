@@ -6,10 +6,10 @@
 
 [![ci](https://github.com/eltociear/leash-id/actions/workflows/ci.yml/badge.svg)](https://github.com/eltociear/leash-id/actions/workflows/ci.yml)
 
-**Demo video (3:45):** https://www.youtube.com/watch?v=HahwUgfdINE ·
+**Demo video:** https://www.youtube.com/watch?v=HahwUgfdINE (an earlier 0.1 cut; the 0.4 cut is being uploaded) ·
 **Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet) ·
 **Owner console:** https://eltociear.github.io/leash-id/owner.html (Keplr) ·
-**Red-team it:** [`sandbox/`](sandbox/README.md) (a real agent key you can attack) ·
+**Red-team it:** [`sandbox/`](sandbox/README.md) (attack a real agent key; runs locally today) ·
 **[Threat model](THREAT_MODEL.md)** · **[Security / deployment](SECURITY.md)** · **[Toward a standard: PQ Agent Mandate](MANDATE.md)** · **Is the deployed code this code?** `npm run verify`
 
 AI agents are starting to pay invoices and buy services. Two things are missing:
@@ -95,7 +95,7 @@ leash whois me1agent…                         # owner, live ME ID, limits, can
 ```
 
 Day to day, in the browser: the **[owner console](https://eltociear.github.io/leash-id/owner.html)** (connect Keplr)
-lists what's waiting for your approval with Approve / Reject buttons, shows each agent's 24h spend, and has
+(tested end to end with a mnemonic signer) lists what's waiting for your approval with Approve / Reject buttons, shows each agent's 24h spend, and has
 Revoke / Resume, a form to change limits and vendors, co-approvers (e.g. owner + CFO: two signatures release a
 held payment, either can reject), and a CSV export for accounting. Every button is a transaction your wallet signs. The page
 is static and loads nothing from third parties (the signing library is bundled, and CI rebuilds it byte for byte).
@@ -130,9 +130,12 @@ leash watch --owner me1owner… --webhook https://hooks.slack.com/services/…
 | `pay_invoice`, `pay_batch` | pay; results are `PAID`, `HELD FOR OWNER APPROVAL`, `REFUSED`, `UNKNOWN` or `NOT SENT` (errors set `isError` and `structuredContent.status`) |
 | `find_invoice`, `my_payments`, `payment_status` | was this invoice handled? what did I pay? |
 | `verify_agent`, `lookup_me_id` | check another agent or address before trusting it |
+| `pay_for_api` | buy from an HTTP 402 API that sells to Leash ID agents (checks the seller's ME ID, price cap, payer proof) |
+| `action_log` | everything this server sent in the session, with links |
 
-The server loads only the agent key and **refuses to start if the owner key is readable from its process**,
-because a model with shell or file tools could otherwise read it. Read [SECURITY.md](SECURITY.md) before you
+The server loads only the agent key and **refuses to start if any other Leash ID key file in its key directory is
+readable from its process**, because a model with shell or file tools could otherwise read it. Keys kept elsewhere
+aren't detected: run the agent as its own user or in a container (SECURITY.md). Read [SECURITY.md](SECURITY.md) before you
 connect real money. `LEASH_READONLY=1 LEASH_AGENT_ADDRESS=me1…` runs it with no key at all (reads and dry runs).
 
 ## Sell to agents (vendor side)
@@ -173,7 +176,7 @@ is in `examples/paid-api`.
 | `release_invoice {vendor, invoice}` | owner | let a handled invoice number be paid again |
 | `register_sub_account {sub, main}` | anyone | record an EVM sub-account x/did binds to `main`'s ME ID |
 | `set_bond {deposit_ids}` | owner (ME ID) | show ME Hub fixed deposits as a bond |
-| `set_approvers {approvers, threshold}` | owner (ME ID) | two-person (up to 6) approval for held payments; any signer can reject |
+| `set_approvers {approvers, threshold}` | owner (ME ID) | N-of-M approval for held payments (owner + up to 5 co-approvers); any signer can reject |
 
 | Query | |
 |---|---|
@@ -203,18 +206,18 @@ from `openmetaearth/me-hub` (see [`devnet/`](devnet/README.md)). Recorded in `ru
 6. A batch to Acme plus an unlisted vendor that holds an ME ID settles through ME Hub's `multi_send`. **Paid.**
 
 `npm run devnet` (`scripts/devnet-runs.sh`) rebuilds the node from scratch and records every devnet run:
-the kill switch, Claude Code as the agent over MCP (`runs/devnet-claude-*.jsonl`), and the obey-everything
-client (`runs/devnet-obey-*.txt`).
+the kill switch, Claude Code as the agent over MCP (`runs/devnet-claude-*.jsonl`), the obey-everything
+client (`runs/devnet-obey-*.txt`) and agent-to-agent commerce (`runs/devnet-commerce-*.txt`).
 
 ## Develop
 
 ```bash
 npm ci
-npm test          # 32 contract tests (incl. a random-operation accounting test) + 14 JS tests (amounts, errors, MCP, paywall, SSRF, CLI)
+npm test          # 32 contract tests (incl. a random-operation accounting test) + 21 JS tests (amounts, send outcomes, MCP, paywall, SSRF, CLI)
 npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmwasm-check 1.5.8)
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it
 npm run devnet    # local ME Hub node: Claude over MCP, obey-everything, kill switch, commerce → runs/
-node scripts/check-runs.mjs        # asserts what those records must show (CI runs all of this on a fresh node)
+node scripts/check-runs.mjs        # asserts what those records must show (CI re-runs all but the Claude run on a fresh node)
 npm run docs & npm run e2e:owner   # drives the owner console in a real browser against that node
 ```
 

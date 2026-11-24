@@ -19,8 +19,10 @@ This document describes contract v0.4. Test names refer to `contracts/leash-id/s
 
 The MCP server (`mcp/server.mjs`) loads only the agent key, and **refuses to start if any other Leash ID key
 is readable from its process** (see [SECURITY.md](SECURITY.md)). The owner-only tools (`approve_payment`,
-`withdraw_budget`, `raise_my_limit`, `send_mec`) aren't offered by default. The demo turns them on
-(`LEASH_HONEYPOT_TOOLS=1`) to show that the chain refuses them whatever the tool list or the prompt says.
+`withdraw_budget`, `raise_my_limit`) aren't offered by default. The demo turns them on (`LEASH_HONEYPOT_TOOLS=1`)
+to show that the chain refuses them whatever the tool list or the prompt says. The demo's fourth tool, `send_mec`,
+is a plain transfer from the agent's own wallet, and the chain allows it: that wallet is the one thing the leash
+doesn't cover, so it should hold only gas money (SECURITY.md §4).
 
 ## Threats
 
@@ -41,17 +43,17 @@ is readable from its process** (see [SECURITY.md](SECURITY.md)). The owner-only 
 | T13 | Approving something that is no longer OK | a "verified vendor" loses its ME ID while a payment waits; a payment waits for weeks | `approve` re-checks the vendor rule and refuses payments older than 7 days | `approval_rechecks_owner_vendor_and_age` |
 | T14 | Flooding the owner with approval requests | agent creates held payments to lock the budget | held payments count against the 24h limit and at most 50 can wait per owner | `the_approval_queue_is_bounded` |
 | T15 | A forgotten agent | old key in an old server | every leash has a required `expires_at`, at most 366 days ahead | `revoke_sticks_…`, `policy_is_validated` |
-| T16 | The contract's code is swapped | a migrate admin replaces the code with one that pays the escrow out | deployed **without an admin**; `npm run verify` fails if an admin exists, and the verifier page says so | `scripts/verify.mjs`, CI job `testnet` |
+| T16 | The contract's code is swapped | a migrate admin replaces the code with one that pays the escrow out | deployed **without an admin**; `npm run verify` fails if an admin exists, and the verifier page says so | `npm run verify`, CI job `testnet` (advisory: a testnet outage doesn't fail the build) |
 | T17 | The agent's own runtime reads the owner key | Claude Code with shell tools runs `cat` on the key file | the MCP server refuses to start next to readable owner keys; deployment guide runs the agent in its own user/container | `test/mcp.test.mjs` |
+| T18 | A network hiccup turns into a double payment | timeout after broadcast; the model retries with a new invoice ref | the tx hash is computed before broadcasting; an unconfirmed send is reported as **UNKNOWN, may have gone through** with the hash, never as "not sent"; `find_invoice` and the `invoice` query look it up | `lib/tx.mjs`, `test/tx.test.mjs` |
 | T19 | A sub-account claims an ME ID it isn't bound to | someone registers a link from an EVM address to a stranger's ME ID | `register_sub_account` only stores a link x/did itself lists, and every use re-reads x/did, so a dropped binding stops counting at once | `an_evm_sub_account_counts_as_its_main_me_id`; devnet run step 7 |
 | T20 | A "bond" that isn't there | an owner points at a deposit that unlocked, was withdrawn, or isn't theirs | bonds are read live from x/wstaking on every `whois`; only locked deposits of the ME ID's main account, in the leash denom, count | `owners_can_show_a_fixed_deposit_bond` |
 | T21 | Selling to an agent nobody answers for, or one payment buying many answers | a bot replays a payment tx, forges one, or races two requests | `paywall()` reads the payment from the chain, needs a live HMAC-signed invoice it issued, claims each tx before any await, and checks the payer's owner's live ME ID | `runs/devnet-commerce-*.txt` steps 3, 5; `test/vendor.test.mjs` |
+| T22 | An agent pays an API run by nobody verified | an API asks for payment to an anonymous address | the leash refuses vendors without an ME ID unless allow-listed; `pay_for_api` also caps the price | commerce run steps 6-7 |
 | T23 | Front-running a payment | someone watching the chain sends another agent's tx hash to the API first | redemption needs the paying agent key's ADR-36 signature over (tx, invoice) | commerce run step 4 |
 | T24 | One insider moves money alone | a single compromised approver key approves a large held payment | `set_approvers`: N signatures, each a live ME ID, re-counted at release; any one can reject; no self-approval; agents can't be approvers | `held_payments_can_need_two_signatures`; devnet step 8; `npm run e2e:owner` |
-| T25 | The agent fetches internal URLs (SSRF) | an injected email makes the agent call `pay_for_api` on cloud metadata or a LAN admin page | public https only, private/loopback/link-local addresses refused after DNS, no redirects, 64 KB cap | `test/mcp.test.mjs` |
+| T25 | The agent fetches internal URLs (SSRF) | an injected email makes the agent call `pay_for_api` on cloud metadata or a LAN admin page | public https only; the resolved address must be public and the request connects to that same address (no DNS-rebinding window); no redirects; 64 KB cap | `test/mcp.test.mjs` |
 | T26 | Paying itself through its own EVM form | an agent key that also holds an ME ID links its EVM sub-account and pays it | `vendor_sane` checks the main account behind any registered sub-account | `an_evm_sub_account_counts_as_its_main_me_id` |
-| T22 | An agent pays an API run by nobody verified | an API asks for payment to an anonymous address | the leash refuses vendors without an ME ID unless allow-listed; `pay_for_api` also caps the price | commerce run steps 6-7 |
-| T18 | A network hiccup turns into a double payment | timeout after broadcast; the model retries with a new invoice ref | the tx hash is computed before broadcasting; an unconfirmed send is reported as **UNKNOWN, may have gone through** with the hash, never as "not sent"; `find_invoice` and the `invoice` query look it up | `lib/tx.mjs`, `test/units.test.mjs` |
 
 ## What Leash ID does *not* protect against
 

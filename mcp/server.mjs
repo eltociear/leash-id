@@ -19,6 +19,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import fs from "node:fs";
 import dns from "node:dns/promises";
+import { Agent } from "undici";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -260,20 +261,23 @@ const privateIp = (ip) => {
   const x = ip.toLowerCase();
   return x === "::1" || x === "::" || x.startsWith("fc") || x.startsWith("fd") || x.startsWith("fe80") || (x.startsWith("::ffff:") && privateIp(x.slice(7)));
 };
-/** Only public https URLs (no localhost, LAN, link-local or cloud-metadata addresses). */
+/** Only public https URLs (no localhost, LAN, link-local or cloud-metadata addresses). Returns { error } or
+ *  { pin }: the checked address, which the request then connects to (so DNS can't be swapped in between). */
 async function checkUrl(raw) {
   let u;
-  try { u = new URL(raw); } catch { return "not a URL"; }
-  if (u.username || u.password) return "URLs with credentials aren't allowed";
-  if (ALLOW_LOCAL) return u.protocol === "http:" || u.protocol === "https:" ? null : "http(s) only";
-  if (u.protocol !== "https:") return "https URLs only";
+  try { u = new URL(raw); } catch { return { error: "not a URL" }; }
+  if (u.username || u.password) return { error: "URLs with credentials aren't allowed" };
+  if (ALLOW_LOCAL) return u.protocol === "http:" || u.protocol === "https:" ? {} : { error: "http(s) only" };
+  if (u.protocol !== "https:") return { error: "https URLs only" };
   let addrs;
-  try { addrs = await dns.lookup(u.hostname, { all: true }); } catch { return `can't resolve ${u.hostname}`; }
-  if (!addrs.length || addrs.some((a) => privateIp(a.address))) return `${u.hostname} points at a private or local address`;
-  return null;
+  try { addrs = await dns.lookup(u.hostname, { all: true }); } catch { return { error: `can't resolve ${u.hostname}` }; }
+  if (!addrs.length || addrs.some((a) => privateIp(a.address))) return { error: `${u.hostname} points at a private or local address` };
+  return { pin: addrs[0] };
 }
-async function fetchCapped(url, headers = {}, max = 64 * 1024) {
-  const r = await fetch(url, { headers, redirect: "manual", signal: AbortSignal.timeout(20000) });
+// Connect to the address checkUrl approved, whatever DNS says by then (no DNS-rebinding window).
+const pinned = (pin) => pin && new Agent({ connect: { lookup: (_h, _o, cb) => cb(null, [{ address: pin.address, family: pin.family }]) } });
+async function fetchCapped(url, headers = {}, pin, max = 64 * 1024) {
+  const r = await fetch(url, { headers, redirect: "manual", signal: AbortSignal.timeout(20000), dispatcher: pinned(pin) });
   if (r.status >= 300 && r.status < 400) throw new Error(`the API redirected (HTTP ${r.status}); not followed`);
   const reader = r.body?.getReader();
   const chunks = [];
@@ -295,10 +299,10 @@ server.registerTool("pay_for_api", {
 }, async ({ url, max_mec }) => {
   let cap;
   try { cap = BigInt(umec(max_mec)); } catch (e) { return bad(e.message); }
-  const urlProblem = await checkUrl(url);
-  if (urlProblem) return bad(`won't call ${url}: ${urlProblem}`);
+  const chk = await checkUrl(url);
+  if (chk.error) return bad(`won't call ${url}: ${chk.error}`);
   let r;
-  try { r = await fetchCapped(url); } catch (e) { return reply(`NOT SENT: couldn't reach ${url}: ${e.message}`, { status: "not_sent" }, true); }
+  try { r = await fetchCapped(url, {}, chk.pin); } catch (e) { return reply(`NOT SENT: couldn't reach ${url}: ${e.message}`, { status: "not_sent" }, true); }
   if (r.status !== 402) return reply(UNTRUSTED(r.text.slice(0, 4000), "API RESPONSE"), { status: "free", http: r.status });
   let t;
   try { t = JSON.parse(r.text).leash_id; } catch {}
@@ -320,7 +324,7 @@ server.registerTool("pay_for_api", {
   let r2;
   try {
     const proof = await signProof(ROLE, KEY_FILE, proofText(tx, t.invoice));
-    r2 = await fetchCapped(url, { "x-leash-payment": tx, "x-leash-proof": Buffer.from(JSON.stringify({ pub_key: proof.pub_key, signature: proof.signature })).toString("base64") });
+    r2 = await fetchCapped(url, { "x-leash-payment": tx, "x-leash-proof": Buffer.from(JSON.stringify({ pub_key: proof.pub_key, signature: proof.signature })).toString("base64") }, chk.pin);
   } catch (e) {
     unpaidSellers.set(t.pay_to, `payment #${paid.structuredContent.payment_id}`);
     return reply(`PAID (payment #${paid.structuredContent.payment_id}) but couldn't fetch the answer: ${e.message}. Don't pay again; the same payment can be retried.`, { status: "paid_no_answer", tx }, true);
