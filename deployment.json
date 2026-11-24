@@ -1,12 +1,20 @@
 {
   "chainId": "mechain_400-1",
-  "codeId": 32,
-  "contract": "me13xlavey3hpkj823z7y3gcq9d23ut7829yjjygz3whr2y2kzlprhssfqa2h",
-  "storeTx": "A021527D6C6B03FE6DB31A950B8753755B369EFBD5CD5A650ADC332C2A72340D",
-  "instantiateTx": "A8FCE7C341BF01B03C8A9311F2C0EE282D959FD48AFE68143E96A63C9682282B",
-  "wasmSha256": "72a10a89b0441bf4cc3a8f5b3e8babe6b11bb9b077899870b6f516099edefcd1",
-  "deployedAt": "2026-11-23T15:58:30.579Z",
+  "codeId": 34,
+  "contract": "me1f2wumnwd4f0jjj9nzun9esvmjmcntv6dur9y7ewet965dt3n6paq4t3cej",
+  "version": "0.2.0",
+  "admin": null,
+  "storeTx": "E6A09D3267EC2168FC710816F1E25EC299E739BBDBEF5A3A47435901A0B80EFA",
+  "instantiateTx": "9B42A8A5C042779201E4E6F0FFA764819AE38960FA181344C0198AD63E0D01E4",
+  "wasmSha256": "de1c8269589510ad029add4d9177eb90b17a7c2d7456e7feb0087a322309712b",
+  "deployedAt": "2026-11-24T04:48:07.429Z",
   "superseded": [
+    {
+      "codeId": 32,
+      "contract": "me13xlavey3hpkj823z7y3gcq9d23ut7829yjjygz3whr2y2kzlprhssfqa2h",
+      "version": "0.1.0",
+      "why": "v0.1: a revoke could be lifted by update_policy, invoice numbers matched byte-for-byte (\"inv 1001\" paid INV-1001 again), the daily limit reset at UTC midnight, anyone could register an agent address they did not control, and it had a migrate admin. All fixed in 0.2 (CHANGELOG.md)."
+    },
     {
       "codeId": 29,
       "contract": "me1wyt8pvtrr9r8p2flsjcukjxw5rcu95cqusl8h6rfq0elcxlv5v2sg56lc4",
