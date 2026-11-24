@@ -6,7 +6,7 @@ import { parseArgs } from "node:util";
 import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
 import {
   KEY_DIR, LEGACY_KEYS_FILE, NET, ROOT, addrOf, address, balance, contract, contractInfo, deployment,
-  fmt, isNotFound, keyFile, meIdRest, q, readKey, roles, saveDeployment, signer, toUmec,
+  fmt, isNotFound, keyFile, meIdRest, q, readKey, reader, roles, saveDeployment, signer, toUmec,
 } from "./lib/chain.mjs";
 import { act, mecAmounts } from "./lib/tx.mjs";
 
@@ -33,6 +33,10 @@ const OPTS = {
   before: { type: "string" },
   "min-kyc": { type: "string" },
   admin: { type: "string" },
+  webhook: { type: "string" },
+  from: { type: "string" },
+  once: { type: "boolean" },
+  interval: { type: "string" },
   help: { type: "boolean", short: "h" },
 };
 
@@ -63,6 +67,7 @@ const HELP = {
   owner: ["owner [owner]", "an owner's budget, reserved funds and agents"],
   history: ["history [--agent a | --owner o] [--limit 20] [--before id]", "payments, newest first"],
   invoice: ["invoice <vendor> <invoice> [--owner o]", "was this invoice already handled?"],
+  watch: ["watch [--owner o] [--webhook URL] [--from height] [--interval 6] [--once]", "follow payments as they happen; held ones ask for your approval (Slack-compatible webhook)"],
 };
 
 function usage(cmd) {
@@ -282,6 +287,49 @@ const cmds = {
     print(o.json ? p : p ? `handled: ${payLine(p)}` : "not handled yet");
     return 0;
   },
+};
+// Payments as they happen, from the contract's `wasm-leash_payment` events. Held payments are the
+// ones a person has to act on, so they're marked, and can be pushed to a Slack-compatible webhook.
+cmds.watch = async () => {
+  const r = await reader();
+  const C = contract();
+  const ownerF = o.owner ? await addrOf(o.owner) : null;
+  const every = Number(o.interval ?? 6) * 1000;
+  let from = o.from ? intArg(o.from, "--from") : Math.max(1, (await r.getHeight()) - 20);
+  const seen = new Set();
+  const hook = async (text, ev) => {
+    if (!o.webhook) return;
+    try {
+      const res = await fetch(o.webhook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, leash_payment: ev }) });
+      if (!res.ok) console.error(`webhook: HTTP ${res.status}`);
+    } catch (e) { console.error(`webhook: ${e.message}`); }
+  };
+  console.error(`watching ${C} on ${NET.chainId} from height ${from}${ownerF ? ` for owner ${ownerF}` : ""}${o.webhook ? " → webhook" : ""}`);
+  for (;;) {
+    let txs = [];
+    try {
+      const top = await r.getHeight();
+      txs = top >= from ? await r.searchTx(`wasm-leash_payment._contract_address='${C}' AND tx.height>=${from}`) : [];
+      from = Math.max(from, top - 1);
+    } catch (e) { console.error(`(ME Hub unreachable: ${e.message.slice(0, 80)}; retrying)`); }
+    for (const tx of txs.sort((a, b) => a.height - b.height)) {
+      for (const [i, e] of tx.events.entries()) {
+        if (e.type !== "wasm-leash_payment") continue;
+        const a = Object.fromEntries(e.attributes.map((x) => [x.key, x.value]));
+        const key = `${tx.hash}/${i}`;
+        if (seen.has(key) || (ownerF && a.owner !== ownerF)) continue;
+        seen.add(key);
+        const held = a.kind === "created" && a.status === "pending";
+        const text = `${held ? "NEEDS YOUR APPROVAL" : a.kind === "created" ? "paid" : a.kind}: #${a.payment_id} ${fmt(a.amount)} to ${a.vendor}` +
+          `${a.vendor_did ? ` (ME ID ${a.vendor_did})` : ""} invoice ${a.invoice} by agent ${a.agent} [height ${tx.height}, tx ${tx.hash}]` +
+          (held ? `  → leash approve ${a.payment_id}  or  leash reject ${a.payment_id}` : "");
+        console.log(o.json ? JSON.stringify({ height: tx.height, tx: tx.hash, ...a }) : text);
+        await hook(text, a);
+      }
+    }
+    if (o.once) return 0;
+    await new Promise((res) => setTimeout(res, every));
+  }
 };
 // old name, kept for scripts written against 0.1
 cmds.register = cmds.offer;

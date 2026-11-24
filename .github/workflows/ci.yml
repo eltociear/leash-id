@@ -33,9 +33,14 @@ jobs:
       - name: Clippy, warnings are errors
         run: cd contracts/leash-id && cargo +1.81.0 clippy --all-targets -- -D warnings
       - name: JS syntax
-        run: for f in leash.mjs lib/*.mjs mcp/*.mjs scripts/*.mjs test/*.mjs; do node --check "$f"; done
+        run: for f in leash.mjs lib/*.mjs mcp/*.mjs scripts/*.mjs test/*.mjs web/*.mjs; do node --check "$f"; done
       - name: JS tests (amounts, error reading, MCP tool set, key isolation, CLI)
         run: npm run test:js
+      - name: The browser bundle (docs/vendor/cosmjs.js) is rebuilt byte for byte from the lockfile
+        run: |
+          cp docs/vendor/cosmjs.js /tmp/committed-cosmjs.js
+          npm run bundle:web
+          cmp /tmp/committed-cosmjs.js docs/vendor/cosmjs.js && echo "bundle reproducible ✔"
       - name: npm audit (production deps)
         run: npm audit --omit=dev --audit-level=high
       - name: Reproducible build + cosmwasm-check with ME Hub capabilities

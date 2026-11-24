@@ -6,6 +6,7 @@
 
 **Demo video (3:45):** https://www.youtube.com/watch?v=HahwUgfdINE ·
 **Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet) ·
+**Owner console:** https://eltociear.github.io/leash-id/owner.html (Keplr) ·
 **[Threat model](THREAT_MODEL.md)** · **[Security / deployment](SECURITY.md)** · **Is the deployed code this code?** `npm run verify`
 
 AI agents are starting to pay invoices and buy services. Two things are missing:
@@ -68,9 +69,24 @@ leash accept me1owner… --key-file /run/secrets/agent.mnemonic
 leash whois me1agent…                         # owner, live ME ID, limits, can it pay right now?
 ```
 
-Day to day: `leash pending`, `leash approve <id>`, `leash reject <id>`, `leash history`, `leash policy <agent>
+Day to day, in the browser: the **[owner console](https://eltociear.github.io/leash-id/owner.html)** (connect Keplr)
+lists what's waiting for your approval with Approve / Reject buttons, shows each agent's 24h spend, and has
+Revoke / Resume and a form to change limits and vendors. Every button is a transaction your wallet signs. The page
+is static and loads nothing from third parties (the signing library is bundled, and CI rebuilds it byte for byte).
+
+From a terminal: `leash pending`, `leash approve <id>`, `leash reject <id>`, `leash history`, `leash policy <agent>
 --daily 0.1` (changes only what you pass), `leash revoke <agent>`, `leash resume <agent>`. `leash help <command>`
 for details. Exit codes: 0 done, 1 refused/failed, 2 usage error, 3 outcome unknown (look it up before retrying).
+
+Get told when an agent needs you:
+
+```bash
+leash watch --owner me1owner… --webhook https://hooks.slack.com/services/…
+# NEEDS YOUR APPROVAL: #12 0.018 MEC to me1j64… invoice INV-1002 by agent me1m8t…  → leash approve 12  or  leash reject 12
+```
+
+`watch` follows the contract's `wasm-leash_payment` events (paid, held, approved, rejected) and posts each one as
+`{"text": …, "leash_payment": {…}}`, which Slack, Discord (`/slack` endpoints) and most chat tools accept.
 
 ## Give it to Claude (MCP)
 
@@ -147,6 +163,8 @@ npm ci
 npm test          # 25 contract tests (fake x/did behind the Stargate query) + JS tests (amounts, errors, MCP, CLI)
 npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmwasm-check 1.5.8)
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it
+npm run devnet    # local ME Hub node: Claude over MCP, the obey-everything client, the kill switch → runs/
+npm run docs & npm run e2e:owner   # drives the owner console in a real browser against that node
 ```
 
 The canonical `artifacts/leash_id.wasm` is the x86_64 Linux build from CI; CI rebuilds it byte for byte.

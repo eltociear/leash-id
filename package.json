@@ -8,7 +8,10 @@
     "test:js": "node --test test/*.test.mjs",
     "build": "bash scripts/build.sh",
     "verify": "node scripts/verify.mjs",
-    "devnet": "bash scripts/devnet-runs.sh"
+    "devnet": "bash scripts/devnet-runs.sh",
+    "bundle:web": "bash scripts/bundle-web.sh",
+    "e2e:owner": "node scripts/e2e-owner.mjs",
+    "docs": "node scripts/serve-docs.mjs"
   },
   "keywords": [
     "me-network",
@@ -33,7 +36,9 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "binaryen": "^116.0.0"
+    "binaryen": "^116.0.0",
+    "esbuild": "^0.25.12",
+    "puppeteer-core": "^24.43.1"
   },
   "bin": {
     "leash": "leash.mjs",

@@ -26,6 +26,14 @@ An adversarial review of 0.1 found ways around the leash. All of them are fixed,
   `migrate` entry point. Deployed **without an admin**.
 - Unknown KYC levels from x/did count as none.
 
+### Owner side
+
+- **Owner console** (`docs/owner.html`): connect Keplr; approve or reject held payments, revoke and resume
+  agents, change limits and vendors, offer new leashes, deposit and withdraw. Tested end to end in a real browser
+  against a local ME Hub node (`npm run e2e:owner`). The signing library is bundled and reproducible in CI.
+- **`leash watch`**: follows payments as they happen and pushes the ones that need approval to a Slack-compatible
+  webhook.
+
 ### Agent side
 
 - The MCP server loads only the agent key and refuses to start while other keys are readable from its process.
