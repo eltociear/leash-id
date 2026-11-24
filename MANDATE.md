@@ -1,6 +1,7 @@
 # PQ Agent Mandate (draft 0.1)
 
-**Status:** working draft, 2026-11-24. Not a standard, not yet proposed anywhere. Written from two
+**Status:** working draft, 2026-11-24. Not a standard, not yet proposed anywhere. Reference
+library and conformance vectors: [eltociear/pqam](https://github.com/eltociear/pqam). Written from two
 running systems, [Invoice Leash](https://github.com/eltociear/invoice-leash) (QoreChain) and
 [Leash ID](https://github.com/eltociear/leash-id) (ME Network, CosmWasm). The same file sits in
 both repositories. Neither one implements the object format below yet (see the last section). What
@@ -51,10 +52,14 @@ is meant to be a profile they can carry.
 ## 4. The mandate object
 
 Encoded as JSON, canonicalised with RFC 8785 (JCS) before hashing and signing. Hash: SHA3-256.
+pqam restricts JCS to safe integers: amounts are decimal strings, so floats never appear. Every
+object has `"v": "pqam/0.1"` and a `type` (`mandate`, `revoke`, `approve`, `invoice`, `receipt`).
+Fields not defined here are refused, which closes off parser-confusion tricks.
 
 ```jsonc
 {
   "v": "pqam/0.1",
+  "type": "mandate",
   "id": "b64url(16 random bytes)",
   "issuer": {
     "id": "did:… | caip10:…",              // who stands behind the money
@@ -64,8 +69,7 @@ Encoded as JSON, canonicalised with RFC 8785 (JCS) before hashing and signing. H
     ]
   },
   "agent": {
-    "keys": [{ "alg": "Ed25519", "pub": "b64url" }],
-    "accepted": true                        // the agent co-signs acceptance (section 4.2)
+    "keys": [{ "alg": "Ed25519", "pub": "b64url" }]
   },
   "enforcer": "caip10:<chain>:<contract or module>",
   "scope": {
@@ -87,9 +91,19 @@ Encoded as JSON, canonicalised with RFC 8785 (JCS) before hashing and signing. H
   "revocation": {
     "where": "caip10:… | https://…",        // where the enforcer looks
     "sticky": true                          // a revoked mandate never comes back; issue a new one
-  }
+  },
+  "sig":    [{ "alg": "ML-DSA-65", "kid": "…", "sig": "b64url" }, { "alg": "ES256K", … }],
+  "accept": [{ "alg": "Ed25519",   "kid": "…", "sig": "b64url" }]   // section 4.2
 }
 ```
+
+The **body** is the object without `sig` and `accept`. Each signature covers
+
+```
+M = UTF-8("pqam/0.1/" + type) || 0x00 || SHA3-256(JCS(body))
+```
+
+and `kid` is the first 8 bytes (hex) of `SHA3-256(UTF-8(alg) || 0x00 || publicKey)`.
 
 ### 4.1 Rules for the fields
 
@@ -107,8 +121,8 @@ Encoded as JSON, canonicalised with RFC 8785 (JCS) before hashing and signing. H
 
 ### 4.2 Offer and accept
 
-A mandate takes effect only when the agent key co-signs it. That signature is over
-`"pqam/0.1/accept" || mandate_hash`. Before that, it is an offer and can be withdrawn. This stops
+A mandate takes effect only when the agent key co-signs it. That signature (the `accept` list) is
+`M` with type `accept` over the mandate's hash, by every agent key. Before that, it is an offer and can be withdrawn. This stops
 an issuer from pinning a mandate on a key without that key's consent, and it proves the agent key
 is held by someone (Leash ID v0.2: `RegisterAgent` → `AcceptLeash`).
 
@@ -140,12 +154,18 @@ is held by someone (Leash ID v0.2: `RegisterAgent` → `AcceptLeash`).
 ## 6. Receipts and revocation
 
 ```jsonc
-{ "v": "pqam/0.1/receipt", "mandate": "sha3-256 hex", "payment": {
+{ "v": "pqam/0.1", "type": "receipt", "mandate": "sha3-256 hex", "payment": {
     "payee": "caip10:…", "asset": "caip19:…", "amount": "…", "invoice": "sha3-256 hex",
     "status": "paid | pending | refused | unknown", "reason": "OverDailyLimit",
     "tx": "caip2:…:<hash>" },
-  "window_used": "…", "sig": [{ "alg": "ML-DSA-87", "kid": "…", "sig": "b64url" }] }
+  "window_used": "…", "at": 1797000000, "sig": [{ "alg": "ML-DSA-87", "kid": "…", "sig": "b64url" }] }
 ```
+
+Payment decisions are pinned down by the reference evaluator, which checks in a fixed order and
+reports the first failure: `MalformedRequest, NotAccepted, Revoked, NotYetValid, Expired,
+AssetNotInScope, PayeeNotInScope, CallNotInScope, InvoiceRequired, ZeroAmount, OverPerPayment,
+OverWindow`, then `TooManyPending` for a payment that would be held. The result is `pay`, `hold`
+(`NeedsApproval`) or `refuse`.
 
 - On-chain enforcers can rely on the chain itself for the receipt (tx plus an event), *as long as
   the chain's own consensus signatures are PQ or the record is anchored somewhere that is*. If they
@@ -153,7 +173,7 @@ is held by someone (Leash ID v0.2: `RegisterAgent` → `AcceptLeash`).
   signs its SHA3-256 hash-chained log every day with the relayer's on-chain ML-DSA-87 key.
 - `unknown` is a real status. A timeout after sending is reported as unknown, never as refused or
   not sent, and is settled later by reading the enforcer's state.
-- **Revocation** is a signed `pqam/0.1/revoke` over the mandate hash. It takes effect at the
+- **Revocation** is a signed `revoke` object (`{"mandate": <hash>, "at": …}`). It takes effect at the
   enforcer as soon as it lands. It rejects everything pending. It can't be undone (`sticky`). There
   is also a one-step freeze that does everything at once: agent off, key unlinked, windows closed
   (`desk.mjs freeze`). A *pause* that can be lifted is a different thing and must not be
@@ -218,11 +238,15 @@ These come from building and attacking the two systems above, not from theory.
 
 ## 10. Next steps
 
-1. A small TypeScript library that canonicalises, signs and verifies `pqam/0.1` objects, using
-   `@noble/post-quantum` ML-DSA, plus shared test vectors (deterministic ML-DSA fixtures already
-   exist in Invoice Leash `test/fixtures.mjs`).
-2. Adapters that read a `pqam/0.1` mandate and produce the native config for each profile:
-   QoreChain spending rule + desk limits, Leash ID `PolicyMsg`. Then one mandate runs on two chains.
+1. **Done (0.1.0):** [eltociear/pqam](https://github.com/eltociear/pqam), a JavaScript library with
+   TypeScript types. It canonicalises, signs and verifies `pqam/0.1` objects (ML-DSA-44/65/87,
+   Ed25519, ES256K) and evaluates payments. Its conformance vectors are 23 verify cases and 26
+   policy cases, reproduced byte for byte from seeds. QoreChain's `@qorechain/sdk` verifies its
+   ML-DSA-87 signatures.
+2. **Done (0.1.0), compile step only:** the adapters turn a mandate into Leash ID's `PolicyMsg` or
+   InvoiceDesk limits plus the agent's spending rule, and refuse what the target can't enforce.
+   Still to do: install those configs on chain from these repositories, so that one mandate
+   actually runs on both chains.
 3. Proposals: a PQ extension issue to AP2, a post on the Ethereum Magicians agent-mandate thread, and
    feedback to the IETF WIMSE PQ agent identity draft.
 
