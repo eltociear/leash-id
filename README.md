@@ -79,8 +79,8 @@ leash keygen owner agent                      # one key file per role, mode 0600
 leash info                                    # network, contract, code id, admin, version
 ```
 
-Defaults point at ME Hub testnet and the contract in `deployment.json`. Override with `ME_CHAIN_ID`, `ME_RPC`,
-`ME_REST`, `LEASH_CONTRACT`.
+Defaults point at ME Hub testnet and the contract in `deployment.json`. Override with `ME_CHAIN_ID`, `ME_RPC`
+(comma-separated for failover), `ME_REST`, `LEASH_CONTRACT`.
 
 ## Put an agent on a leash
 
@@ -213,7 +213,7 @@ client (`runs/devnet-obey-*.txt`) and agent-to-agent commerce (`runs/devnet-comm
 
 ```bash
 npm ci
-npm test          # 32 contract tests (incl. a random-operation accounting test) + 21 JS tests (amounts, send outcomes, MCP, paywall, SSRF, CLI)
+npm test          # 33 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 22 JS tests (amounts, send outcomes, RPC failover, MCP, paywall, SSRF, CLI)
 npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmwasm-check 1.5.8)
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it
 npm run devnet    # local ME Hub node: Claude over MCP, obey-everything, kill switch, commerce → runs/

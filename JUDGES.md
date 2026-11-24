@@ -10,6 +10,7 @@ Everything below can be checked without trusting us: each claim links to code, a
 
 | What | Where |
 |---|---|
+| One-page overview | https://eltociear.github.io/leash-id/about.html |
 | Check any agent, no wallet | https://eltociear.github.io/leash-id/ (try "an EVM address bound to an ME ID": a real testnet user's sub-account, resolved by the contract from x/did) |
 | Owner console (Keplr): approvals, two signers, revoke, limits, CSV | https://eltociear.github.io/leash-id/owner.html |
 | Demo video | see the top of the [README](README.md) |
@@ -37,7 +38,7 @@ needs the global DAO's key, so it can only be shown on a node we run.
 ## By judging criterion
 
 **Technical implementation (30)**
-- Contract: [`contracts/leash-id/src`](contracts/leash-id/src). 32 unit tests, including a random-operation test of
+- Contract: [`contracts/leash-id/src`](contracts/leash-id/src). 33 unit tests, including a random-operation test of
   the accounting invariants (40 seeds × 250 operations: contract balance = sum of owner balances, reserved = sum
   of held payments, with partial two-person approvals mixed in).
 - [CI](.github/workflows/ci.yml), three jobs on every push:
@@ -99,7 +100,7 @@ needs the global DAO's key, so it can only be shown on a node we run.
 ```bash
 git clone https://github.com/eltociear/leash-id && cd leash-id && npm ci
 npm run verify                    # testnet: deployed code == this repo's build, no admin
-npm run test:js                   # 15 JS tests, no chain needed
+npm run test:js                   # 22 JS tests, no chain needed
 node scripts/check-runs.mjs       # the committed run records say what we claim
 cat runs/devnet-claude-*.jsonl | jq -r 'select(.type=="result").result'   # Claude's own report
 ```

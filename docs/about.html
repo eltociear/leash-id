@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leash ID — AI agents on a verified human's leash</title>
+<meta name="description" content="Leash ID lets AI agents pay on ME Network only inside a spending leash tied to their owner's live, KYC-backed ME ID. Enforced by a contract on ME Hub.">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:,">
+<style>
+  .hero h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .hero p { font-size: 17px; max-width: 700px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .cta a { display: inline-block; padding: 10px 16px; border-radius: 6px; font-weight: 600; text-decoration: none; border: 1px solid var(--accent); }
+  .cta a.primary { background: var(--accent); color: #fff; }
+  .cta a.ghostlink { color: var(--accent); }
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .steps .card h3, .grid3 .card h3 { margin: 0 0 6px; font-size: 16px; }
+  .steps .card p, .grid3 .card p { margin: 0; font-size: 14px; color: var(--muted); }
+  .num { font-size: 30px; font-weight: 700; }
+  .nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .nums .card p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 760px) { .steps, .nums, .grid3 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <nav class="top" aria-label="Leash ID">
+    <b>Leash ID</b>
+    <a href="./about.html" aria-current="page">About</a>
+    <a href="./">Check an agent</a>
+    <a href="./owner.html">Owner console</a>
+    <a href="https://github.com/eltociear/leash-id/blob/main/JUDGES.md">For judges</a>
+    <a href="https://github.com/eltociear/leash-id">GitHub</a>
+  </nav>
+
+  <header class="hero">
+    <h1>Let your AI agent pay.<br>Let the chain hold the leash.</h1>
+    <p>Leash ID lets an AI agent pay invoices and buy services on ME Network, but only inside a spending leash tied to its
+      owner's live, KYC-backed <b>ME ID</b>. A contract on ME Hub re-reads that ME ID on every payment. Suspend it, and every
+      agent under it stops in the next block.</p>
+    <div class="cta">
+      <a class="primary" href="./">Check an agent</a>
+      <a class="ghostlink" href="./owner.html">Owner console</a>
+      <a class="ghostlink" href="https://github.com/eltociear/leash-id/blob/main/JUDGES.md">Judges: 10-minute tour</a>
+    </div>
+  </header>
+
+  <section><h2>How it works</h2>
+    <div class="steps">
+      <div class="card"><h3>1 · The owner sets a leash</h3><p>An owner with an ME ID (KYC level ≥ 2) offers a leash to an agent key: per-payment and 24-hour limits, which vendors, when a payment waits for approval (by one or two signers), when it expires. The agent key accepts it.</p></div>
+      <div class="card"><h3>2 · The agent pays</h3><p>Claude, or any agent, works an invoice inbox through our MCP server. Each payment is a transaction from the agent key, and nothing else it holds can touch the budget.</p></div>
+      <div class="card"><h3>3 · The contract checks</h3><p>Is the owner's ME ID still active? Is the vendor allowed or verified? Within limits? Paid before? Over the threshold? Every check runs on chain, in one transaction, with no oracle.</p></div>
+    </div>
+  </section>
+
+  <section><h2>What the records show</h2>
+    <div class="nums">
+      <div class="card"><div class="num">0 / 10</div><p>attacks that got through: a client that obeys every email, including a prompt injection</p></div>
+      <div class="card"><div class="num">1 block</div><p>from suspending the owner's ME ID to every agent under it refused, on a real ME Hub node</p></div>
+      <div class="card"><div class="num">~260k</div><p>gas per payment (about 0.00036 MEC on testnet); refusals cost nothing</p></div>
+      <div class="card"><div class="num">every push</div><p>CI builds ME Hub from source and re-runs the attacks, the kill switch and the commerce flow</p></div>
+    </div>
+  </section>
+
+  <section><h2>Built on what only ME Network has</h2>
+    <div class="grid3">
+      <div class="card"><h3>ME ID on chain</h3><p><code>/metaearth.did.Query/Did</code> from inside the contract, on every pay, approve and whois. The ME ID is the kill switch.</p></div>
+      <div class="card"><h3>EVM sub-accounts and bonds</h3><p>Sub-accounts bound in x/did count as their ME ID (shown on testnet with real records). Fixed deposits can back an owner as a bond.</p></div>
+      <div class="card"><h3>multi_send, in MEC</h3><p>Batches settle through ME Hub's own <code>multi_send</code>. Receipts carry both parties' ME IDs.</p></div>
+    </div>
+  </section>
+
+  <section><h2>For sellers too</h2><div class="card">
+    <p style="margin:0">An API can sell to AI agents only when a verified human answers for them: HTTP 402 terms, payment through the leash, and a
+      signed proof from the paying agent. Replays, front-running and sellers without an ME ID all fail. <a href="https://github.com/eltociear/leash-id#sell-to-agents-vendor-side">How to add it</a>.</p>
+  </div></section>
+
+  <footer>Open source (Apache-2.0): <a href="https://github.com/eltociear/leash-id">github.com/eltociear/leash-id</a> ·
+    contract deployed without an admin, checked against the source by <code>npm run verify</code> ·
+    <a href="https://github.com/eltociear/leash-id/blob/main/THREAT_MODEL.md">threat model</a></footer>
+</main>
+</body>
+</html>

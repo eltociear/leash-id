@@ -1,6 +1,7 @@
 // Offline tests for the JS side: amounts and how chain errors are read.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { fmt, isAddress, isNotFound, toUmec, checkMnemonic } from "../lib/chain.mjs";
 import { contractReason, mecAmounts } from "../lib/tx.mjs";
 
@@ -51,4 +52,27 @@ test("mnemonics are checked without echoing them", () => {
   const words = Array(24).fill("abandon").join(" ");
   assert.equal(checkMnemonic(`  ${words}\n`, "x"), words);
   assert.throws(() => checkMnemonic('"abandon abandon"', "keys file line 3"), (e) => !e.message.includes("abandon") && e.message.includes("line 3"));
+});
+
+test("RPC failover: a dead first endpoint falls through to the next", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const http = await import("node:http");
+  // a fake CometBFT endpoint that answers /status like a node would
+  const srv = http.createServer((req, res) => {
+    let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => {
+      const id = (() => { try { return JSON.parse(b).id; } catch { return 0; } })();
+      res.setHeader("content-type", "application/json");
+      // a real CometBFT /status answer (captured from ME Hub testnet), renamed so we can tell it came from here
+      const fx = JSON.parse(fs.readFileSync(new URL("./fixtures/comet-status.json", import.meta.url), "utf8"));
+      res.end(JSON.stringify({ ...fx, id }));
+    });
+  });
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  const live = `http://127.0.0.1:${srv.address().port}`;
+  const code = `const c = await import(${JSON.stringify(new URL("../lib/chain.mjs", import.meta.url).href)}); const r = await c.reader(); console.log(await r.getChainId());`;
+  const out = await new Promise((resolve) => {
+    import("node:child_process").then(({ execFile }) => execFile(process.execPath, ["--input-type=module", "-e", code], { env: { ...process.env, ME_RPC: `http://127.0.0.1:1,${live}` } }, (e, so, se) => resolve({ e, so, se })));
+  });
+  srv.close();
+  assert.equal(out.so.trim(), "failover-test", out.se);
 });

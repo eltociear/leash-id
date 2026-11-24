@@ -79,8 +79,8 @@ leash keygen owner agent                      # 役割ごとに鍵ファイル�
 leash info                                    # ネットワーク、コントラクト、コード ID、admin、バージョン
 ```
 
-既定では ME Hub テストネットと、`deployment.json` のコントラクトを指します。`ME_CHAIN_ID`、`ME_RPC`、`ME_REST`、
-`LEASH_CONTRACT` で上書きできます。
+既定では ME Hub テストネットと、`deployment.json` のコントラクトを指します。`ME_CHAIN_ID`、`ME_RPC`（カンマ区切りで複数指定すると
+順に切り替え）、`ME_REST`、`LEASH_CONTRACT` で上書きできます。
 
 ## エージェントにリードを付ける
 
@@ -211,7 +211,7 @@ ME ID を持たない売り手には払いません。本物のノードでの�
 
 ```bash
 npm ci
-npm test          # コントラクトのテスト 32 件（ランダム操作による帳尻テストを含む）+ JS のテスト 21 件（金額、送信結果、MCP、ペイウォール、SSRF、CLI）
+npm test          # コントラクトのテスト 33 件（ランダム操作による帳尻テスト、ゴミ入力でのパーサー検査を含む）+ JS のテスト 22 件（金額、送信結果、RPC の切り替え、MCP、ペイウォール、SSRF、CLI）
 npm run build     # 再現可能な wasm（Rust 1.81 + wasm32、binaryen、cosmwasm-check 1.5.8 が必要）
 npm run verify    # デプロイ済みのコード == artifacts/leash_id.wasm であり、admin がコードを差し替えられないこと
 npm run devnet    # ローカル ME Hub ノード: MCP 経由の Claude、obey-everything、キルスイッチ、取引 → runs/

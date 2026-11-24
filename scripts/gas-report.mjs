@@ -26,6 +26,7 @@ await measure("approve (owner alone)", "owner", { approve: { id: Number(held.att
 const held2 = await measure("pay (held, to reject)", "agent", { pay: { vendor, amount: "1600000", invoice: `G-${stamp}-4`, memo: null } });
 await measure("reject", "owner", { reject: { id: Number(held2.attrs.payment_id) } });
 await measure("pay_batch (5 items, one multi_send)", "agent", { pay_batch: { payments: Array.from({ length: 5 }, (_, i) => ({ vendor, amount: "10000", invoice: `G-${stamp}-B${i}` })) } });
+await measure("pay_batch (20 items, the maximum)", "agent", { pay_batch: { payments: Array.from({ length: 20 }, (_, i) => ({ vendor, amount: "10000", invoice: `G-${stamp}-T${i}` })) } });
 await measure("register_sub_account", "vendor", { register_sub_account: { sub: merchant, main: shop } });
 await measure("set_approvers (1 co-approver)", "owner", { set_approvers: { approvers: [await address("cfo")], threshold: 1 } });
 await measure("revoke_agent", "owner", { revoke_agent: { agent } });
@@ -36,3 +37,4 @@ console.log(`Fee = gas × ${NET.gasPrice} (testnet's price). The chain charges f
 console.log("| Operation | Gas used | Fee |\n|---|---:|---:|");
 for (const [what, gas] of rows) console.log(`| ${what} | ${gas.toLocaleString("en-US")} | ${fmt(Math.ceil(gas * price))} |`);
 console.log(`\nA refused payment costs nothing: it is caught in simulation and never broadcast.`);
+console.log(`The largest message, a 20-item batch, stays far below the block gas limit (300,000,000 on our node; unlimited, -1, on testnet).`);

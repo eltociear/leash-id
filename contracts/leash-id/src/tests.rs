@@ -915,3 +915,33 @@ fn held_payments_can_need_two_signatures() {
     assert!(owners.is_empty());
     assert_eq!(t.exec(&cfo, ExecuteMsg::Reject { id: 3 }, &[]).unwrap_err(), ContractError::Unauthorized {});
 }
+
+/// Garbage in, no panic out: the DID and fixed-deposit parsers and the invoice key never crash on arbitrary
+/// bytes (a node answering oddly must fail closed, not abort the transaction), and the invoice key keeps its shape.
+#[test]
+fn parsers_survive_arbitrary_input() {
+    let mut x: u64 = 0x2545F4914F6CDD1D;
+    let mut next = || { x ^= x << 13; x ^= x >> 7; x ^= x << 17; x };
+    let pieces: [&[u8]; 12] = [b"{\"info\":{", b"\"did\":\"7\"", b"\"status\":\"DID_STATUS_ACTIVE\"", b"\"kycLevel\":\"KYC_LEVEL_TWO\"", b"}", b",",
+        b"{\"FixedDeposit\":{", b"\"principal\":{\"denom\":\"umec\",\"amount\":\"99999999999999999999999999999999999999\"}", b"\"end_time\":\"2026-02-30T25:61:61+99:99\"", b"\x0a\x80\x80\x80", b"\xff", b"\x12\x05me1ab"];
+    for _ in 0..20_000 {
+        let n = (next() % 24) as usize;
+        let mut buf = Vec::new();
+        for _ in 0..n {
+            if next() % 3 == 0 {
+                buf.extend((0..(next() % 12)).map(|_| next() as u8));
+            } else {
+                buf.extend_from_slice(pieces[(next() % pieces.len() as u64) as usize]);
+            }
+        }
+        let _ = crate::did::parse_response(&buf);
+        let _ = crate::me::parse_response(&buf);
+        if let Ok(s) = std::str::from_utf8(&buf) {
+            let _ = crate::me::rfc3339_seconds(s);
+            if let Ok((shown, key)) = invoice_key(s) {
+                assert!(!key.is_empty() && key.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()), "{key:?}");
+                assert!(shown.chars().count() <= 64 && shown == shown.trim());
+            }
+        }
+    }
+}
