@@ -377,6 +377,7 @@ cmds["gas-grant"] = async () => {
 cmds["gas-revoke"] = async () => {
   const agent = await addrOf(need(args[0], "agent"));
   const { addr } = await signer(as("owner"), o["key-file"]);
+  if (!(await feeGrant(agent, addr))) { console.error(`nothing to stop: you don't pay ${agent}'s fees`); return 1; }
   return outcome(await sendTx(as("owner"), [revokeGasMsg(addr, agent)], { file: o["key-file"], granter: null }));
 };
 cmds["link-sub"] = async () => send(as("owner"), { register_sub_account: { sub: await addrOf(need(args[0], "sub-account")), main: await addrOf(need(args[1], "main account")) } });

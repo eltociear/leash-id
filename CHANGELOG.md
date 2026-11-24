@@ -6,6 +6,8 @@
   allowance from the owner that covers contract calls only (capped, expiring); `--fee-granter` / the MCP server
   (automatically) use it. A key that never held MEC accepts its leash and pays, and can't move anything else.
   Recorded on a real node (kill-switch run, step 9) and checked by `scripts/check-runs.mjs`.
+- The owner console can pay an agent's fees (cap and days) and stop paying them; the verifier shows who pays an
+  agent's fees and what its key holds outside the leash. Both are driven in Chrome by `npm run e2e:owner` in CI.
 - RPC failover: `ME_RPC` takes a comma-separated list.
 - About page; a 20-item batch measured at 1.41M gas; a garbage-input test for the DID, deposit and invoice parsers.
 - Claims audit: every overstated or stale statement in the docs corrected (`send_mec`, what CI re-runs, sandbox

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // End-to-end test of docs/owner.html against a local ME Hub node (after `npm run devnet`, node restarted with
 // devnet/start.sh, and `node scripts/serve-docs.mjs` running). Drives a real browser through: sign in, change
-// a leash, deposit, approve a held payment, revoke, resume, a refused withdraw and a rejected bad input.
+// a leash, deposit, approve a held payment, revoke, resume, a refused withdraw, a rejected bad input, two-signature
+// approval from two browsers, and paying / no longer paying an agent's fees (x/feegrant).
 //   CHROME=/path/to/chrome node scripts/e2e-owner.mjs
 import puppeteer from "puppeteer-core";
 import { execSync } from "node:child_process";
@@ -24,7 +25,8 @@ let ok = true;
 const expect = (cond, what, got) => { ok &&= cond; console.log(`${cond ? "ok  " : "FAIL"}  ${what}${cond ? "" : `: ${got}`}`); };
 const press = async (sel) => { await p.waitForSelector(sel, { timeout: 30000 }); await new Promise((r) => setTimeout(r, 400)); await p.evaluate((s) => document.querySelector(s).click(), sel); };
 const step = async (n) => {
-  await p.waitForFunction((n) => document.querySelectorAll("#log > div").length >= n, { timeout: 60000 }, n);
+  await p.waitForFunction((n) => document.querySelectorAll("#log > div").length >= n && !document.body.dataset.busy, { timeout: 60000, polling: 250 }, n)
+    .catch(async (e) => { console.log(`FAIL  step ${n} never finished; page errors: ${errs.join(" | ") || "none"}; log: ${await p.$eval("#log", (x) => x.children.length + " lines, busy=" + document.body.dataset.busy)}`); throw e; });
   return p.$eval("#log", (e) => e.innerText.split("\n")[0]);
 };
 
@@ -86,6 +88,19 @@ l = await c.$eval("#log", (e) => e.innerText.split("\n")[0]);
 expect(/✓ approve #/.test(l), "the co-approver signs from their own console", l);
 await c.waitForFunction(() => /Nothing waits on your signature/.test(document.getElementById("co").innerText), { timeout: 30000 });
 expect(true, "the payment left the co-approver's queue: paid");
+// fee grant from the browser: pay the agent's fees, see it on the card, stop paying
+await p.bringToFront(); // the co-approver's tab was in front, and background tabs don't run the waits' animation frames
+const gasCard = async () => p.$eval("#agents", (e) => e.innerText);
+await p.evaluate(() => [...document.querySelectorAll("#agents summary")].find((s) => /Pay its fees/.test(s.textContent))?.click());
+await p.$eval("#a0-gl", (e) => (e.value = "0.005"));
+await press("form[data-gas] button");
+l = await step(11); expect(/✓ pay fees of .* up to 0\.005 MEC/.test(l), "grant the agent's fees from the console (x/feegrant)", l);
+await p.waitForFunction(() => /you pay them: 0\.005 MEC left.*contract calls only/.test(document.getElementById("agents").innerText), { timeout: 30000 });
+expect(true, "the card shows the fee grant: 0.005 MEC left, contract calls only");
+await press("[data-ungas]");
+l = await step(12); expect(/✓ stop paying fees of/.test(l), "stop paying the agent's fees", l);
+await p.waitForFunction(() => /from its own wallet/.test(document.getElementById("agents").innerText), { timeout: 30000 });
+expect(/from its own wallet/.test(await gasCard()), "the card is back to: fees from its own wallet", "");
 execSync(`. devnet/env.sh && node leash.mjs approvers --threshold 1`, { shell: "/bin/bash", stdio: "ignore" });
 expect(errs.length === 0, "no errors in the page", errs.join(" | "));
 

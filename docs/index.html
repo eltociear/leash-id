@@ -142,7 +142,18 @@ async function show(agent) {
     $("retry")?.addEventListener("click", () => show(agent));
     return;
   }
+  // who pays its fees: an owner fee grant (x/feegrant) means the agent key needs to hold nothing outside the leash
+  const [grants, own] = await Promise.all([
+    rest(`/cosmos/feegrant/v1beta1/allowances/${agent}`).then((j) => j.allowances ?? []).catch(() => null),
+    rest(`/cosmos/bank/v1beta1/balances/${agent}/by_denom?denom=umec`).then((j) => j.balance?.amount ?? "0").catch(() => null),
+  ]);
   if (me !== seq) return;
+  const g = grants?.find((x) => x.granter === w.owner);
+  const ga = g ? (g.allowance?.["@type"]?.endsWith("AllowedMsgAllowance") ? g.allowance.allowance : g.allowance) : null;
+  const gleft = ga?.spend_limit?.find((c) => c.denom === "umec")?.amount;
+  const fees = g ? `paid by the owner (fee grant${gleft ? `, ${mec(gleft)} left` : ""}${g.allowance?.allowed_messages ? ", contract calls only" : ""})`
+    : grants ? "from the agent's own wallet" : "couldn't read";
+  const ownLine = own == null ? "" : ` · the agent key itself holds ${mec(own)}${BigInt(own) > 0n ? ` <span style="color:var(--muted)">(outside the leash)</span>` : ""}`;
   const [cls, label, line] = verdict(w);
   const pol = w.policy;
   const used = Number((BigInt(w.spent_24h) * 1000n) / BigInt(pol.daily_limit)) / 10;
@@ -159,6 +170,7 @@ async function show(agent) {
       <dt>Owner's bond</dt><dd>${w.owner_bond ? `<b>${mec(w.owner_bond.amount)}</b> locked in ${w.owner_bond.deposits.length} ME Hub fixed deposit(s) until at least ${when(w.owner_bond.earliest_unlock)} <span style="color:var(--muted)">(read live from x/wstaking)</span>` : `<span style="color:var(--muted)">none posted</span>`}</dd>
       <dt>Owner budget left</dt><dd>${mec(w.owner_balance)}${w.pending_count ? ` · ${w.pending_count} payment(s) waiting for the owner` : ""}</dd>
       <dt>Leash valid until</dt><dd>${when(pol.expires_at)}</dd>
+      <dt>Fees</dt><dd>${fees}${ownLine}</dd>
     </dl>
   </div></section>
 

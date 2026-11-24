@@ -62,7 +62,7 @@
   <footer id="foot"></footer>
 </main>
 <script type="module">
-import { SigningCosmWasmClient, CosmWasmClient, GasPrice, DirectSecp256k1HdWallet } from "./vendor/cosmjs.js";
+import { SigningCosmWasmClient, CosmWasmClient, GasPrice, DirectSecp256k1HdWallet, BasicAllowance, AllowedMsgAllowance } from "./vendor/cosmjs.js";
 
 const CFG = {
   chainId: "mechain_400-1",
@@ -172,6 +172,46 @@ async function send(what, msg, funds = [], button) {
   }
 }
 
+// ---------- fee grants (x/feegrant): you pay an agent's fees, contract calls only, capped and expiring ----------
+const EXEC = "/cosmwasm.wasm.v1.MsgExecuteContract";
+async function grantOf(agent) {
+  // the list endpoint: the single-grant one answers 500 when there is no grant
+  const r = await fetch(`${CFG.rest}/cosmos/feegrant/v1beta1/allowances/${agent}`).then((x) => x.json()).catch(() => null);
+  const a = (r?.allowances ?? []).find((g) => g.granter === me)?.allowance;
+  if (!a) return null;
+  const basic = a["@type"]?.endsWith("AllowedMsgAllowance") ? a.allowance : a;
+  return { left: (basic?.spend_limit ?? []).find((c) => c.denom === "umec")?.amount ?? null, until: basic?.expiration ?? null, only: a.allowed_messages ?? null };
+}
+const balanceOf = (a) => fetch(`${CFG.rest}/cosmos/bank/v1beta1/balances/${a}/by_denom?denom=umec`).then((x) => x.json()).then((j) => j.balance?.amount ?? "0").catch(() => "0");
+function grantMsgs(agent, limitUmec, days, replace) {
+  const basic = BasicAllowance.encode(BasicAllowance.fromPartial({
+    spendLimit: [{ denom: "umec", amount: limitUmec }],
+    expiration: { seconds: BigInt(Math.floor(Date.now() / 1000) + days * 86400), nanos: 0 },
+  })).finish();
+  const allowed = AllowedMsgAllowance.encode(AllowedMsgAllowance.fromPartial({
+    allowance: { typeUrl: "/cosmos.feegrant.v1beta1.BasicAllowance", value: basic }, allowedMessages: [EXEC],
+  })).finish();
+  return [
+    ...(replace ? [{ typeUrl: "/cosmos.feegrant.v1beta1.MsgRevokeAllowance", value: { granter: me, grantee: agent } }] : []),
+    { typeUrl: "/cosmos.feegrant.v1beta1.MsgGrantAllowance", value: { granter: me, grantee: agent, allowance: { typeUrl: "/cosmos.feegrant.v1beta1.AllowedMsgAllowance", value: allowed } } },
+  ];
+}
+async function sendMsgs(what, msgs, button) {
+  if (button) button.disabled = true;
+  const stamp = new Date().toISOString().slice(11, 19);
+  try {
+    const r = await client.signAndBroadcast(me, msgs, "auto", `leash-id owner console: ${what}`);
+    if (r.code !== 0) throw new Error(r.rawLog || `code ${r.code}`);
+    logLine(`${stamp} ✓ ${esc(what)} <a href="${esc(CFG.explorer + r.transactionHash)}" target="_blank" rel="noopener">${esc(r.transactionHash.slice(0, 12))}…</a>`);
+    await refresh();
+    return true;
+  } catch (e) {
+    logLine(`${stamp} ✗ ${esc(what)}: <span class="err">${esc(reason(e))}</span>`);
+    if (button) button.disabled = false;
+    return false;
+  }
+}
+
 // ---------- views ----------
 const policyFields = (prefix, p) => `
   <div class="grid2" style="margin-top:10px">
@@ -203,7 +243,13 @@ function readPolicy(prefix, label) {
   };
 }
 
+// The page says when it is re-reading the chain (tests wait for it; nothing else depends on it).
+let refreshing = 0;
 async function refresh() {
+  document.body.dataset.busy = String(++refreshing);
+  try { await render(); } finally { if (--refreshing === 0) delete document.body.dataset.busy; }
+}
+async function render() {
   const [o, cfg, ident, appr, coOwners] = await Promise.all([q({ owner: { owner: me } }), q({ config: {} }), q({ identity: { address: me } }),
     q({ approvers: { owner: me } }), q({ approver_of: { approver: me } })]);
   const id = o.me_id;
@@ -275,6 +321,7 @@ async function refresh() {
   if (!o.agents.length) { box.innerHTML = `<div class="card">No agents yet. Offer a leash below; it takes effect when the agent key accepts it.</div>`; }
   else {
     const ws = await Promise.all(o.agents.map((a) => q({ whois: { agent: a } })));
+    const gas = await Promise.all(o.agents.map(async (a) => ({ grant: await grantOf(a), own: await balanceOf(a) })));
     box.innerHTML = ws.map((w, i) => {
       const p = w.policy, k = `a${i}`;
       const [cls, label] = w.can_pay_now ? ["ok", "can pay"] : w.revoked ? ["bad", "revoked"] : ["wait", esc(w.blocked_by)];
@@ -285,10 +332,21 @@ async function refresh() {
           <dt>Last 24 hours</dt><dd>${mec(w.spent_24h)} spent, ${mec(w.remaining_24h)} left</dd>
           <dt>Vendors</dt><dd>${p.vendors.length ? p.vendors.map((v) => `<span class="mono">${esc(v)}</span>`).join("<br>") : "none listed"}${p.any_verified_vendor ? "<br>+ any verified ME ID holder" : ""}</dd>
           <dt>Valid until</dt><dd>${when(p.expires_at)}</dd>
+          <dt>Fees</dt><dd>${gas[i].grant
+            ? `you pay them: ${gas[i].grant.left ? mec(gas[i].grant.left) + " left" : "no cap"}${gas[i].grant.until ? `, until ${esc(gas[i].grant.until.slice(0, 10))}` : ""}${gas[i].grant.only ? " (contract calls only)" : ""}`
+            : "from its own wallet"} · its wallet holds ${mec(gas[i].own)}${!gas[i].grant && BigInt(gas[i].own) > 0n ? ` <span class="muted">(anything there is outside the leash)</span>` : ""}</dd>
         </dl>
         <div class="row" style="margin-top:12px">
           ${w.revoked ? `<button class="ghost small" data-resume="${esc(w.agent)}">Resume</button>` : `<button class="danger small" data-revoke="${esc(w.agent)}">Revoke now</button>`}
         </div>
+        <details><summary>${gas[i].grant ? "Change or stop paying its fees" : "Pay its fees, so its key can hold 0 MEC"}</summary>
+          <form data-gas="${esc(w.agent)}" data-replace="${gas[i].grant ? 1 : ""}" class="grid2" style="margin-top:10px">
+            <div><label for="${k}-gl">Fees I cover, at most (MEC)</label><input id="${k}-gl" inputmode="decimal" value="0.01"></div>
+            <div><label for="${k}-gd">For (days)</label><input id="${k}-gd" inputmode="numeric" value="30"></div>
+            <div class="row"><button class="small">${gas[i].grant ? "Replace fee grant" : "Pay its fees"}</button>${gas[i].grant ? `<button type="button" class="small danger ghost" data-ungas="${esc(w.agent)}">Stop paying its fees</button>` : ""}</div>
+          </form>
+          <p class="muted" style="margin:8px 0 0">Covers only calls to contracts (that is how the agent pays through its leash), never transfers. The cap is the most a stolen key could burn in fees.</p>
+        </details>
         <details><summary>Change limits and vendors</summary>
           <form data-edit="${esc(w.agent)}" data-k="${k}" data-label="${esc(p.label)}">${policyFields(k, p)}<button class="small" style="margin-top:10px">Save leash</button></form>
         </details>
@@ -298,7 +356,19 @@ async function refresh() {
       const rv = e.target.dataset.revoke, rs = e.target.dataset.resume;
       if (rv) send(`revoke ${rv.slice(0, 10)}…`, { revoke_agent: { agent: rv } }, [], e.target);
       if (rs) send(`resume ${rs.slice(0, 10)}…`, { resume_agent: { agent: rs } }, [], e.target);
+      const ug = e.target.dataset.ungas;
+      if (ug) sendMsgs(`stop paying fees of ${ug.slice(0, 10)}…`, [{ typeUrl: "/cosmos.feegrant.v1beta1.MsgRevokeAllowance", value: { granter: me, grantee: ug } }], e.target);
     };
+    box.querySelectorAll("form[data-gas]").forEach((f) => f.onsubmit = (e) => {
+      e.preventDefault();
+      try {
+        const k = f.querySelector("input").id.replace(/-gl$/, "");
+        const limit = toUmec($(`${k}-gl`).value, "fee cap");
+        const days = Number($(`${k}-gd`).value);
+        if (!Number.isInteger(days) || days < 1 || days > 366) throw new Error("fee grant: 1 to 366 days");
+        sendMsgs(`pay fees of ${f.dataset.gas.slice(0, 10)}… up to ${mec(limit)}`, grantMsgs(f.dataset.gas, limit, days, !!f.dataset.replace), f.querySelector("button"));
+      } catch (err) { logLine(`<span class="err">${esc(err.message)}</span>`); }
+    });
     box.querySelectorAll("form[data-edit]").forEach((f) => f.onsubmit = (e) => {
       e.preventDefault();
       try { send(`update leash of ${f.dataset.edit.slice(0, 10)}…`, { update_policy: { agent: f.dataset.edit, policy: readPolicy(f.dataset.k, f.dataset.label) } }, [], f.querySelector("button")); }

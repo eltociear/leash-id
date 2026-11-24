@@ -97,7 +97,7 @@ leash whois me1agent…                         # owner, live ME ID, limits, can
 
 Day to day, in the browser: the **[owner console](https://eltociear.github.io/leash-id/owner.html)** (connect Keplr)
 (tested end to end with a mnemonic signer) lists what's waiting for your approval with Approve / Reject buttons, shows each agent's 24h spend, and has
-Revoke / Resume, a form to change limits and vendors, co-approvers (e.g. owner + CFO: two signatures release a
+Revoke / Resume, a form to change limits and vendors, paying an agent's fees (so its key holds 0 MEC), co-approvers (e.g. owner + CFO: two signatures release a
 held payment, either can reject), and a CSV export for accounting. Every button is a transaction your wallet signs. The page
 is static and loads nothing from third parties (the signing library is bundled, and CI rebuilds it byte for byte).
 
