@@ -97,7 +97,7 @@ function report(tool, args, r) {
         `This is NOT paid yet; the owner has to approve it.\n${r.link}`, { ...s, status: "held", payment_id: Number(a.payment_id) });
     }
     if (a.action === "pay") {
-      return reply(`PAID: payment #${a.payment_id}, ${fmt(a.amount)} to ${a.vendor} (invoice ${a.invoice}).\n${r.link}`,
+      return reply(`PAID: payment #${a.payment_id}, ${fmt(a.amount)} to ${a.vendor}${a.vendor_did ? ` (ME ID ${a.vendor_did})` : ""} (invoice ${a.invoice}).\n${r.link}`,
         { ...s, status: "paid", payment_id: Number(a.payment_id) });
     }
     if (a.action === "pay_batch") {
