@@ -179,8 +179,9 @@ server.registerTool("lookup_me_id", {
   inputSchema: { address: z.string().max(100) },
 }, async ({ address: a }) => {
   if (!isAddress(a)) return bad(`not an ME Hub address: ${a}`);
-  const id = await q({ me_id: { address: a } });
-  return reply(`${a}: ${meIdLine(id)}`, { address: a, me_id: id ?? null });
+  const r = await q({ identity: { address: a } });
+  return reply(`${a}: ${meIdLine(r.me_id)}${r.via_main ? ` (EVM sub-account of ${r.via_main})` : ""}${r.bond ? `; bond ${fmt(r.bond.amount)} locked` : ""}`,
+    { address: a, me_id: r.me_id ?? null, via_main: r.via_main ?? null });
 });
 
 server.registerTool("verify_agent", {
@@ -192,7 +193,8 @@ server.registerTool("verify_agent", {
     const w = await q({ whois: { agent } });
     return reply(`${agent} is leashed by ${w.owner} — ${meIdLine(w.owner_me_id)}\n` +
       `verified=${w.verified}, can_pay_now=${w.can_pay_now}${w.blocked_by ? ` (${w.blocked_by})` : ""}\n` +
-      `limits: ≤ ${fmt(w.policy.per_tx_limit)} per payment, ≤ ${fmt(w.policy.daily_limit)} per 24h; expires ${when(w.policy.expires_at)}`,
+      `limits: ≤ ${fmt(w.policy.per_tx_limit)} per payment, ≤ ${fmt(w.policy.daily_limit)} per 24h; expires ${when(w.policy.expires_at)}` +
+      (w.owner_bond ? `\nowner's bond: ${fmt(w.owner_bond.amount)} locked in ME Hub fixed deposits until at least ${when(w.owner_bond.earliest_unlock)}` : ""),
       { agent, registered: true, owner: w.owner, verified: w.verified, can_pay_now: w.can_pay_now });
   } catch (e) {
     if (isNotFound(e)) return reply(`${agent} is NOT a Leash ID agent: nobody verified has taken responsibility for it.`, { agent, registered: false });

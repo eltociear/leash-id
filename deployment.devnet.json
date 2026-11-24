@@ -4,11 +4,31 @@
   "contract": "me14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sc0nehr",
   "version": "0.2.0",
   "admin": null,
-  "storeTx": "2D9DEC605DBAA10037C6D8D0E1C56F01D25F558A26F51CA298930793B3934D08",
+  "storeTx": "3EB06B7FFBDE5D4D06AEBC5E9C38D6226979AA9F86E9ED5945AB0D16EB20983D",
   "instantiateTx": "5FFBA18B7EB37FF17E0AE11876816AE931ECB7670950205F7E3A117F91E17C8B",
-  "wasmSha256": "de1c8269589510ad029add4d9177eb90b17a7c2d7456e7feb0087a322309712b",
-  "deployedAt": "2026-11-24T04:50:32.438Z",
+  "wasmSha256": "1b21c6f26f2839c4f78619b8a0d05f6557d1b7faa7408959aab3a828a7c78a63",
+  "deployedAt": "2026-11-24T05:53:29.555Z",
   "superseded": [
+    {
+      "codeId": 1,
+      "contract": "me14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sc0nehr",
+      "version": "0.2.0"
+    },
+    {
+      "codeId": 1,
+      "contract": "me14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sc0nehr",
+      "version": "0.2.0"
+    },
+    {
+      "codeId": 1,
+      "contract": "me14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sc0nehr",
+      "version": "0.2.0"
+    },
+    {
+      "codeId": 1,
+      "contract": "me14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sc0nehr",
+      "version": "0.2.0"
+    },
     {
       "codeId": 1,
       "contract": "me14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sc0nehr",

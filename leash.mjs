@@ -67,6 +67,9 @@ const HELP = {
   owner: ["owner [owner]", "an owner's budget, reserved funds and agents"],
   history: ["history [--agent a | --owner o] [--limit 20] [--before id]", "payments, newest first"],
   invoice: ["invoice <vendor> <invoice> [--owner o]", "was this invoice already handled?"],
+  "link-sub": ["link-sub <sub-account> <main>", "record an EVM-form sub-account of an ME ID (anyone can; the contract checks x/did)"],
+  bond: ["bond <deposit-id>[,<id>…] [--as owner]", "show ME Hub fixed deposits as your bond (empty list clears it)"],
+  identity: ["identity <role|address>", "ME ID (direct or via its main account) and bond, as the contract sees them"],
   watch: ["watch [--owner o] [--webhook URL] [--from height] [--interval 6] [--once]", "follow payments as they happen; held ones ask for your approval (Slack-compatible webhook)"],
 };
 
@@ -263,6 +266,7 @@ const cmds = {
       if (o.json) return print(w), 0;
       const p = w.policy;
       console.log(`agent      ${w.agent} "${p.label}"\nowner      ${w.owner}\nME ID      ${w.owner_me_id ? `${w.owner_me_id.did} ${w.owner_me_id.active ? "active" : "INACTIVE"} KYC ${w.owner_me_id.kyc_level}` : "none"} (needs KYC ≥ ${w.min_kyc_level}) → verified ${w.verified}`);
+      console.log(`bond       ${bondLine(w.owner_bond)}`);
       console.log(`can pay    ${w.can_pay_now ? "yes" : `NO: ${w.blocked_by}`}`);
       console.log(`limits     ≤ ${fmt(p.per_tx_limit)} per payment, ≤ ${fmt(p.daily_limit)} per 24h, approval above ${p.approve_above ? fmt(p.approve_above) : "never"}`);
       console.log(`24h spend  ${fmt(w.spent_24h)} (remaining ${fmt(w.remaining_24h)}); owner budget ${fmt(w.owner_balance)}; ${w.pending_count} held`);
@@ -330,6 +334,16 @@ cmds.watch = async () => {
     if (o.once) return 0;
     await new Promise((res) => setTimeout(res, every));
   }
+};
+cmds["link-sub"] = async () => send(as("owner"), { register_sub_account: { sub: await addrOf(need(args[0], "sub-account")), main: await addrOf(need(args[1], "main account")) } });
+cmds.bond = async () => send(as("owner"), { set_bond: { deposit_ids: (args[0] ?? "").split(",").filter(Boolean).map((x) => intArg(x, "deposit id")) } });
+const bondLine = (b) => (b ? `${fmt(b.amount)} locked in ${b.deposits.length} ME Hub fixed deposit(s), first unlocks ${when(b.earliest_unlock)}` : "none");
+cmds.identity = async () => {
+  const r = await q({ identity: { address: await addrOf(need(args[0], "role or address")) } });
+  if (o.json) return print(r), 0;
+  const id = r.me_id;
+  console.log(`address  ${r.address}\nME ID    ${id ? `${id.did} ${id.active ? "active" : "INACTIVE"} KYC ${id.kyc_level}${r.via_main ? ` (via its main account ${r.via_main})` : ""}` : "none"}\nbond     ${bondLine(r.bond)}`);
+  return 0;
 };
 // old name, kept for scripts written against 0.1
 cmds.register = cmds.offer;

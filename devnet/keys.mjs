@@ -2,7 +2,7 @@
 import { writeFileSync } from "node:fs";
 import { wallet } from "../lib/chain.mjs";
 const rows = [];
-for (const r of ["owner", "agent", "vendor", "rogue", "lowkyc"]) {
+for (const r of ["owner", "agent", "vendor", "rogue", "lowkyc", "shop", "merchant"]) {
   const [a] = await (await wallet(r)).getAccounts();
   rows.push(`${r} ${a.address} ${JSON.stringify({ "@type": "/cosmos.crypto.secp256k1.PubKey", key: Buffer.from(a.pubkey).toString("base64") })}`);
 }

@@ -14,6 +14,10 @@ REMAP="--remap-path-prefix=$CARGO_HOME=/cargo --remap-path-prefix=$PWD=/src"
 ( cd contracts/leash-id && RUSTFLAGS="-C link-arg=-s $REMAP" cargo +1.81.0 build -q --release --lib --target wasm32-unknown-unknown )
 mkdir -p artifacts
 npx wasm-opt -Oz --signext-lowering contracts/leash-id/target/wasm32-unknown-unknown/release/leash_id.wasm -o artifacts/leash_id.wasm
+# ME Hub's wasmvm rejects any float instruction at upload ("Float operator detected"); catch it here, not on chain.
+if npx wasm-opt --print artifacts/leash_id.wasm | grep -qE "\((f32|f64)\.[a-z]"; then
+  echo "error: artifacts/leash_id.wasm contains float instructions; ME Hub will refuse to store it" >&2; exit 1
+fi
 cosmwasm-check --available-capabilities iterator,staking,stargate,cosmwasm_1_1,cosmwasm_1_2,cosmwasm_1_3,cosmwasm_1_4 artifacts/leash_id.wasm
 shasum -a 256 artifacts/leash_id.wasm | tee artifacts/checksums.txt
 [ "$(uname -sm)" = "Linux x86_64" ] || echo "note: built on $(uname -sm); the committed artifact comes from x86_64 Linux (CI)" >&2

@@ -12,7 +12,7 @@ const C = deployment().contract;
 const base = "http://localhost:18766";
 const url = `${base}/owner.html?rpc=${base}/rpc&rest=${base}&contract=${C}&chain=mechain_2401-1&explorer=http://localhost:1317/cosmos/tx/v1beta1/txs/`;
 const chrome = process.env.CHROME ?? "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary";
-const b = await puppeteer.launch({ executablePath: chrome, headless: "new" });
+const b = await puppeteer.launch({ executablePath: chrome, headless: "new", args: process.env.CI ? ["--no-sandbox"] : [] });
 const p = await b.newPage();
 await p.setViewport({ width: 1280, height: 2000 });
 const errs = [];

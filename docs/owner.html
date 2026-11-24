@@ -194,7 +194,7 @@ function readPolicy(prefix, label) {
 }
 
 async function refresh() {
-  const [o, cfg] = await Promise.all([q({ owner: { owner: me } }), q({ config: {} })]);
+  const [o, cfg, ident] = await Promise.all([q({ owner: { owner: me } }), q({ config: {} }), q({ identity: { address: me } })]);
   const id = o.me_id;
   const ok = id && id.active && id.kyc_level >= cfg.min_kyc_level;
   $("acct").innerHTML = `
@@ -203,12 +203,20 @@ async function refresh() {
       <dt>ME ID</dt><dd>${id ? `<b>${esc(id.did)}</b> · ${id.active ? "active" : "<b>inactive</b>"} · KYC level ${id.kyc_level}` : "none"}
         ${ok ? `<span class="badge ok">can run agents</span>` : `<span class="badge bad">agents can't pay: needs an active ME ID at KYC ≥ ${cfg.min_kyc_level}</span>`}</dd>
       <dt>Budget</dt><dd>${mec(BigInt(o.balance) - BigInt(o.reserved))} available · ${mec(o.reserved)} reserved for ${o.pending_count} held payment(s)</dd>
+      <dt>Bond</dt><dd>${ident.bond ? `${mec(ident.bond.amount)} locked in fixed deposit(s) #${ident.bond.deposits.map((d) => d.id).join(", #")} until at least ${when(ident.bond.earliest_unlock)}` : "none: vendors see no bond"}
+        <form class="row" id="bondf" style="margin-top:6px"><label class="sr" for="bond-ids">Fixed deposit ids</label><input id="bond-ids" placeholder="ME Hub fixed deposit ids, e.g. 12, 15" value="${ident.bond ? ident.bond.deposits.map((d) => d.id).join(", ") : ""}"><button class="ghost small" id="bond-go">Show as bond</button></form></dd>
     </dl>
     <form class="row" id="fund" style="margin-top:14px">
       <label class="sr" for="amt">Amount in MEC</label><input id="amt" inputmode="decimal" placeholder="amount (MEC)">
       <button class="ghost" id="dep">Deposit</button><button class="ghost" id="wd" type="button">Withdraw</button>
     </form>`;
   $("fund").onsubmit = (e) => { e.preventDefault(); try { const a = toUmec($("amt").value, "amount"); send(`deposit ${mec(a)}`, { deposit: {} }, [{ denom: cfg.denom, amount: a }], $("dep")); } catch (err) { logLine(`<span class="err">${esc(err.message)}</span>`); } };
+  $("bondf").onsubmit = (e) => {
+    e.preventDefault();
+    const ids = $("bond-ids").value.split(/[\s,#]+/).filter(Boolean);
+    if (!ids.every((x) => /^\d+$/.test(x))) return logLine(`<span class="err">deposit ids are whole numbers</span>`);
+    send(ids.length ? `show fixed deposit(s) #${ids.join(", #")} as bond` : "clear bond", { set_bond: { deposit_ids: ids.map(Number) } }, [], $("bond-go"));
+  };
   $("wd").onclick = () => { try { const a = toUmec($("amt").value, "amount"); send(`withdraw ${mec(a)}`, { withdraw: { amount: a } }, [], $("wd")); } catch (err) { logLine(`<span class="err">${esc(err.message)}</span>`); } };
 
   const pend = (await q({ pending: { owner: me, limit: 50 } })).payments;

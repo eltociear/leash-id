@@ -1,6 +1,7 @@
 pub mod contract;
 pub mod did;
 pub mod error;
+pub mod me;
 pub mod msg;
 pub mod state;
 

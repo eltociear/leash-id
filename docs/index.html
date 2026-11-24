@@ -141,6 +141,7 @@ async function show(agent) {
       <dt>Per payment</dt><dd>up to ${mec(pol.per_tx_limit)}${pol.approve_above ? `; the owner approves anything above ${mec(pol.approve_above)}` : ""}</dd>
       <dt>Any 24 hours</dt><dd>${mec(w.spent_24h)} of ${mec(pol.daily_limit)} used<div class="meter" role="img" aria-label="${used}% of the 24-hour limit used"><div style="width:${Math.min(100, used)}%"></div></div></dd>
       <dt>May pay</dt><dd>${pol.vendors.length ? `<ul class="vendors">${pol.vendors.map((v) => `<li class="mono">${esc(v)}</li>`).join("")}</ul>` : "no listed vendors"}${pol.any_verified_vendor ? `${pol.vendors.length ? "plus " : ""}any vendor holding a live ME ID at KYC level ≥ ${w.min_kyc_level}` : ""}</dd>
+      <dt>Owner's bond</dt><dd>${w.owner_bond ? `<b>${mec(w.owner_bond.amount)}</b> locked in ${w.owner_bond.deposits.length} ME Hub fixed deposit(s) until at least ${when(w.owner_bond.earliest_unlock)} <span style="color:var(--muted)">(read live from x/wstaking)</span>` : `<span style="color:var(--muted)">none posted</span>`}</dd>
       <dt>Owner budget left</dt><dd>${mec(w.owner_balance)}${w.pending_count ? ` · ${w.pending_count} payment(s) waiting for the owner` : ""}</dd>
       <dt>Leash valid until</dt><dd>${when(pol.expires_at)}</dd>
     </dl>

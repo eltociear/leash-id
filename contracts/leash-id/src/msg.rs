@@ -70,6 +70,11 @@ pub enum ExecuteMsg {
     Reject { id: u64 },
     /// Owner lets an already-handled invoice number be paid again (e.g. a vendor re-issued it).
     ReleaseInvoice { vendor: String, invoice: String },
+    /// Anyone: record that `sub` is the EVM-form sub-account of `main`. Accepted only if `main`'s ME ID
+    /// lists `sub` in x/did, and re-checked on every use, so it can never claim more than x/did says.
+    RegisterSubAccount { sub: String, main: String },
+    /// Owner: ME Hub fixed deposits (ids) to show as their bond. Up to 5; each must belong to the owner's ME ID.
+    SetBond { deposit_ids: Vec<u64> },
 }
 
 #[cw_serde]
@@ -132,9 +137,30 @@ pub enum QueryMsg {
         vendor: String,
         invoice: String,
     },
-    /// Pass-through ME ID lookup (frontends cannot call the REST API cross-origin).
+    /// Pass-through ME ID lookup, following registered sub-accounts.
     #[returns(Option<MeId>)]
     MeId { address: String },
+    /// Everything the contract can vouch for about any address: ME ID (direct or via its main account) and bond.
+    #[returns(IdentityResponse)]
+    Identity { address: String },
+}
+
+#[cw_serde]
+pub struct Bond {
+    /// Sum of the owner's registered fixed deposits that are still locked, in the contract denom.
+    pub amount: Uint128,
+    /// The earliest of their unlock times (unix seconds).
+    pub earliest_unlock: u64,
+    pub deposits: Vec<crate::me::Deposit>,
+}
+
+#[cw_serde]
+pub struct IdentityResponse {
+    pub address: String,
+    pub me_id: Option<MeId>,
+    /// Set when the ME ID was found through a registered sub-account: the main account that holds it.
+    pub via_main: Option<String>,
+    pub bond: Option<Bond>,
 }
 
 #[cw_serde]
@@ -142,6 +168,8 @@ pub struct WhoisResponse {
     pub agent: String,
     pub owner: String,
     pub owner_me_id: Option<MeId>,
+    /// The owner's locked ME Hub fixed deposits, if they registered any.
+    pub owner_bond: Option<Bond>,
     /// Owner holds a live, active ME ID at the required KYC level right now.
     pub verified: bool,
     pub min_kyc_level: u8,

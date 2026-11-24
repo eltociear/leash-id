@@ -23,6 +23,9 @@ pub struct MeId {
     pub active: bool,
     /// `KYC_LEVEL_*` as a number (0 = none … 5).
     pub kyc_level: u8,
+    /// The EVM-form account bound to this ME ID (same private key), if any. x/did keeps the binding.
+    #[serde(default)]
+    pub sub_account: String,
 }
 
 pub fn encode_query_did(address: &str) -> Binary {
@@ -71,6 +74,8 @@ struct JsonInfo {
     status: Option<String>,
     #[serde(default, rename = "kycLevel")]
     kyc_level: Option<String>,
+    #[serde(default, alias = "subAccount")]
+    sub_account: String,
 }
 
 fn parse_json(raw: &[u8]) -> Option<MeId> {
@@ -83,6 +88,7 @@ fn parse_json(raw: &[u8]) -> Option<MeId> {
         address: r.info.address,
         active: status_from_str(r.info.status.as_deref().unwrap_or("")),
         kyc_level: level_from_str(r.info.kyc_level.as_deref().unwrap_or("")),
+        sub_account: r.info.sub_account,
     })
 }
 
@@ -103,7 +109,7 @@ fn level_from_str(s: &str) -> u8 {
 
 // ---------- minimal protobuf reader (QueryDidResponse { DidInfo info = 1 }) ----------
 
-fn get_varint(b: &[u8], i: &mut usize) -> Option<u64> {
+pub(crate) fn get_varint(b: &[u8], i: &mut usize) -> Option<u64> {
     let mut v: u64 = 0;
     let mut shift = 0;
     loop {
@@ -120,7 +126,7 @@ fn get_varint(b: &[u8], i: &mut usize) -> Option<u64> {
     }
 }
 
-fn put_varint(out: &mut Vec<u8>, mut v: u64) {
+pub(crate) fn put_varint(out: &mut Vec<u8>, mut v: u64) {
     while v >= 0x80 {
         out.push((v as u8) | 0x80);
         v >>= 7;
@@ -130,9 +136,9 @@ fn put_varint(out: &mut Vec<u8>, mut v: u64) {
 
 /// Iterates (field, wire, payload) over a protobuf message.
 /// (field number, wire type, bytes for length-delimited fields, value for varints)
-type Field<'a> = (u64, u64, &'a [u8], u64);
+pub(crate) type Field<'a> = (u64, u64, &'a [u8], u64);
 
-fn fields(b: &[u8]) -> Option<Vec<Field<'_>>> {
+pub(crate) fn fields(b: &[u8]) -> Option<Vec<Field<'_>>> {
     let mut i = 0;
     let mut out = vec![];
     while i < b.len() {
@@ -166,6 +172,7 @@ fn parse_proto(raw: &[u8]) -> Option<MeId> {
         address: String::new(),
         active: false,
         kyc_level: 0,
+        sub_account: String::new(),
     };
     for (f, w, s, v) in fields(info)? {
         match (f, w) {
@@ -174,6 +181,7 @@ fn parse_proto(raw: &[u8]) -> Option<MeId> {
             (4, 0) => id.active = v == 1,
             // Unknown future levels count as none, the same as the JSON path.
             (6, 0) => id.kyc_level = if v <= 5 { v as u8 } else { 0 },
+            (7, 2) => id.sub_account = String::from_utf8(s.to_vec()).ok()?,
             _ => {}
         }
     }

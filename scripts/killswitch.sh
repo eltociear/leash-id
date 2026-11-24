@@ -52,5 +52,13 @@ step "6. a batch settled through ME Hub's custom multi_send message (to Acme + D
 run node leash.mjs batch "vendor:0.004:$(inv c)" "me1p7s6k4ecrm2kl0rs6399k99pyuk322dc78dcxq:0.003:$(inv d)" --as agent
 run node leash.mjs whois agent
 
+step "7. an EVM-form sub-account: a shop (ME ID 1000000000103) takes payment at the EVM address bound to its ME ID"
+M=$(node -e "import('./lib/chain.mjs').then(async c => console.log(await c.address('merchant')))")
+run node leash.mjs identity "$M"
+run node leash.mjs pay "$M" 0.002 "$(inv e)" --as agent     # on its own the EVM address has no ME ID: refused
+run node leash.mjs link-sub "$M" shop --as vendor   # anyone may record it; the contract checks x/did
+run node leash.mjs identity "$M"
+run node leash.mjs pay "$M" 0.002 "$(inv e)" --as agent     # now paid, with vendor_did 1000000000103 on the receipt
+
 log ""
 log "done -> $OUT"

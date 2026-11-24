@@ -95,3 +95,7 @@ pub const INVOICES: Map<(&Addr, &Addr, &str), u64> = Map::new("invoices");
 pub const AGENT_PAYMENTS: Map<(&Addr, u64), ()> = Map::new("agent_payments");
 pub const OWNER_PAYMENTS: Map<(&Addr, u64), ()> = Map::new("owner_payments");
 pub const OWNER_PENDING: Map<(&Addr, u64), ()> = Map::new("owner_pending");
+/// EVM-form sub-account -> the main account whose ME ID lists it (re-checked against x/did on every use).
+pub const SUB_ACCOUNTS: Map<&Addr, Addr> = Map::new("sub_accounts");
+/// Owner -> ME Hub fixed deposit ids they put up as a bond (read live on every whois).
+pub const BONDS: Map<&Addr, Vec<u64>> = Map::new("bonds");

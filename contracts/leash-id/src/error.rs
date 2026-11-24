@@ -70,6 +70,12 @@ pub enum ContractError {
     #[error("this message takes no funds")]
     NonPayable {},
 
+    #[error("{sub} is not the sub-account of {main}'s ME ID")]
+    NotSubAccount { sub: String, main: String },
+
+    #[error("fixed deposit #{id}: {why}")]
+    BadBond { id: u64, why: String },
+
     #[error("invalid input: {msg}")]
     Invalid { msg: String },
 }

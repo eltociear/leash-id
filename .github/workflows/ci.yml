@@ -58,6 +58,64 @@ jobs:
           want=$(node -p 'require("./deployment.json").contract')
           grep -q "contract: \"$want\"" docs/index.html || { echo "docs/index.html does not use $want"; exit 1; }
 
+  # The whole system on a real ME Hub node built from openmetaearth/me-hub, on every push: the canonical wasm,
+  # the obey-everything attack run, the ME ID kill switch, the sub-account link, then the owner console in a
+  # real browser. scripts/check-runs.mjs asserts each claim the README and the video make.
+  devnet:
+    needs: contract
+    runs-on: ubuntu-latest
+    env:
+      ME_HUB_DIR: ${{ github.workspace }}/me-hub
+      ME_HUB_REF: 1e9eff8a
+      LEASH_HOME: ${{ github.workspace }}/.leash-ci
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: openmetaearth/me-hub
+          ref: 1e9eff8a5feae166fe9d72ad4bcc904622b078a1
+          path: me-hub
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: me-hub/go.mod
+          cache-dependency-path: me-hub/go.sum
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        id: med
+        with:
+          path: me-hub/build
+          key: med-${{ env.ME_HUB_REF }}
+      - name: Build ME Hub (med)
+        if: steps.med.outputs.cache-hit != 'true'
+        run: cd me-hub && make build
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: leash_id.wasm
+          path: artifacts
+      - name: Throwaway keys for this run
+        run: |
+          node leash.mjs keygen owner agent vendor rogue lowkyc shop merchant
+          node devnet/keys.mjs
+      - name: Devnet runs (obey-everything, kill switch, sub-account) from an empty node
+        run: SKIP_CLAUDE=1 bash scripts/devnet-runs.sh
+      - name: The run records show what the README claims
+        run: node scripts/check-runs.mjs
+      - name: Owner console, end to end in Chrome
+        run: |
+          devnet/start.sh > /tmp/med.log 2>&1 &
+          until curl -sf localhost:36657/status > /dev/null; do sleep 1; done; sleep 3
+          node scripts/serve-docs.mjs > /tmp/docs.log 2>&1 &
+          sleep 1
+          CHROME=$(command -v google-chrome) node scripts/e2e-owner.mjs
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: devnet-runs
+          path: runs/devnet-*
+
   # Talks to the public testnet, so it is kept apart: an outage there shouldn't fail the build.
   testnet:
     needs: contract

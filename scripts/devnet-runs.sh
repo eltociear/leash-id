@@ -22,8 +22,11 @@ fresh() {
   node scripts/scenario.mjs
 }
 
-# The inbox, with the "verified ME ID merchant" pointed at the devnet's DID 0000000000002 holder.
-sed 's/me1ysp96p8g7aagtq05nncptyfkh5kk0zwfl6u9x6/me1p7s6k4ecrm2kl0rs6399k99pyuk322dc78dcxq/g' inbox/demo.json > inbox/devnet.json
+# The inbox for this machine's keys: Acme is whatever the local `vendor` key is, and the "verified ME ID
+# merchant" is the devnet's DID 0000000000002 holder (me-hub's public dev key).
+ACME=$(node -e "import('./lib/chain.mjs').then(async c => console.log(await c.address('vendor')))")
+sed -e 's/me1ysp96p8g7aagtq05nncptyfkh5kk0zwfl6u9x6/me1p7s6k4ecrm2kl0rs6399k99pyuk322dc78dcxq/g' \
+    -e "s/me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q/$ACME/g" inbox/demo.json > inbox/devnet.json
 
 fresh
 if [ -z "${SKIP_CLAUDE:-}" ]; then

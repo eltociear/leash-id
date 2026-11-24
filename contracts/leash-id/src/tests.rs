@@ -13,15 +13,27 @@ use cosmwasm_std::{
 
 use crate::contract::{execute, instantiate, invoice_key, migrate, query, MAX_PENDING, PENDING_TTL};
 use crate::did::DID_QUERY_PATH;
+use crate::me::FIXED_DEPOSIT_QUERY_PATH;
 use crate::error::ContractError;
 use crate::msg::*;
 use crate::state::{ContractVersion, PayStatus, Payment, VERSION};
 
 type Dids = Rc<RefCell<HashMap<String, (String, &'static str, &'static str)>>>;
+/// main account -> its EVM-form sub-account, as x/did would list it
+type Subs = Rc<RefCell<HashMap<String, String>>>;
+/// (account, id) -> (denom, principal, end_time as RFC 3339)
+type Deposits = Rc<RefCell<HashMap<(String, u64), (&'static str, u128, String)>>>;
 
 struct DidQuerier {
     base: MockQuerier,
     dids: Dids,
+    subs: Subs,
+    deposits: Deposits,
+}
+
+fn read_str(d: &[u8], at: usize) -> (String, usize) {
+    let len = d[at] as usize;
+    (String::from_utf8(d[at + 1..at + 1 + len].to_vec()).unwrap(), at + 1 + len)
 }
 
 impl Querier for DidQuerier {
@@ -36,14 +48,25 @@ impl Querier for DidQuerier {
             }
         };
         if let QueryRequest::Stargate { path, data } = &req {
-            assert_eq!(path, DID_QUERY_PATH, "only the whitelisted DID query is used");
             let d = data.as_slice();
             assert_eq!(d[0], 0x0a);
-            let addr = String::from_utf8(d[2..2 + d[1] as usize].to_vec()).unwrap();
+            let (addr, next) = read_str(d, 1);
+            if path == FIXED_DEPOSIT_QUERY_PATH {
+                assert_eq!(d[next], 0x10);
+                let id = d[next + 1] as u64;
+                return match self.deposits.borrow().get(&(addr.clone(), id)) {
+                    Some((denom, amount, end)) => SystemResult::Ok(ContractResult::Ok(Binary::from(
+                        format!(r#"{{"FixedDeposit":{{"id":"{id}","account":"{addr}","principal":{{"denom":"{denom}","amount":"{amount}"}},"end_time":"{end}","term":"1"}}}}"#).into_bytes(),
+                    ))),
+                    None => SystemResult::Ok(ContractResult::Err("fixed deposit not found".into())),
+                };
+            }
+            assert_eq!(path, DID_QUERY_PATH, "only whitelisted ME Hub queries are used");
+            let sub = self.subs.borrow().get(&addr).cloned().unwrap_or_default();
             return match self.dids.borrow().get(&addr) {
                 Some((did, status, level)) => SystemResult::Ok(ContractResult::Ok(
                     Binary::from(
-                        format!(r#"{{"info":{{"did":"{did}","address":"{addr}","pubkey":"","status":"{status}","regionId":"","kycLevel":"{level}","sub_account":""}}}}"#)
+                        format!(r#"{{"info":{{"did":"{did}","address":"{addr}","pubkey":"","status":"{status}","regionId":"","kycLevel":"{level}","sub_account":"{sub}"}}}}"#)
                             .into_bytes(),
                     ),
                 )),
@@ -59,6 +82,8 @@ type R = Result<Response<MeMsg>, ContractError>;
 struct T {
     deps: OwnedDeps<MockStorage, MockApi, DidQuerier>,
     dids: Dids,
+    subs: Subs,
+    deposits: Deposits,
     env: Env,
     owner: Addr,
     agent: Addr,
@@ -73,6 +98,8 @@ const HOUR: u64 = 3600;
 fn setup() -> T {
     let api = MockApi::default().with_prefix("me");
     let dids: Dids = Rc::new(RefCell::new(HashMap::new()));
+    let subs: Subs = Rc::new(RefCell::new(HashMap::new()));
+    let deposits: Deposits = Rc::new(RefCell::new(HashMap::new()));
     let owner = api.addr_make("owner");
     let agent = api.addr_make("agent");
     let vendor = api.addr_make("vendor");
@@ -92,6 +119,8 @@ fn setup() -> T {
         querier: DidQuerier {
             base: MockQuerier::default(),
             dids: dids.clone(),
+            subs: subs.clone(),
+            deposits: deposits.clone(),
         },
         custom_query_type: std::marker::PhantomData,
     };
@@ -110,6 +139,8 @@ fn setup() -> T {
     let mut t = T {
         deps,
         dids,
+        subs,
+        deposits,
         env,
         owner,
         agent,
@@ -628,4 +659,179 @@ fn migrate_only_moves_forward() {
     assert!(migrate(t.deps.as_mut(), env, MigrateMsg {}).is_err());
     let v: ContractVersion = from_json(query(t.deps.as_ref(), t.env.clone(), QueryMsg::Version {}).unwrap()).unwrap();
     assert_eq!(v.contract, "crates.io:other");
+}
+
+fn iso(secs: u64) -> String {
+    // inverse of rfc3339_seconds for whole days+seconds, enough for tests
+    let days = (secs / 86400) as i64;
+    let rem = secs % 86400;
+    let z = days + 719468;
+    let era = z.div_euclid(146097);
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
+    format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.5Z", rem / 3600, rem % 3600 / 60, rem % 60)
+}
+
+#[test]
+fn an_evm_sub_account_counts_as_its_main_me_id() {
+    let mut t = setup();
+    let (shop, stranger) = (t.shop.clone(), t.stranger.clone());
+    let shop_evm = t.deps.api.addr_make("shop-evm");
+    let mut p = t.policy();
+    p.any_verified_vendor = true;
+    t.set_policy(p);
+    // the merchant takes payment at its EVM-form address: on its own, that address has no ME ID
+    assert!(matches!(t.pay(&shop_evm, 10, "S-1").unwrap_err(), ContractError::VendorNotAllowed { .. }));
+    let reg = |sub: &Addr, main: &Addr| ExecuteMsg::RegisterSubAccount { sub: sub.to_string(), main: main.to_string() };
+    // nobody can register a link x/did doesn't have
+    assert!(matches!(t.exec(&stranger, reg(&shop_evm, &shop), &[]).unwrap_err(), ContractError::NotSubAccount { .. }));
+    t.subs.borrow_mut().insert(shop.to_string(), shop_evm.to_string());
+    assert!(matches!(t.exec(&stranger, reg(&shop_evm, &t.owner.clone()), &[]).unwrap_err(), ContractError::NotSubAccount { .. }));
+    // anyone may record a link x/did does have
+    t.exec(&stranger, reg(&shop_evm, &shop), &[]).unwrap();
+    t.pay(&shop_evm, 10, "S-1").unwrap();
+    assert_eq!(t.payment(1).vendor_did.as_deref(), Some("1000000000002"));
+    let idr: IdentityResponse = t.q(QueryMsg::Identity { address: shop_evm.to_string() });
+    assert_eq!(idr.via_main.as_deref(), Some(shop.as_str()));
+    // if x/did drops the binding, the link stops counting immediately
+    t.subs.borrow_mut().remove(shop.as_str());
+    assert!(matches!(t.pay(&shop_evm, 10, "S-2").unwrap_err(), ContractError::VendorNotAllowed { .. }));
+    let idr: IdentityResponse = t.q(QueryMsg::Identity { address: shop_evm.to_string() });
+    assert!(idr.me_id.is_none());
+}
+
+#[test]
+fn owners_can_show_a_fixed_deposit_bond() {
+    let mut t = setup();
+    let (o, s) = (t.owner.clone(), t.stranger.clone());
+    let now = t.env.block.time.seconds();
+    t.deposits.borrow_mut().insert((o.to_string(), 1), ("umec", 5_000, iso(now + 10 * DAY)));
+    t.deposits.borrow_mut().insert((o.to_string(), 2), ("umec", 2_000, iso(now + 20 * DAY)));
+    t.deposits.borrow_mut().insert((o.to_string(), 3), ("uother", 9_000, iso(now + 20 * DAY)));
+    t.deposits.borrow_mut().insert((o.to_string(), 4), ("umec", 9_000, iso(now - DAY)));
+    assert!(t.whois().owner_bond.is_none());
+    for bad in [3u64, 4, 99] {
+        assert!(matches!(t.owner_does(ExecuteMsg::SetBond { deposit_ids: vec![1, bad] }).unwrap_err(), ContractError::BadBond { .. }), "{bad}");
+    }
+    // someone without an ME ID can't post a bond
+    assert!(matches!(t.exec(&s, ExecuteMsg::SetBond { deposit_ids: vec![1] }, &[]).unwrap_err(), ContractError::NoMeId { .. }));
+    t.owner_does(ExecuteMsg::SetBond { deposit_ids: vec![1, 2, 2] }).unwrap();
+    let b = t.whois().owner_bond.unwrap();
+    assert_eq!((b.amount, b.earliest_unlock, b.deposits.len()), (Uint128::new(7_000), now + 10 * DAY, 2));
+    // read live: once #1 unlocks it no longer counts, and a withdrawn deposit just drops out
+    t.later(15 * DAY);
+    assert_eq!(t.whois().owner_bond.unwrap().amount, Uint128::new(2_000));
+    t.deposits.borrow_mut().remove(&(o.to_string(), 2));
+    assert!(t.whois().owner_bond.is_none());
+    t.owner_does(ExecuteMsg::SetBond { deposit_ids: vec![] }).unwrap();
+}
+
+/// Random operation sequences against the accounting invariants:
+///   contract bank balance == sum of owner balances,
+///   each owner's reserved == sum of their pending payments, pending count matches, reserved <= balance.
+/// Bank balance is tracked from what the contract actually sends (BankMsg::Send, multi_send) and receives.
+#[test]
+fn accounting_invariants_hold_under_random_operations() {
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+        fn pick(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+    }
+    let mut ok_ops = [0u32; 12];
+    for seed in 1..=40u64 {
+        let mut t = setup();
+        let mut rng = Rng(seed.wrapping_mul(0x9E3779B97F4A7C15) | 1);
+        let api = t.deps.api;
+        let owner2 = api.addr_make("owner2");
+        t.dids.borrow_mut().insert(owner2.to_string(), ("1000000000003".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
+        let agent2 = api.addr_make("agent2");
+        let agent3 = api.addr_make("agent3");
+        let (o1, a1, v, shop) = (t.owner.clone(), t.agent.clone(), t.vendor.clone(), t.shop.clone());
+        let mut p = t.policy();
+        p.any_verified_vendor = true;
+        t.set_policy(p.clone());
+        t.exec(&owner2, ExecuteMsg::Deposit {}, &coins(2_000, "umec")).unwrap();
+        t.leash(&owner2, &agent2, p.clone()).unwrap();
+        t.leash(&o1, &agent3, p.clone()).unwrap();
+        let mut bank: u128 = 3_000;
+        let owners = [o1.clone(), owner2.clone()];
+        let agents = [a1.clone(), agent2.clone(), agent3.clone()];
+        let vendors = [v.clone(), shop.clone()];
+        for step in 0..250 {
+            let op = rng.pick(12);
+            let owner = owners[rng.pick(2) as usize].clone();
+            let agent = agents[rng.pick(3) as usize].clone();
+            let vendor = vendors[rng.pick(2) as usize].clone();
+            let amt = 1 + rng.pick(220) as u128;
+            let inv = format!("I{}", rng.pick(40));
+            let r = match op {
+                0 => t.exec(&owner, ExecuteMsg::Deposit {}, &coins(amt, "umec")),
+                1 => t.exec(&owner, ExecuteMsg::Withdraw { amount: Uint128::new(amt) }, &[]),
+                2..=4 => t.exec(&agent, ExecuteMsg::Pay { vendor: vendor.to_string(), amount: Uint128::new(amt), invoice: inv, memo: None }, &[]),
+                5 => t.exec(&agent, ExecuteMsg::PayBatch { payments: vec![
+                    PayItem { vendor: vendor.to_string(), amount: Uint128::new(amt % 100 + 1), invoice: inv.clone() },
+                    PayItem { vendor: vendors[0].to_string(), amount: Uint128::new(amt % 50 + 1), invoice: format!("{inv}b") },
+                ] }, &[]),
+                6 | 7 => {
+                    let id = 1 + rng.pick(30);
+                    t.exec(&owner, if op == 6 { ExecuteMsg::Approve { id } } else { ExecuteMsg::Reject { id } }, &[])
+                }
+                8 => t.exec(&owner, ExecuteMsg::RevokeAgent { agent: agent.to_string() }, &[]),
+                9 => t.exec(&owner, ExecuteMsg::ResumeAgent { agent: agent.to_string() }, &[]),
+                10 => t.exec(&owner, ExecuteMsg::ReleaseInvoice { vendor: vendor.to_string(), invoice: inv }, &[]),
+                _ => {
+                    t.later(rng.pick(30) * HOUR);
+                    continue;
+                }
+            };
+            if r.is_ok() {
+                ok_ops[op as usize] += 1;
+            }
+            if op == 0 && r.is_ok() {
+                bank += amt;
+            }
+            if let Ok(res) = &r {
+                for m in &res.messages {
+                    match &m.msg {
+                        CosmosMsg::Bank(BankMsg::Send { amount, .. }) => bank -= amount[0].amount.u128(),
+                        CosmosMsg::Custom(MeMsg::MultiSend(ms)) => {
+                            let outs: u128 = ms.output.iter().map(|o| o.amount[0].amount.u128()).sum();
+                            assert_eq!(outs, ms.amount[0].amount.u128(), "multi_send inputs == outputs");
+                            bank -= outs;
+                        }
+                        other => panic!("unexpected message {other:?}"),
+                    }
+                }
+            }
+            // invariants
+            let mut total = 0u128;
+            for o in &owners {
+                let or: OwnerResponse = t.q(QueryMsg::Owner { owner: o.to_string() });
+                total += or.balance.u128();
+                assert!(or.reserved <= or.balance, "seed {seed} step {step}: reserved > balance");
+                let pend: PaymentsResponse = t.q(QueryMsg::Pending { owner: o.to_string(), start_after: None, limit: Some(100) });
+                let sum: u128 = pend.payments.iter().map(|p| p.amount.u128()).sum();
+                assert_eq!(sum, or.reserved.u128(), "seed {seed} step {step}: reserved != pending sum");
+                assert_eq!(pend.payments.len() as u32, or.pending_count, "seed {seed} step {step}: pending count");
+                assert!(pend.payments.iter().all(|p| p.status == PayStatus::Pending));
+            }
+            assert_eq!(total, bank, "seed {seed} step {step} op {op}: owner balances != contract bank balance");
+        }
+    }
+    // the sequences must actually exercise every path, not just bounce off refusals
+    for (op, name) in [(0, "deposit"), (1, "withdraw"), (2, "pay"), (5, "batch"), (6, "approve"), (7, "reject"), (8, "revoke"), (9, "resume"), (10, "release")] {
+        assert!(ok_ops[op] >= 5, "only {} successful {name}", ok_ops[op]);
+    }
 }

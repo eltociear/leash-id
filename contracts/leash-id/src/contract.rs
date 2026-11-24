@@ -5,13 +5,14 @@ use cosmwasm_std::{
 use cw_storage_plus::Bound;
 
 use crate::did::{self, MeId};
+use crate::me;
 use crate::error::ContractError;
 use crate::msg::{
-    CheckPayResponse, ExecuteMsg, InstantiateMsg, MeMsg, MigrateMsg, MultiSend, OffersResponse,
+    Bond, CheckPayResponse, ExecuteMsg, IdentityResponse, InstantiateMsg, MeMsg, MigrateMsg, MultiSend, OffersResponse,
     Output, OwnerResponse, PayItem, PaymentsResponse, PolicyMsg, QueryMsg, WhoisResponse,
 };
 use crate::state::{
-    AgentRec, Config, ContractVersion, Offer, OwnerAcct, PayStatus, Payment, Policy, AGENTS,
+    AgentRec, Config, ContractVersion, Offer, OwnerAcct, PayStatus, Payment, Policy, AGENTS, BONDS, SUB_ACCOUNTS,
     AGENT_PAYMENTS, CONFIG, INVOICES, NEXT_ID, OFFERS, OWNERS, OWNER_AGENTS, OWNER_PAYMENTS,
     OWNER_PENDING, PAYMENTS, VERSION,
 };
@@ -32,6 +33,7 @@ const HOUR: u64 = 3600;
 const WINDOW_HOURS: u64 = 24;
 const MAX_INVOICE: usize = 64;
 const MAX_MEMO: usize = 256;
+const MAX_BONDS: usize = 5;
 
 pub fn instantiate(deps: DepsMut, _env: Env, info: MessageInfo, msg: InstantiateMsg) -> Res {
     nonpayable(&info)?;
@@ -116,6 +118,8 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> R
         ExecuteMsg::Approve { id } => settle(deps, env, info, id, true),
         ExecuteMsg::Reject { id } => settle(deps, env, info, id, false),
         ExecuteMsg::ReleaseInvoice { vendor, invoice } => release_invoice(deps, info, vendor, invoice),
+        ExecuteMsg::RegisterSubAccount { sub, main } => register_sub(deps, sub, main),
+        ExecuteMsg::SetBond { deposit_ids } => set_bond(deps, env, info, deposit_ids),
     }
 }
 
@@ -135,9 +139,25 @@ fn nonpayable(info: &MessageInfo) -> Result<(), ContractError> {
     }
 }
 
+/// The ME ID behind `addr`: its own, or, for a registered EVM-form sub-account, its main account's, as long
+/// as x/did still lists `addr` as that ME ID's sub-account. Returns the ME ID and the main account it came via.
+pub fn resolve(deps: Deps, addr: &str) -> Option<(MeId, Option<String>)> {
+    if let Some(id) = did::lookup(deps, addr) {
+        return Some((id, None));
+    }
+    let a = Addr::unchecked(addr);
+    let main = SUB_ACCOUNTS.may_load(deps.storage, &a).ok()??;
+    let id = did::lookup(deps, main.as_str())?;
+    (id.sub_account == addr).then(|| (id, Some(main.to_string())))
+}
+
+fn me_id_of(deps: Deps, addr: &str) -> Option<MeId> {
+    resolve(deps, addr).map(|(id, _)| id)
+}
+
 /// The address must hold a live ME ID that is active and at the required KYC level.
 fn verified(deps: Deps, cfg: &Config, addr: &Addr) -> Result<MeId, ContractError> {
-    let id = did::lookup(deps, addr.as_str()).ok_or_else(|| ContractError::NoMeId {
+    let id = me_id_of(deps, addr.as_str()).ok_or_else(|| ContractError::NoMeId {
         addr: addr.to_string(),
     })?;
     if !id.active {
@@ -552,6 +572,86 @@ fn release_invoice(deps: DepsMut, info: MessageInfo, vendor: String, invoice: St
         .add_attribute("payment_id", id.to_string()))
 }
 
+// ---------------- ME-native extras: sub-accounts and bonds ----------------
+
+fn register_sub(deps: DepsMut, sub: String, main: String) -> Res {
+    let sub = deps.api.addr_validate(&sub)?;
+    let main = deps.api.addr_validate(&main)?;
+    let id = did::lookup(deps.as_ref(), main.as_str()).ok_or_else(|| ContractError::NoMeId {
+        addr: main.to_string(),
+    })?;
+    if id.sub_account != sub.as_str() {
+        return Err(ContractError::NotSubAccount {
+            sub: sub.to_string(),
+            main: main.to_string(),
+        });
+    }
+    SUB_ACCOUNTS.save(deps.storage, &sub, &main)?;
+    Ok(Response::new()
+        .add_attribute("action", "register_sub_account")
+        .add_attribute("sub", sub)
+        .add_attribute("main", main)
+        .add_attribute("did", id.did))
+}
+
+/// A deposit counts toward the bond only while it is locked, in the leash denom, and held by the ME ID's
+/// main account. Deposits that were withdrawn simply stop answering and drop out.
+fn bond_deposit(deps: Deps, env: &Env, cfg: &Config, me: &MeId, id: u64) -> Result<me::Deposit, String> {
+    let d = me::fixed_deposit(deps, &me.address, id).ok_or("not found on ME Hub (withdrawn, or not this ME ID's)")?;
+    if d.account != me.address {
+        return Err("belongs to another account".into());
+    }
+    if d.denom != cfg.denom {
+        return Err(format!("is in {}, not {}", d.denom, cfg.denom));
+    }
+    if d.end_time <= env.block.time.seconds() {
+        return Err("has already unlocked".into());
+    }
+    Ok(d)
+}
+
+fn bond_of(deps: Deps, env: &Env, cfg: &Config, owner: &Addr, me: &MeId) -> Option<Bond> {
+    let ids = BONDS.may_load(deps.storage, owner).ok()??;
+    let deposits: Vec<me::Deposit> = ids.iter().filter_map(|i| bond_deposit(deps, env, cfg, me, *i).ok()).collect();
+    if deposits.is_empty() {
+        return None;
+    }
+    Some(Bond {
+        amount: deposits.iter().fold(Uint128::zero(), |a, d| a.saturating_add(d.principal)),
+        earliest_unlock: deposits.iter().map(|d| d.end_time).min().unwrap_or(0),
+        deposits,
+    })
+}
+
+fn set_bond(deps: DepsMut, env: Env, info: MessageInfo, ids: Vec<u64>) -> Res {
+    let cfg = CONFIG.load(deps.storage)?;
+    let me = verified(deps.as_ref(), &cfg, &info.sender)?;
+    if ids.len() > MAX_BONDS {
+        return Err(invalid("at most 5 fixed deposits"));
+    }
+    let mut seen = vec![];
+    let mut total = Uint128::zero();
+    for id in ids {
+        if seen.contains(&id) {
+            continue;
+        }
+        let d = bond_deposit(deps.as_ref(), &env, &cfg, &me, id).map_err(|why| ContractError::BadBond { id, why })?;
+        total += d.principal;
+        seen.push(id);
+    }
+    if seen.is_empty() {
+        BONDS.remove(deps.storage, &info.sender);
+    } else {
+        BONDS.save(deps.storage, &info.sender, &seen)?;
+    }
+    Ok(Response::new()
+        .add_attribute("action", "set_bond")
+        .add_attribute("owner", info.sender)
+        .add_attribute("owner_did", me.did)
+        .add_attribute("deposits", seen.len().to_string())
+        .add_attribute("bond", total))
+}
+
 // ---------------- the leash itself ----------------
 
 struct Decision {
@@ -605,7 +705,7 @@ fn evaluate(
         });
     }
     vendor_sane(deps, env, agent, vendor)?;
-    let vendor_id = did::lookup(deps, vendor.as_str());
+    let vendor_id = me_id_of(deps, vendor.as_str());
     if !vendor_allowed(cfg, &rec.policy, vendor, vendor_id.as_ref()) {
         return Err(ContractError::VendorNotAllowed {
             vendor: vendor.to_string(),
@@ -863,7 +963,7 @@ fn settle(deps: DepsMut, env: Env, info: MessageInfo, id: u64, approve: bool) ->
         verified(deps.as_ref(), &cfg, &p.owner)?;
         // The vendor must still be one this leash may pay (a "verified vendor" may have lost its ME ID).
         let rec = load_agent(deps.as_ref(), &p.agent)?;
-        let vid = did::lookup(deps.as_ref(), p.vendor.as_str());
+        let vid = me_id_of(deps.as_ref(), p.vendor.as_str());
         if !vendor_allowed(&cfg, &rec.policy, &p.vendor, vid.as_ref()) {
             return Err(ContractError::VendorNotAllowed {
                 vendor: p.vendor.to_string(),
@@ -905,7 +1005,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
                 .map(|k| k.map(|a| a.to_string()))
                 .collect::<StdResult<Vec<_>>>()?;
             to_json_binary(&OwnerResponse {
-                me_id: did::lookup(deps, owner.as_str()),
+                me_id: me_id_of(deps, owner.as_str()),
                 owner: owner.to_string(),
                 balance: acct.balance,
                 reserved: acct.reserved,
@@ -998,7 +1098,19 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             };
             to_json_binary(&found)
         }
-        QueryMsg::MeId { address } => to_json_binary(&did::lookup(deps, &address)),
+        QueryMsg::MeId { address } => to_json_binary(&me_id_of(deps, &address)),
+        QueryMsg::Identity { address } => {
+            let a = deps.api.addr_validate(&address)?;
+            let r = resolve(deps, a.as_str());
+            let cfg = CONFIG.load(deps.storage)?;
+            let bond = r.as_ref().and_then(|(id, _)| bond_of(deps, &env, &cfg, &a, id));
+            to_json_binary(&IdentityResponse {
+                address,
+                via_main: r.as_ref().and_then(|(_, v)| v.clone()),
+                me_id: r.map(|(id, _)| id),
+                bond,
+            })
+        }
     }
 }
 
@@ -1016,7 +1128,8 @@ fn whois(deps: Deps, env: &Env, agent: String) -> StdResult<WhoisResponse> {
     let rec = AGENTS
         .may_load(deps.storage, &agent_addr)?
         .ok_or_else(|| StdError::generic_err(format!("not registered: {agent} is not a leashed agent")))?;
-    let me = did::lookup(deps, rec.owner.as_str());
+    let me = me_id_of(deps, rec.owner.as_str());
+    let owner_bond = me.as_ref().and_then(|id| bond_of(deps, env, &cfg, &rec.owner, id));
     let id_check = verified(deps, &cfg, &rec.owner);
     let spent = spent_24h(&rec, env);
     let remaining = rec.policy.daily_limit.saturating_sub(spent);
@@ -1040,6 +1153,7 @@ fn whois(deps: Deps, env: &Env, agent: String) -> StdResult<WhoisResponse> {
         agent,
         owner: rec.owner.to_string(),
         owner_me_id: me,
+        owner_bond,
         verified: id_check.is_ok(),
         min_kyc_level: cfg.min_kyc_level,
         spent_24h: spent,
