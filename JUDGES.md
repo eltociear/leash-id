@@ -10,7 +10,7 @@ Everything below can be checked without trusting us: each claim links to code, a
 
 | What | Where |
 |---|---|
-| Check any agent, no wallet | https://eltociear.github.io/leash-id/ |
+| Check any agent, no wallet | https://eltociear.github.io/leash-id/ (try "an EVM address bound to an ME ID": a real testnet user's sub-account, resolved by the contract from x/did) |
 | Owner console (Keplr): approvals, two signers, revoke, limits, CSV | https://eltociear.github.io/leash-id/owner.html |
 | Demo video | see the top of the [README](README.md) |
 | Red-team page (a real agent key you can attack) | [`sandbox/`](sandbox/README.md); runs locally with `node scripts/sandbox-dev.mjs` |

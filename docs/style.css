@@ -68,3 +68,7 @@
   .agent + .agent { margin-top: 14px; }
   details summary { cursor: pointer; color: var(--accent); font-size: 14px; margin-top: 10px; }
   @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+  nav.top { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; font-size: 14px; margin-bottom: 26px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  nav.top b { margin-right: 6px; }
+  nav.top a { color: var(--muted); text-decoration: none; }
+  nav.top a:hover, nav.top a[aria-current="page"] { color: var(--accent); text-decoration: underline; }

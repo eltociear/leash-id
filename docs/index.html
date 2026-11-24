@@ -10,6 +10,13 @@
 </head>
 <body>
 <main>
+  <nav class="top" aria-label="Leash ID">
+    <b>Leash ID</b>
+    <a href="./" aria-current="page">Check an agent</a>
+    <a href="./owner.html">Owner console</a>
+    <a href="https://github.com/eltociear/leash-id/blob/main/JUDGES.md">For judges</a>
+    <a href="https://github.com/eltociear/leash-id">GitHub</a>
+  </nav>
   <header>
     <h1>Who is behind this agent?</h1>
     <p>Leash ID ties AI agents to a KYC-verified human (an ME ID) and limits what they can spend, enforced by a contract on ME Hub. Paste an agent address to see who answers for it and whether it can pay right now. Read live from the chain, no wallet needed.</p>
@@ -39,6 +46,7 @@ const CFG = {
   contract: "me1pggva37n3yr92stjc4vquvsl4dulgm7z34ja24e23t5nck3ezjpqhr958v",
   examples: [
     ["demo AP agent", "me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam"],
+    ["an EVM address bound to an ME ID", "me1lfr0r096aj9fgf3k2sapawn0chpnw7gxdw0vcn"],
     ["an address with no leash", "me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p"],
   ],
 };
@@ -119,9 +127,15 @@ async function show(agent) {
     w = await q({ whois: { agent } });
   } catch (e) {
     if (me !== seq) return;
+    let ident = null;
+    if (e instanceof NotFound) ident = await q({ identity: { address: agent } }).catch(() => null);
+    if (me !== seq) return;
+    const idLine = ident?.me_id
+      ? `It does belong to a verified person: ${meId(ident.me_id)}${ident.via_main ? ` (an EVM sub-account of <span class="mono">${esc(ident.via_main)}</span>, bound in x/did)` : ""}${ident.bond ? `, with a bond of ${mec(ident.bond.amount)} locked until at least ${when(ident.bond.earliest_unlock)}` : ""}.`
+      : "Nobody verified has taken responsibility for it here.";
     out.innerHTML = e instanceof NotFound
-      ? `<section><div class="card verdict"><span class="badge bad">Not leashed</span>
-          <p><span class="mono">${esc(agent)}</span> is not registered with this Leash ID contract. Nobody verified has taken responsibility for it here.</p></div></section>`
+      ? `<section><div class="card verdict"><span class="badge ${ident?.me_id ? "wait" : "bad"}">${ident?.me_id ? "Not an agent · verified person" : "Not leashed"}</span>
+          <p><span class="mono">${esc(agent)}</span> is not an agent registered with this Leash ID contract. ${idLine}</p></div></section>`
       : `<section><div class="card verdict"><span class="badge wait">Couldn't check</span>
           <p>${esc(e.message)}. This says nothing about the agent. <button class="ghost" id="retry">Try again</button></p></div></section>`;
     $("retry")?.addEventListener("click", () => show(agent));
