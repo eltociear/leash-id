@@ -19,9 +19,23 @@ attack is *harvest now, forge later*. Payment rails can migrate when Q-Day gets 
 signed today cannot be re-signed later by a key that is already broken. So the mandate layer has
 to be post-quantum first, before the rails.
 
-No published profile covers this. NIST FIPS 204 (ML-DSA) gives the signature. The IETF draft
-`draft-uppalapati-wimse-pq-agent-identity` asks for PQ signing on credentials kept as evidence. AP2
-defines the mandates. Nothing ties the three together for agent payments.
+No adopted standard covers this yet. Related work, and how this draft relates to it:
+
+- **NIST FIPS 204 (ML-DSA)** is the signature this draft uses.
+- **draft-uppalapati-wimse-pq-agent-identity-00** (IETF individual submission, 2026-09) sets
+  requirements PQ-R1 to PQ-R7 for credentials kept as evidence: algorithm agility, PQ issuance from
+  a transition date, non-separable hybrids, downgrade resistance, and long-lived audit records.
+  This draft tries to be a concrete instance of those requirements for payment mandates.
+- **AP2 issue #250** (PQSafe, 2026-04) proposes optional ML-DSA-65 dual signatures on AP2 mandates
+  over the same JCS bytes, and has a shared fixture repository. AP2 spec work has since moved to the
+  FIDO Alliance Payments TWG.
+- **AP2 issue #338** (2026-08) defines a dispute-time evidence pack: mandates plus key material plus
+  a timestamp, optionally signed with ML-DSA-65 over the pack's digest. As its authors note, that PQ
+  signature does not protect the underlying ES256 mandate signature.
+
+What this draft adds: PQ signatures on the mandate *at issuance*, not only on a later evidence
+wrapper; hybrids bound to their full signer set; a reference evaluator with a fixed reason order;
+and enforcement profiles checked against running enforcers.
 
 ## 2. Goals and non-goals
 
@@ -33,7 +47,9 @@ Goals:
    is post-quantum, or hybrid while the transition lasts.
 3. Enforcement is done by whoever holds the money: a contract, a chain module or a payment
    processor. It is **never done by the agent**. The agent is assumed fooled or stolen.
-4. The same mandate can be enforced on more than one chain through thin profiles (section 7).
+4. One format, one verifier, many enforcers. A mandate names exactly one enforcer, so the same
+   issuer and agent keys get one mandate per chain, each compiled by a thin profile (section 7).
+   This is shown with both running enforcers in `examples/two-chains` of the reference library.
 
 Non-goals: deciding *whether* a payment is wise (that is the agent's and the policy's job),
 identity proofing (we reference a DID, we don't issue one), and replacing AP2 or ERC-7710. This
@@ -100,10 +116,12 @@ Fields not defined here are refused, which closes off parser-confusion tricks.
 The **body** is the object without `sig` and `accept`. Each signature covers
 
 ```
-M = UTF-8("pqam/0.1/" + type) || 0x00 || SHA3-256(JCS(body))
+M = UTF-8("pqam/0.1/" + type) || 0x00 || SHA3-256(JCS(body)) || SHA3-256(UTF-8(join(",", sort(kids))))
 ```
 
-and `kid` is the first 8 bytes (hex) of `SHA3-256(UTF-8(alg) || 0x00 || publicKey)`.
+`kid` is the first 8 bytes (hex) of `SHA3-256(UTF-8(alg) || 0x00 || publicKey)`,
+and `kids` lists **every** key expected to co-sign (the issuer's keys for a mandate, the agent's for
+acceptance, the payee's or enforcer's for an invoice or receipt).
 
 ### 4.1 Rules for the fields
 
@@ -138,6 +156,10 @@ is held by someone (Leash ID v0.2: `RegisterAgent` → `AcceptLeash`).
 - **Hybrid means AND.** Every key in `issuer.keys` must verify. A Q-Day attacker who has the
   classical half still fails (Invoice Leash drill: 16 of 16 attacks refused with four accounts'
   secp256k1 keys and no ML-DSA-87 key).
+- **Hybrids can't be separated.** Each signature covers the hash of the whole signer set. A PQ
+  signature made next to a classical one fails if a verifier is offered the PQ key alone. That is
+  the "stripping" attack, which IETF draft PQ-R3 warns concatenated hybrids are open to. For
+  mandates the issuer's key list is also inside the signed body. Both are in the vectors.
 - **The algorithm is named, never implied.** Every signature carries `alg`. A verifier that
   doesn't know an `alg` rejects it. It doesn't skip it.
 - **Domain separation.** Each signed message starts with its own tag: `pqam/0.1/mandate`,
@@ -186,7 +208,8 @@ OverWindow`, then `TooManyPending` for a payment that would be held. The result 
 |---|---|---|---|
 | **QoreChain** | account-abstraction spending rule (denoms, calls, expiry) + desk contract (limits, payees) | the chain: hybrid account, ML-DSA-87 precompile `0x…0a01` for invoices | running (Invoice Leash V2/V3) |
 | **CosmWasm / ME Hub** | the Leash ID contract (policy, rolling window, approvals, pending cap) | **not yet**: ME Hub accounts are secp256k1. Payee identity is checked live through the x/did Stargate query | running (Leash ID v0.3), PQ part missing |
-| **EVM + ERC-7710** | a caveat enforcer per scope/limit field | off-chain or a precompile. Pure-Solidity ML-DSA verification costs too much gas on chains without one | design only |
+| **EVM (InvoiceDeskV3 outside QoreChain)** | the desk contract (limits, payees, signed invoices) | a precompile if the chain has one. Otherwise the payee's signature is checked off-chain and recorded. Pure-Solidity ML-DSA costs too much gas | local run (anvil, stand-in precompile) |
+| **EVM + ERC-7710** | a caveat enforcer per scope/limit field | as above | design only |
 | **Off-chain (AP2, x402 facilitator)** | the processor | a verifier library, receipts signed by the processor | design only |
 
 On a chain that can't verify ML-DSA itself, the profile must say so plainly. In that case the
@@ -240,15 +263,23 @@ These come from building and attacking the two systems above, not from theory.
 
 1. **Done (0.1.0):** [eltociear/pqam](https://github.com/eltociear/pqam), a JavaScript library with
    TypeScript types. It canonicalises, signs and verifies `pqam/0.1` objects (ML-DSA-44/65/87,
-   Ed25519, ES256K) and evaluates payments. Its conformance vectors are 23 verify cases and 26
-   policy cases, reproduced byte for byte from seeds. QoreChain's `@qorechain/sdk` verifies its
+   Ed25519, ES256K) and evaluates payments. Its conformance vectors are 26 verify cases (stripping
+   included) and 26 policy cases, reproduced byte for byte from seeds. QoreChain's `@qorechain/sdk` verifies its
    ML-DSA-87 signatures.
 2. **Done (0.1.0), compile step only:** the adapters turn a mandate into Leash ID's `PolicyMsg` or
    InvoiceDesk limits plus the agent's spending rule, and refuse what the target can't enforce.
-   Still to do: install those configs on chain from these repositories, so that one mandate
-   actually runs on both chains.
-3. Proposals: a PQ extension issue to AP2, a post on the Ethereum Magicians agent-mandate thread, and
-   feedback to the IETF WIMSE PQ agent identity draft.
+   **Done locally:** `examples/two-chains` installs both on private nodes, a single ME Hub node
+   (Leash ID v0.4.0 canonical wasm) and anvil (InvoiceDeskV3). The issuer and agent keys are the same
+   on both. 16 payment attempts, and the chain agreed with the reference evaluator on every one.
+   Still to do: the same on the public testnets.
+3. Proposals, matched to where the work now lives:
+   - AP2 #338: mandate-level PQ issuance would close the gap that the evidence pack's own PQ
+     signature leaves open.
+   - AP2 #250: a cross-check against its fixture repository.
+   - The Ethereum Magicians agent-mandate thread: no post there mentions PQ. The reference
+     evaluator's reason order also fits the `ExecutionReason` discussion.
+   - The author of the IETF draft: this spec as a worked instance of PQ-R1 to PQ-R7.
+   - The FIDO Payments TWG takes contributions from members only.
 
 ## Open questions
 
