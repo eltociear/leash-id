@@ -1,6 +1,6 @@
 {
   "name": "leash-id",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "KYC-backed spending leashes for AI agents on ME Network: a CosmWasm contract on ME Hub, an MCP server and a CLI",
   "scripts": {
     "test": "npm run test:contract && npm run test:js",
