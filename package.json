@@ -55,6 +55,7 @@
     "docs/",
     "README.md",
     "SECURITY.md",
+    "CHANGELOG.md",
     "THREAT_MODEL.md",
     "LICENSE"
   ],

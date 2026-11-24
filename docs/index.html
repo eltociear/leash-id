@@ -38,7 +38,8 @@
   .badge.ok { background: var(--ok-bg); color: var(--ok); }
   .badge.bad { background: var(--bad-bg); color: var(--bad); }
   .badge.wait { background: var(--wait-bg); color: var(--wait); }
-  .verdict p { margin: 0; }
+  .verdict p { margin: 0; overflow-wrap: anywhere; }
+  footer, .result { overflow-wrap: anywhere; }
   dl { display: grid; grid-template-columns: 180px 1fr; gap: 6px 16px; margin: 16px 0 0; font-size: 14px; }
   dt { color: var(--muted); }
   dd { margin: 0; overflow-wrap: anywhere; }
@@ -48,7 +49,7 @@
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; }
-  .row-form { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; }
+  .row-form { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; margin: 0; }
   .row-form input { width: 100%; }
   .result { margin-top: 12px; font-size: 14px; }
   .err { color: var(--bad); }
@@ -57,6 +58,7 @@
   @media (max-width: 640px) {
     form, .row-form { grid-template-columns: 1fr; flex-direction: column; }
     dl { grid-template-columns: 1fr; }
+    .verdict { flex-direction: column; gap: 8px; }
     dt { margin-top: 8px; }
   }
 </style>

@@ -5,6 +5,8 @@ confused model or a stolen agent key all end up the same way: the agent's key si
 shouldn't. So we don't try to make the agent trustworthy. We limit what its key can do, and we enforce
 those limits in the ME Hub contract, not in the agent, the MCP server or the prompt.
 
+This document describes contract v0.2. Test names refer to `contracts/leash-id/src/tests.rs`.
+
 ## Actors and keys
 
 | Actor | Holds | Trusted for |
@@ -13,49 +15,60 @@ those limits in the ME Hub contract, not in the agent, the MCP server or the pro
 | Agent (LLM + MCP server) | agent key only | nothing; every action is checked on-chain |
 | Vendor | an address, optionally an ME ID | nothing |
 | KYC issuer / global DAO (ME Network) | x/did | creating, suspending and re-activating ME IDs |
-| Leash ID contract | escrowed budget | the checks below; its code is public and reproducible |
+| Leash ID contract | escrowed budget | the checks below; public, reproducible code, deployed **without an admin** |
 
-The MCP server (`mcp/server.mjs`) holds **only the agent key**. On purpose, it also exposes tools the agent
-must never be able to use: `approve_payment`, `withdraw_budget`, `raise_my_limit`, `send_mec`. If those calls
-are refused, the refusal comes from the chain, so it doesn't depend on the tool list or the prompt.
+The MCP server (`mcp/server.mjs`) loads only the agent key, and **refuses to start if any other Leash ID key
+is readable from its process** (see [SECURITY.md](SECURITY.md)). The owner-only tools (`approve_payment`,
+`withdraw_budget`, `raise_my_limit`, `send_mec`) aren't offered by default. The demo turns them on
+(`LEASH_HONEYPOT_TOOLS=1`) to show that the chain refuses them whatever the tool list or the prompt says.
 
 ## Threats
 
 | # | Threat | Example | What stops it | Evidence |
 |---|---|---|---|---|
-| T1 | Prompt injection makes the agent pay an attacker | hidden "SYSTEM NOTICE" in `inbox/demo.json` m4 | vendor must be allow-listed or hold a live ME ID at KYC ≥ N | `vendor_rules`; obey run: `vendor … is not allowed by this leash` |
+| T1 | Prompt injection makes the agent pay an attacker | hidden "SYSTEM NOTICE" in `inbox/demo.json` m4 | vendor must be allow-listed or hold a live ME ID at KYC ≥ N | `vendor_rules`; obey run |
 | T2 | Business-email compromise ("CEO wire") | m3: urgent 0.04 MEC to a new supplier | vendor rule + `per_tx_limit` | obey run |
-| T3 | Duplicate invoice / "pay again to be safe" | m2 re-sends INV-1001 | `(owner, vendor, invoice)` is paid once; checked before limits so the answer is "already paid as #N" | `duplicate_invoice_is_refused` |
-| T4 | Agent raises its own limits or approves its own held payment | m4 asks for `raise_my_limit`, `approve_payment` | `update_policy` and `approve` are owner-only | `approval_flow_reserves_funds`; obey run: `only the owner can do this` |
-| T5 | Agent drains the escrow | `withdraw_budget`, `send_mec`, one big pay | `withdraw` is owner-only; the escrow sits in the contract, not in the agent's account | `agent_cannot_attach_funds_or_drain_via_withdraw` |
-| T6 | Splitting a big amount into many small ones | 5 × 0.014 MEC in one batch | UTC-daily limit counts every item and every held payment; batches can't contain items that need approval | `limits_and_utc_day_reset`, `batch_uses_me_multi_send`; obey run |
-| T7 | Agent key stolen | attacker signs `pay` directly, without the MCP server | same contract checks; worst case = what's left of today's limit, to allowed vendors only. Owner calls `revoke_agent` | `revoke_expiry_and_ownership` |
-| T8 | Owner's identity goes bad (fraud, a stolen account, a lapsed KYC) | ME ID suspended by the global DAO | **every `pay` re-reads the owner's ME ID from x/did.** Suspended → the next block refuses every agent under it. A suspended owner can still **reject** held payments but cannot **approve** them | `suspending_the_owner_me_id_freezes_the_agent_immediately`, `suspended_owner_can_reject_but_not_approve`; `runs/devnet-killswitch-*.txt` |
-| T9 | Counterparty can't tell who is behind an agent | vendor receives a payment from an unknown address | `whois(agent)` returns the owner and their live ME ID; every receipt stores both ME IDs as of payment time | verifier page `docs/` |
-| T10 | Low-assurance owner | real-person check only (KYC level 1) | `min_kyc_level` (2 on our deployments) gates `deposit` and `register_agent`, and is re-checked on every `pay` | `low_kyc_owner_is_refused`; devnet run step 5 |
-| T11 | Self-dealing | agent lists itself as vendor | `vendor == agent` is refused | `vendor_rules` |
-| T12 | A forgotten agent | old key in an old server | every leash has a required `expires_at`; after it, every `pay` is refused | `revoke_expiry_and_ownership` |
+| T3 | Duplicate invoice, including re-spelled ones | m2 re-sends INV-1001; an injection says "resend as `inv 1001`" | an invoice is paid once per (owner, vendor, **normalized number**): case, spaces and separators are ignored, and non-ASCII look-alikes (fullwidth digits, Unicode hyphens) are refused outright. Checked before limits, so the answer is "already handled as #N" | `duplicate_invoice_is_refused_whatever_the_spelling`; obey run |
+| T4 | Agent raises its own limits or approves its own held payment | m4 asks for `raise_my_limit`, `approve_payment` | `update_policy`, `approve`, `release_invoice` are owner-only | `approval_flow_…`; obey run: `only the owner can do this` |
+| T5 | Agent drains the escrow | `withdraw_budget`, one big pay | `withdraw` is owner-only; the escrow sits in the contract; only `deposit` accepts funds | `only_deposit_takes_funds` |
+| T6 | Splitting, or straddling midnight | 5 × 0.014 MEC in one batch; full limit at 23:59 and again at 00:01 | the limit covers **any rolling 24 hours** (hourly buckets), every batch item and every held payment; batches can't contain items that need approval | `daily_limit_is_a_rolling_24_hours`, `batch_uses_me_multi_send` |
+| T7 | Agent key stolen | attacker signs `pay` directly | same contract checks; worst case = what's left of the 24h limit, to allowed vendors only. `revoke_agent` stops it **and rejects its held payments**; no later policy change can lift a revoke, only `resume_agent` | `revoke_sticks_until_resume_and_clears_the_queue` |
+| T8 | Owner's identity goes bad (fraud, a stolen account, a lapsed KYC) | ME ID suspended by the global DAO | **every `pay` re-reads the owner's ME ID from x/did.** Suspended → the next block refuses every agent under it. A suspended owner can still reject held payments but can't approve them | `suspending_the_owner_me_id_freezes_the_agent_immediately`, `approval_rechecks_owner_vendor_and_age`; `runs/devnet-killswitch-*.txt` |
+| T9 | Counterparty can't tell who is behind an agent | vendor receives a payment from an unknown address | `whois(agent)` returns the owner, their live ME ID and whether the agent can pay right now; every receipt stores both ME IDs as of payment time | verifier page `docs/` |
+| T10 | Someone vouches for an address they don't control (squatting) | a KYC'd attacker registers a company's agent address first | a leash is an **offer** until the agent key itself accepts it; an agent can leave a leash | `a_leash_needs_the_agent_to_accept_it` |
+| T11 | Low-assurance owner | real-person check only (KYC level 1) | `min_kyc_level` (2 on our deployments) gates `deposit`, offers and acceptance, and is re-checked on every `pay` and `approve` | `low_kyc_owner_is_refused`; devnet run step 5 |
+| T12 | Money that never leaves the leash | agent pays itself, the contract, or another leashed agent | all three are refused as vendors, in the policy and at payment time | `vendor_rules` |
+| T13 | Approving something that is no longer OK | a "verified vendor" loses its ME ID while a payment waits; a payment waits for weeks | `approve` re-checks the vendor rule and refuses payments older than 7 days | `approval_rechecks_owner_vendor_and_age` |
+| T14 | Flooding the owner with approval requests | agent creates held payments to lock the budget | held payments count against the 24h limit and at most 50 can wait per owner | `the_approval_queue_is_bounded` |
+| T15 | A forgotten agent | old key in an old server | every leash has a required `expires_at`, at most 366 days ahead | `revoke_sticks_…`, `policy_is_validated` |
+| T16 | The contract's code is swapped | a migrate admin replaces the code with one that pays the escrow out | deployed **without an admin**; `npm run verify` fails if an admin exists, and the verifier page says so | `scripts/verify.mjs`, CI job `testnet` |
+| T17 | The agent's own runtime reads the owner key | Claude Code with shell tools runs `cat` on the key file | the MCP server refuses to start next to readable owner keys; deployment guide runs the agent in its own user/container | `test/mcp.test.mjs` |
+| T18 | A network hiccup turns into a double payment | timeout after broadcast; the model retries with a new invoice ref | the tx hash is computed before broadcasting; an unconfirmed send is reported as **UNKNOWN, may have gone through** with the hash, never as "not sent"; `find_invoice` and the `invoice` query look it up | `lib/tx.mjs`, `test/units.test.mjs` |
 
 ## What Leash ID does *not* protect against
 
 - **The owner key.** Whoever holds it can change the leash, approve, withdraw and revoke. Keep it off the
-  agent's machine. A multisig owner is a natural next step; the contract only needs an address with an ME ID.
+  agent's machine. A multisig owner is a natural next step; today the owner must itself hold an ME ID, so it
+  has to be a person's key.
 - **Payments the leash allows.** A legitimate-looking 0.012 MEC invoice from an allow-listed vendor will be
   paid. Leash ID limits how much can go wrong. Judging whether the invoice is right is still the model's job
   (see `runs/devnet-claude-*.jsonl`, where Claude declines m3 and m4 before the chain ever sees them).
+- **Different invoice numbers for the same bill.** Matching is per normalized number. "INV-1001" and
+  "INV-1001-B" are two invoices. Per-payment and 24h limits still cap the damage.
 - **"Verified vendor" means "a real, KYC'd person or business", not "honest".** If that's not enough, turn off
   `any_verified_vendor` and keep only the allowlist.
 - **ME ID semantics.** We trust x/did: `DID_STATUS_ACTIVE` and `kycLevel` as returned by
   `/metaearth.did.Query/Did`. If the DID query fails or can't be parsed, the owner is treated as unverified
-  and payments are refused (fail closed, `did::lookup` returns `None`).
-- **Contract admin.** Our deployments set the deployer as wasm admin so we can fix bugs during the hackathon
-  (we did, see `deployment.json` → `superseded`). A production deployment should clear the admin or hand it to
-  a DAO. `scripts/verify.mjs` shows which code is deployed and whether it matches the source in this repo.
+  and payments are refused (fail closed, `did::lookup` returns `None`). Unknown KYC levels count as none.
+- **Bugs in this contract.** It has no admin, so a bug can't be patched in place: owners withdraw and move to a
+  new deployment. That's the price of nobody being able to swap the code under the escrow.
 - **Liveness.** If ME Hub halts, nothing gets paid. That fails safe for the owner.
 
 ## Fail-closed choices
 
 - Unknown agent → refused. Unknown DID response → unverified → refused.
-- Held payments count against the daily limit and reserve budget the moment they're created.
-- Agents never call `pay_batch` with an item that needs approval; the whole batch is refused instead.
-- Refusals are real failed transactions (fixed gas, no simulation), so they're visible on the explorer.
+- Held payments count against the 24h limit and reserve budget the moment they're created.
+- A batch with any item that needs approval, or the same invoice twice, is refused as a whole.
+- Funds attached to anything but `deposit` are refused, so nothing can get stuck in the contract unaccounted.
+- Off-chain, every send is simulated first (no fee for a refusal). The demo sets `LEASH_ONCHAIN_REFUSALS=1` so
+  refusals become real failed transactions anyone can look up on the explorer.

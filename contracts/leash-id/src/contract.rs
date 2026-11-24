@@ -467,7 +467,7 @@ fn reject_pending_of(storage: &mut dyn Storage, env: &Env, owner: &Addr, agent: 
     let mut events = vec![];
     for id in ids {
         let mut p = PAYMENTS.load(storage, id)?;
-        if &p.agent != agent {
+        if p.agent != *agent {
             continue;
         }
         close_pending(storage, &mut acct, &mut p, env, false)?;

@@ -129,7 +129,10 @@ fn put_varint(out: &mut Vec<u8>, mut v: u64) {
 }
 
 /// Iterates (field, wire, payload) over a protobuf message.
-fn fields(b: &[u8]) -> Option<Vec<(u64, u64, &[u8], u64)>> {
+/// (field number, wire type, bytes for length-delimited fields, value for varints)
+type Field<'a> = (u64, u64, &'a [u8], u64);
+
+fn fields(b: &[u8]) -> Option<Vec<Field<'_>>> {
     let mut i = 0;
     let mut out = vec![];
     while i < b.len() {

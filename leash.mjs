@@ -15,6 +15,7 @@ const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf
 // name: [usage, summary, options]
 const OPTS = {
   as: { type: "string" },
+  "key-file": { type: "string" },
   json: { type: "boolean" },
   label: { type: "string" },
   "per-tx": { type: "string" },
@@ -70,6 +71,7 @@ function usage(cmd) {
   return `leash ${VERSION}: KYC-backed spending leashes for AI agents on ME Hub (${NET.chainId})\n\n` +
     Object.entries(HELP).map(([k, [, s]]) => `  ${k.padEnd(w)}  ${s}`).join("\n") +
     "\n\n  roles are key names in " + KEY_DIR + " (owner, agent, …) or any me1… address\n" +
+    "  --as <role> signs as another role; --key-file <path> signs with that key file; --json for machine output\n" +
     "  amounts are MEC (1 MEC = 10^8 umec), e.g. 0.015\n  leash help <command> for details";
 }
 
@@ -136,7 +138,8 @@ async function policyFrom(base) {
 }
 
 const as = (def) => o.as ?? def;
-const send = async (role, msg, funds) => outcome(await act(role, msg, funds));
+// --key-file signs with that file instead of a role's key (e.g. the agent host, which holds only its own key).
+const send = async (role, msg, funds) => outcome(await act(role, msg, funds, { file: o["key-file"] }));
 
 const cmds = {
   async keygen() {
