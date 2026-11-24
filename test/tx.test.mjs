@@ -51,7 +51,7 @@ test("CheckTx rejection (e.g. fee too low): not sent, safe to retry", async () =
   const e = Object.assign(new Error("Broadcasting transaction failed with code 13 (codespace: sdk). Log: insufficient fee"), { code: 13, codespace: "sdk" });
   const r = await sendNow(fake({ broadcast: async () => { throw e; } }), [], "m", false);
   assert.equal(r.status, "not_sent");
-  assert.match(r.reason, /can't pay the fee/);
+  assert.match(r.reason, /fee is too low or nobody pays it/);
 });
 
 test("included: ok with the contract's attributes; out of gas: failed, fee charged", async () => {
