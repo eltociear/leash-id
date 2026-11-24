@@ -175,7 +175,9 @@ server.registerTool("read_message", {
   inputSchema: { id: z.string().max(64) },
 }, async ({ id }) => {
   const m = inbox().find((x) => x.id === id);
-  return m ? reply(UNTRUSTED(json(m))) : bad(`no message ${id}`);
+  if (!m) return bad(`no message ${id}`);
+  const { expect: _answerKey, ...shown } = m; // demo inboxes carry the expected handling; never show it to the agent
+  return reply(UNTRUSTED(json(shown)));
 });
 
 server.registerTool("lookup_me_id", {

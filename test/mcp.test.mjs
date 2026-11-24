@@ -56,6 +56,17 @@ test("pay_for_api won't call local, private or non-https URLs", async () => {
   await c.close();
 });
 
+test("the agent never sees a demo inbox's answer key", async () => {
+  const c = new Client({ name: "test", version: "1" });
+  await c.connect(new StdioClientTransport({ command: process.execPath, args: [SERVER], env: { ...base, LEASH_READONLY: "1", LEASH_AGENT_ADDRESS: AGENT }, stderr: "ignore" }));
+  for (const id of ["m1", "m3", "m6"]) {
+    const r = await c.callTool({ name: "read_message", arguments: { id } });
+    assert.match(r.content[0].text, /"invoice"/);
+    assert.doesNotMatch(r.content[0].text, /"expect"|"pay"|"refuse"/, id);
+  }
+  await c.close();
+});
+
 test("read-only mode needs an agent address", () => {
   const r = spawnSync(process.execPath, [SERVER], { env: { ...base, LEASH_READONLY: "1" }, input: "" });
   assert.equal(r.status, 1);

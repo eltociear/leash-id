@@ -9,7 +9,7 @@ $ api localhost:18790/chain-stats
     "pay_to": "me13esx9gwc65ctg6a9h2fappkwegvqg9y63kcp8d",
     "amount": "100000",
     "amount_mec": "0.001 MEC",
-    "invoice": "API-TOZVPY-EE727BDB70-9786F76336187604",
+    "invoice": "API-TOZW24-B2D5E47A3C-B80612CDF0168521",
     "chain_id": "mechain_2401-1",
     "contract": "me14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sc0nehr",
     "for": "GET /chain-stats",
@@ -30,62 +30,62 @@ $ node scripts/commerce-client.mjs http://localhost:18790/chain-stats 0.002
 {
   "chain_id": "mechain_2401-1",
   "height": 25,
-  "time": "2026-11-24T06:55:58.540808000Z",
-  "txs_in_block": 1,
+  "time": "2026-11-24T07:03:17.218116000Z",
+  "txs_in_block": 0,
   "receipt": {
     "paid_by_agent": "me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam",
     "owner": "me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq",
     "owner_me_id": "1000000000101",
     "payment_id": 1,
-    "tx": "C808D18C273370C91688A4DD0B9D5A68077D27D4C2CDCEBEA8E81B1250829C18"
+    "tx": "FA0DC01440EBC4D4D144B897E456498E8F7DBBAF92937E8CC73CA96F7B6A33E3"
   }
 }
 <<END UNTRUSTED API RESPONSE>>
-tx=C808D18C273370C91688A4DD0B9D5A68077D27D4C2CDCEBEA8E81B1250829C18 invoice=API-TOZVPY-558077C712-848F204934E231FA
+tx=FA0DC01440EBC4D4D144B897E456498E8F7DBBAF92937E8CC73CA96F7B6A33E3 invoice=API-TOZW25-140048D204-D353B5D41EF089F3
 
 ## 3. the same payment can't buy a second answer (even with the agent's own proof)
-$ api -H X-Leash-Payment: C808D18C273370C91688A4DD0B9D5A68077D27D4C2CDCEBEA8E81B1250829C18 -H X-Leash-Proof: eyJwdWJfa2V5IjoiQW1pOHZsSVNtTE5iOG56cERoR2R3MlFCc0p3ZFJObnZKdzZCSUFNZk1kM3ciLCJzaWduYXR1cmUiOiJ4UzlIbzBsZUFYVHF0WEhhKzNPNUIvTlk1Ry9uTGR1S3dQMjl1WjdJY01ZWGZBNkEwNFRMT1BwN09MaGhHUGw0TU9LbkZaMW4rU0k5ci9FanFHQklSQT09In0= localhost:18790/chain-stats
+$ api -H X-Leash-Payment: FA0DC01440EBC4D4D144B897E456498E8F7DBBAF92937E8CC73CA96F7B6A33E3 -H X-Leash-Proof: eyJwdWJfa2V5IjoiQW1pOHZsSVNtTE5iOG56cERoR2R3MlFCc0p3ZFJObnZKdzZCSUFNZk1kM3ciLCJzaWduYXR1cmUiOiJma2JKSUxQOG5hcG00b2YraHhrV0NnbnozVVVnVWhpL05kWW8vdzVPcmQ5ZTJxdHBzV0QyR0VkT01lS09tb1VBU1h1WWRZYm52d2tzMkhSTUEyWnhpdz09In0= localhost:18790/chain-stats
 {
   "error": "that payment was already used for a response"
 }
 (HTTP 402)
 
 ## 4. tx hashes are public: someone watching the chain tries to redeem a fresh payment first
-$ node leash.mjs pay shop 0.001 API-TOZVQ0-E518C16610-E7B56EE0B391A8F5 --as agent
-ok   pay (paid) payment #2  http://localhost:1317/cosmos/tx/v1beta1/txs/tx/6FE7B2E5CE6BAF6F150A073D9C469E9E6148CD5930AC27CC7C45492D753ECFE2
-     payment_id=2 agent=me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq owner_did=1000000000101 vendor=me13esx9gwc65ctg6a9h2fappkwegvqg9y63kcp8d amount=100000 invoice=API-TOZVQ0-E518C16610-E7B56EE0B391A8F5 status=paid vendor_did=1000000000103
-$ api -H X-Leash-Payment: 6FE7B2E5CE6BAF6F150A073D9C469E9E6148CD5930AC27CC7C45492D753ECFE2 -H X-Leash-Proof: eyJwdWJfa2V5IjoiQWcxS3pzbksrMUdMZkpwUzE5TThFQ0d0dVBKVkkxOUJyUUhGeWhUTHRBdXgiLCJzaWduYXR1cmUiOiJuakgzdlRlRFIyRUgramtBSG56MmdZNXh2RnZVMmFJOGlPTkhUbGgxRk50MjNneGhYK21KUEFldHRxYzBnVWI5c1Y1RUpHU0FiYzBQSHhucmM0cUZ3UT09In0= localhost:18790/chain-stats
+$ node leash.mjs pay shop 0.001 API-TOZW26-E0342A4346-600FCB7A0DDB3BCD --as agent
+ok   pay (paid) payment #2  http://localhost:1317/cosmos/tx/v1beta1/txs/tx/33B98E5932040B236FEFF1C277AFF5A9C56522005A0BDC95F33BB97CDBEC1546
+     payment_id=2 agent=me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq owner_did=1000000000101 vendor=me13esx9gwc65ctg6a9h2fappkwegvqg9y63kcp8d amount=100000 invoice=API-TOZW26-E0342A4346-600FCB7A0DDB3BCD status=paid vendor_did=1000000000103
+$ api -H X-Leash-Payment: 33B98E5932040B236FEFF1C277AFF5A9C56522005A0BDC95F33BB97CDBEC1546 -H X-Leash-Proof: eyJwdWJfa2V5IjoiQWcxS3pzbksrMUdMZkpwUzE5TThFQ0d0dVBKVkkxOUJyUUhGeWhUTHRBdXgiLCJzaWduYXR1cmUiOiJ3Y3l1S25XTHEvZmhHYUkyZjE0Y3k5Unp5WkVUMVpkKzYyUW5LSGo3ZE5nYW9YZGx5U3NtbjhBbGh2WlprMTRrcGMyM0xtZldxc0JxMUdFMThOZ3FsQT09In0= localhost:18790/chain-stats
 {
   "error": "X-Leash-Proof isn't a signature by the agent that made this payment"
 }
 (HTTP 403)
 # the agent that paid, with its own signature
-$ api -H X-Leash-Payment: 6FE7B2E5CE6BAF6F150A073D9C469E9E6148CD5930AC27CC7C45492D753ECFE2 -H X-Leash-Proof: eyJwdWJfa2V5IjoiQW1pOHZsSVNtTE5iOG56cERoR2R3MlFCc0p3ZFJObnZKdzZCSUFNZk1kM3ciLCJzaWduYXR1cmUiOiJXK3NMTytqSGdIM0ZJWWF0Tks3dUllekRDdUgzOGNERWw4QlkvbDhZNStBUWh5S1VZQTZydlJZbTNGeDJEKzZsdStvU2UrakkrSHNwb2NyOUJJVm5Udz09In0= localhost:18790/chain-stats
+$ api -H X-Leash-Payment: 33B98E5932040B236FEFF1C277AFF5A9C56522005A0BDC95F33BB97CDBEC1546 -H X-Leash-Proof: eyJwdWJfa2V5IjoiQW1pOHZsSVNtTE5iOG56cERoR2R3MlFCc0p3ZFJObnZKdzZCSUFNZk1kM3ciLCJzaWduYXR1cmUiOiJIcHRvY0JkTlhDRWtrNXAvRUFsTllDSGFkbXVRUTFFaWFnTGlyVnFxV1dsN3VCVFdVYThiQnErYXdTdFJCNTkrU3dIVWxiUGQvRXRtOUVDbkFnemQvZz09In0= localhost:18790/chain-stats
 {
   "chain_id": "mechain_2401-1",
   "height": 27,
-  "time": "2026-11-24T06:56:00.583254000Z",
-  "txs_in_block": 1,
+  "time": "2026-11-24T07:03:19.260728000Z",
+  "txs_in_block": 0,
   "receipt": {
     "paid_by_agent": "me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam",
     "owner": "me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq",
     "owner_me_id": "1000000000101",
     "payment_id": 2,
-    "tx": "6FE7B2E5CE6BAF6F150A073D9C469E9E6148CD5930AC27CC7C45492D753ECFE2"
+    "tx": "33B98E5932040B236FEFF1C277AFF5A9C56522005A0BDC95F33BB97CDBEC1546"
   }
 }
 (HTTP 200)
 
 ## 5. a made-up payment, and a real leash payment that isn't for an invoice the API issued
-$ api -H X-Leash-Payment: D7C14F0E753AE9E3F7D949048146C17AAD4888C600192ACF96CECFB06391BAC3 -H X-Leash-Proof: eyJwdWJfa2V5IjoiQW1pOHZsSVNtTE5iOG56cERoR2R3MlFCc0p3ZFJObnZKdzZCSUFNZk1kM3ciLCJzaWduYXR1cmUiOiJuRC9raDMrUWVBUGV3bkxDaVpHRW5pdE1YMEFETDFXN0liRnhJUGpLdWhCNkpxMDlIR2ZRZHpFeHBBL3RkU1ZuZUg1dXNPa0VrVlhScDdKb2ZQdU5kQT09In0= localhost:18790/chain-stats
+$ api -H X-Leash-Payment: B9EB44BE3C169D119D3ED7F27F84EF862BC5F4087EA3674FA8894F3A833B7CDC -H X-Leash-Proof: eyJwdWJfa2V5IjoiQW1pOHZsSVNtTE5iOG56cERoR2R3MlFCc0p3ZFJObnZKdzZCSUFNZk1kM3ciLCJzaWduYXR1cmUiOiJOalQ3RjRqR090aHFBdnQzdWR1bkFYazZGbmpIbEt3MW52c0gxK3FHLzA5MGhsT3dVVEtseGYzV0QrT1JXZkd5UWZ5NHovSU5jZUhtbGk4em8wUzFSUT09In0= localhost:18790/chain-stats
 {
   "error": "no such transaction on ME Hub (yet?)"
 }
 (HTTP 402)
-$ node leash.mjs pay shop 0.001 NOT-ISSUED-1795503362 --as agent
-ok   pay (paid) payment #3  http://localhost:1317/cosmos/tx/v1beta1/txs/tx/B35B516E52896D25F001906B91C939EA529FF2B5F6BA929E172D7EC8617B3BAF
-     payment_id=3 agent=me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq owner_did=1000000000101 vendor=me13esx9gwc65ctg6a9h2fappkwegvqg9y63kcp8d amount=100000 invoice=NOT-ISSUED-1795503362 status=paid vendor_did=1000000000103
-$ api -H X-Leash-Payment: B35B516E52896D25F001906B91C939EA529FF2B5F6BA929E172D7EC8617B3BAF -H X-Leash-Proof: eyJwdWJfa2V5IjoiQW1pOHZsSVNtTE5iOG56cERoR2R3MlFCc0p3ZFJObnZKdzZCSUFNZk1kM3ciLCJzaWduYXR1cmUiOiJuYXFKL3plNkk5YVFkMGIxYmMxYWo3ZG1INHU0Qms3M3BaZTR5Zkc2dHhaY1U2U0V3VXVZRHpESEhUZzRwekEydE1FbkFtaHhLUmROK1VRWEkrSlVYdz09In0= localhost:18790/chain-stats
+$ node leash.mjs pay shop 0.001 NOT-ISSUED-1795503801 --as agent
+ok   pay (paid) payment #3  http://localhost:1317/cosmos/tx/v1beta1/txs/tx/9146E981624E75E068C776AD18D9D446F4F8C0C3C2615CE5A81AF3930B66A132
+     payment_id=3 agent=me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq owner_did=1000000000101 vendor=me13esx9gwc65ctg6a9h2fappkwegvqg9y63kcp8d amount=100000 invoice=NOT-ISSUED-1795503801 status=paid vendor_did=1000000000103
+$ api -H X-Leash-Payment: 9146E981624E75E068C776AD18D9D446F4F8C0C3C2615CE5A81AF3930B66A132 -H X-Leash-Proof: eyJwdWJfa2V5IjoiQW1pOHZsSVNtTE5iOG56cERoR2R3MlFCc0p3ZFJObnZKdzZCSUFNZk1kM3ciLCJzaWduYXR1cmUiOiJKUmh2NVVYTlNQK0NxK29UeTdmOFlmSHdLQ0NUaDVQOWcwemprUXFuY2ZjM1Y2RFFIZDhKZXllUFNZNkpYNzBtNkJuTm9hVFhZMVNpZ2paY3grVE9wQT09In0= localhost:18790/chain-stats
 {
   "error": "no Leash ID payment in that tx pays 0.001 MEC to me13esx9gwc65ctg6a9h2fappkwegvqg9y63kcp8d for a live invoice this server issued"
 }
@@ -94,11 +94,11 @@ $ api -H X-Leash-Payment: B35B516E52896D25F001906B91C939EA529FF2B5F6BA929E172D7E
 ## 6. a seller without an ME ID: the agent's tool won't pay it, and the contract wouldn't either
 $ node scripts/commerce-client.mjs http://localhost:18791/chain-stats 0.002
 [declined, isError] NOT PAID: the seller me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p holds no ME ID and isn't on your vendor list, so nobody verified answers for it.
-$ node leash.mjs pay rogue 0.001 DIRECT-1795503365 --as agent
+$ node leash.mjs pay rogue 0.001 DIRECT-1795503803 --as agent
 REFUSED by the contract: vendor me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p is not allowed by this leash  (simulation; nothing sent, no fee)
 
 ## 7. too expensive: the agent's own cap
 $ node scripts/commerce-client.mjs http://localhost:18790/chain-stats 0.0005
 [declined, isError] NOT PAID: the API asks 0.001 MEC, more than your max of 0.0005 MEC.
 
-done -> runs/devnet-commerce-2026-11-24T06-55-57Z.txt
+done -> runs/devnet-commerce-2026-11-24T07-03-16Z.txt

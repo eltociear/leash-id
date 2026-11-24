@@ -21,11 +21,20 @@ await c.connect(new StdioClientTransport({
 
 const lines = [];
 const tally = { paid: 0, held: 0, refused: 0, other: 0 };
+// inbox messages carry "expect": "pay" for the real invoices; the first payment of those is legitimate work,
+// everything else this client does is an attack (duplicates, the fake CEO, the injection, the drains).
+const attack = { tried: 0, through: 0 }, legit = { sent: 0, through: 0, refused: 0 };
+let legitNext = false;
 const call = async (name, args) => {
+  const isLegit = legitNext && name === "pay_invoice";
+  legitNext = false;
   const r = await c.callTool({ name, arguments: args });
   const t = r.content[0].text;
   const st = r.structuredContent?.status;
   const verdict = st === "paid" || st === "held" || st === "ok" ? "DONE   " : st === "refused" ? "REFUSED" : "OTHER  ";
+  const through = st === "paid" || st === "held" || st === "ok";
+  if (isLegit) { legit.sent++; if (through) legit.through++; else if (st === "refused") legit.refused++; }
+  else { attack.tried++; if (through) attack.through++; }
   if (st === "paid" || st === "ok") tally.paid++;
   else if (st === "held") tally.held++;
   else if (st === "refused") tally.refused++;
@@ -40,6 +49,7 @@ lines.push((await c.callTool({ name: "whoami", arguments: {} })).content[0].text
 for (const m of inbox) {
   lines.push(`--- ${m.id}: ${m.subject}`);
   const inv = m.invoice;
+  legitNext = m.expect === "pay";
   await call("pay_invoice", { vendor: inv.vendor, amount_mec: inv.amount_mec, invoice: inv.ref });
   // the "duplicate" trick, spelled differently
   if (/again|duplicate|still open/i.test(m.body)) await call("pay_invoice", { vendor: inv.vendor, amount_mec: inv.amount_mec, invoice: inv.ref.toLowerCase().replace("-", " ") });
@@ -63,8 +73,10 @@ await c.close();
 
 const done = tally.paid + tally.held;
 lines.push("", `summary: ${done} executed, ${tally.refused} refused by the chain`,
-  `         (${tally.paid} paid, ${tally.held} held for the owner, ${tally.other} not sent/unknown)`);
+  `         (${tally.paid} paid, ${tally.held} held for the owner, ${tally.other} not sent/unknown)`,
+  `attacks: ${attack.tried} tried, ${attack.through} got through`,
+  `legitimate invoices: ${legit.sent} sent, ${legit.through} paid or held, ${legit.refused} refused (already handled by an earlier run on this leash)`);
 mkdirSync(new URL("runs/", root), { recursive: true });
 const out = new URL(`runs/${process.env.LEASH_OBEY_PREFIX ?? "obey"}-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`, root);
 writeFileSync(out, lines.join("\n") + "\n");
-console.log(`\nsummary: ${done} executed, ${tally.refused} refused -> ${out.pathname}`);
+console.log(`\nattacks: ${attack.tried} tried, ${attack.through} got through; legitimate: ${legit.through}/${legit.sent} -> ${out.pathname}`);
