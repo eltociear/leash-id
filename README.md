@@ -10,7 +10,7 @@
 **Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet) ·
 **Owner console:** https://eltociear.github.io/leash-id/owner.html (Keplr) ·
 **Red-team it:** [`sandbox/`](sandbox/README.md) (a real agent key you can attack) ·
-**[Threat model](THREAT_MODEL.md)** · **[Security / deployment](SECURITY.md)** · **Is the deployed code this code?** `npm run verify`
+**[Threat model](THREAT_MODEL.md)** · **[Security / deployment](SECURITY.md)** · **[Toward a standard: PQ Agent Mandate](MANDATE.md)** · **Is the deployed code this code?** `npm run verify`
 
 AI agents are starting to pay invoices and buy services. Two things are missing:
 
