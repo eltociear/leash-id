@@ -223,8 +223,8 @@ unissued invoices and a seller with no ME ID all fail.
 Only ME Hub's global DAO (`MsgUpdateDidStatus`) or the KYC issuer (`MsgRemove`) can suspend an ME ID, and on
 testnet we are neither (all 253 testnet ME IDs are active today). So `scripts/killswitch.sh` runs against a local
 ME Hub node built from `openmetaearth/me-hub` (see [`devnet/`](devnet/README.md)), playing the DAO there.
-`scripts/testnet-killswitch.sh` is ready for testnet: it holds a payment, watches x/did, and records the refusals in
-the block the owner's ME ID stops being active. Recorded on the node in `runs/devnet-killswitch-*.txt`:
+`scripts/testnet-killswitch.sh` is ready for testnet: it holds a payment, watches x/did, and records the refusals as soon
+as the owner's ME ID stops being active (it checks every 6 s). Recorded on the node in `runs/devnet-killswitch-*.txt`:
 
 1. The owner's ME ID is active, and the agent pays Acme. **Paid.** A second, larger invoice is held for approval.
 2. The global DAO sends `MsgUpdateDidStatus` and the owner's ME ID becomes inactive.
