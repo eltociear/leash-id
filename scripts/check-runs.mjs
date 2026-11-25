@@ -108,5 +108,24 @@ if (tnFile) {
   check(/via its main account/.test(st[5] ?? ""), "testnet 5: the contract resolves the EVM address to its ME ID");
 }
 
+// ---- testnet: the payment flows with our owner's real ME ID (optional: only if a record exists)
+const tpFile = latest(/^testnet-payments-.*\.txt$/);
+if (tpFile) {
+  const st = Object.fromEntries(fs.readFileSync(path.join(dir, tpFile), "utf8").split(/^## /m).slice(1).map((x) => [x[0], x]));
+  const txs = (s) => (s.match(/txs\/[0-9A-F]{64}/g) ?? []).length;
+  check(/"status":"DID_STATUS_ACTIVE","kycLevel":"KYC_LEVEL_TWO"/.test(st[1] ?? "") && /kyc_level: 2/.test(st[1] ?? ""), "testnet pay 1: the owner's ME ID is active at KYC 2, in x/did and through the contract");
+  check(/"kycLevel":"KYC_LEVEL_ONE"/.test(st[2] ?? "") && /REFUSED: ME ID \d+ has KYC level 1, need 2 .*txs\//.test(st[2] ?? ""), "testnet pay 2: a real KYC level 1 ME ID can't fund agents (refused on chain)");
+  check(/ok\s+deposit/.test(st[3] ?? "") && /ok\s+offer_leash/.test(st[3] ?? "") && /ok\s+accept_leash/.test(st[3] ?? "") && /verified true/.test(st[3] ?? ""), "testnet pay 3: deposit, offer, accept; the agent is verified");
+  const s4 = st[4] ?? "";
+  check((s4.match(/ok\s+pay \(paid\)/g) ?? []).length === 2 && /already handled/.test(s4) && /over per-payment limit/.test(s4) && (s4.match(/is not allowed by this leash/g) ?? []).length === 2 && (s4.match(/REFUSED by the contract/g) ?? []).length === 4,
+    "testnet pay 4: 2 paid (one to an EVM sub-account of a KYC 2 ME ID), 4 refused (duplicate, over limit, unknown vendor, KYC 1 vendor)");
+  check(/pay \(pending\)/.test(st[5] ?? "") && /unauthorized/.test(st[5] ?? "") && /ok\s+approve payment/.test(st[5] ?? ""), "testnet pay 5: held; the agent can't release it; the owner does");
+  check(/ok\s+pay_batch/.test(st[6] ?? "") && /payment_ids=\d+,\d+/.test(st[6] ?? ""), "testnet pay 6: a batch through multi_send");
+  check(/REFUSED by the contract: agent revoked/.test(st[7] ?? "") && /ok\s+pay \(paid\)/.test(st[7] ?? ""), "testnet pay 7: revoked → refused; resumed → paid");
+  check(/^\[\]$/m.test(st[8] ?? "") && /ok\s+pay \(paid\)/.test(st[8] ?? "") && /the agent's own wallet holds 0 MEC/.test(st[8] ?? "") && /NOT_SENT/.test(st[8] ?? ""), "testnet pay 8: a key with no MEC pays on the owner's fee grant and can't move anything else");
+  check(/"vendor_did":"\d+","owner_did":"\d+"/.test(st[9] ?? ""), "testnet pay 9: the receipt carries both ME IDs (the vendor's resolved from its EVM sub-account)");
+  check(Object.values(st).reduce((n, s) => n + txs(s), 0) >= 20, "testnet pay: at least 20 transactions anyone can look up");
+}
+
 console.log(ok ? "\nrun records: all good" : "\nrun records: FAILED");
 process.exit(ok ? 0 : 1);

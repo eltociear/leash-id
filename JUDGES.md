@@ -14,7 +14,7 @@ Everything below can be checked without trusting us: each claim links to code, a
 | Check any agent, no wallet | https://eltociear.github.io/leash-id/ (try "an EVM address bound to an ME ID": a real testnet user's sub-account, resolved by the contract from x/did) |
 | Owner console (Keplr): approvals, two signers, revoke, limits, fee grants, CSV | https://eltociear.github.io/leash-id/owner.html |
 | Demo video | see the top of the [README](README.md) |
-| Red-team page (attack a real agent key) | [`sandbox/`](sandbox/README.md): runs locally against a devnet with `node scripts/sandbox-dev.mjs`; the hosted testnet version waits on our ME ID |
+| Red-team page (attack a real agent key) | [`sandbox/`](sandbox/README.md): runs locally against a devnet with `node scripts/sandbox-dev.mjs` |
 
 ## On ME Hub testnet (`mechain_400-1`)
 
@@ -29,11 +29,23 @@ Everything below can be checked without trusting us: each claim links to code, a
   records the true one ([tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/C5313B5A7AE17FBC3C682817CD3AF67F6F61F4777E435710E29CC964F97D6A91)),
   and from then on treats that EVM address as the ME ID's.
 
-The payment flows need an owner who holds a testnet ME ID. Ours was requested and hasn't been issued yet, so
-those runs are recorded on a **local ME Hub node built from `openmetaearth/me-hub`** (see below). CI repeats the
+- **The payment flows, with our owner's real ME ID** (`2611255912050`, KYC level 2, issued by the testnet KYC
+  issuer) in [`runs/testnet-payments-2026-11-25T05-22-54Z.txt`](runs/testnet-payments-2026-11-25T05-22-54Z.txt), 20+ transactions anyone can look up:
+  - A second real ME ID, at KYC level 1, tries to fund agents and is refused on chain
+    ([tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/25F9DC16734C72D88F16C55883AD129D45415A06DF33315E643B9E463A122088): `has KYC level 1, need 2`).
+  - Paid inside the leash; refused: the same invoice spelled differently, over the limit, a vendor with no ME ID, a
+    vendor at KYC level 1. Each refusal is a failed tx with its reason.
+  - Paid to an **EVM sub-account** of another user's KYC 2 ME ID: the receipt names that ME ID
+    ([tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/0A9620F89D6CDE675DC11935777AE622C04AEB831C719CF2D0F90852EDFD5E60)).
+  - Held above the threshold; the agent can't release it; the owner approves. A `multi_send` batch. Revoke → refused,
+    resume → paid.
+  - An agent key that **never held MEC** pays on the owner's fee grant (the tx's fee granter is the owner:
+    [tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/992D931D5B97D1BFB10834BE899EA1BA36CDBFCDCEA5810B622CDD6B1DCDF593)) and can't send anything else.
+
+The kill switch needs the global DAO's key to suspend an ME ID, so it is shown on a **local ME Hub node built from
+`openmetaearth/me-hub`** (see below), with the Claude, obey-everything and commerce runs. CI repeats the
 obey-everything, kill-switch and commerce runs on a fresh node on every push; the Claude run is recorded once and
-committed. On testnet the payment, Claude and commerce flows need only an owner with an ME ID; the kill switch
-needs the global DAO's key, so it can only be shown on a node we run.
+committed.
 
 ## By judging criterion
 
@@ -108,8 +120,8 @@ cat runs/devnet-claude-*.jsonl | jq -r 'select(.type=="result").result'   # Clau
 
 ## Known limits, stated plainly
 
-- No testnet ME ID for our owner yet, so the payment flows on testnet are pending. They are recorded on a local
-  me-hub node and re-run by CI.
+- Suspending an ME ID needs the global DAO, so the kill switch is shown on a node we run, not on testnet. The
+  Claude and commerce runs are also on that node (and the obey-everything and commerce runs are re-run by CI).
 - The owner console's Keplr path is written to Keplr's API but was tested with a mnemonic signer (`npm run
   e2e:owner`). Bonds are covered by unit tests against the real x/wstaking response shape. A local node has no
   fixed-deposit configuration to try them against.

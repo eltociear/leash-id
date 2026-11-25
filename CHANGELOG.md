@@ -8,6 +8,8 @@
   Recorded on a real node (kill-switch run, step 9) and checked by `scripts/check-runs.mjs`.
 - The owner console can pay an agent's fees (cap and days) and stop paying them; the verifier shows who pays an
   agent's fees and what its key holds outside the leash. Both are driven in Chrome by `npm run e2e:owner` in CI.
+- **Testnet payment flows with a real ME ID**: our owner's testnet ME ID was issued (KYC 2), and
+  `scripts/testnet-pay.sh` records every flow against it in `runs/testnet-payments-2026-11-25T05-22-54Z.txt`, checked by `scripts/check-runs.mjs`.
 - RPC failover: `ME_RPC` takes a comma-separated list.
 - About page; a 20-item batch measured at 1.41M gas; a garbage-input test for the DID, deposit and invoice parsers.
 - Claims audit: every overstated or stale statement in the docs corrected (`send_mec`, what CI re-runs, sandbox

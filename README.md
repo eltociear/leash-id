@@ -192,6 +192,18 @@ is in `examples/paid-api`.
 Policy: `per_tx_limit`, `daily_limit` (any rolling 24 hours), `approve_above` (< `per_tx_limit`), `vendors`
 (≤ 32), `any_verified_vendor`, `expires_at` (≤ 366 days). Limits per owner: 50 agents, 50 held payments.
 
+## On ME Hub testnet, with a real ME ID
+
+Our owner holds a testnet ME ID (`2611255912050`, KYC level 2, issued by the testnet KYC issuer).
+`scripts/testnet-pay.sh` records the payment flows against it in [`runs/testnet-payments-2026-11-25T05-22-54Z.txt`](runs/testnet-payments-2026-11-25T05-22-54Z.txt), every step a transaction:
+
+- A second real ME ID at KYC level 1 tries to fund agents: refused on chain, `has KYC level 1, need 2`.
+- The agent pays inside the leash. The same invoice spelled differently, an over-limit amount, a vendor with no ME ID
+  and a vendor at KYC level 1 are refused, each as a failed tx with its reason.
+- It pays an EVM sub-account bound to another user's KYC 2 ME ID, and the receipt names that ME ID.
+- A held payment the agent can't release and the owner approves; a `multi_send` batch; revoke → refused, resume → paid.
+- An agent key that never held any MEC pays on the owner's fee grant, and can't send anything else.
+
 ## The kill switch, on a real ME Hub node
 
 We can't suspend a testnet ME ID ourselves, so `scripts/killswitch.sh` runs against a local ME Hub node built
@@ -232,7 +244,7 @@ explorer `https://www.explorer-testnet.me`.
 
 ## Status
 
-v0.4, testnet. Built for the MetaEarth Hackathon 2026 "Harbor" (AI & Trust Infrastructure). The design ideas
+v0.5 (contract v0.4), testnet, with payment flows recorded against a real testnet ME ID. Built for the MetaEarth Hackathon 2026 "Harbor" (AI & Trust Infrastructure). The design ideas
 (agent spending leashes, attack replays, MCP-driven agents) come from our earlier project
 [Invoice Leash](https://github.com/eltociear/invoice-leash), which ran on another chain. See
 [CHANGELOG.md](CHANGELOG.md).

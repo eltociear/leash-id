@@ -191,6 +191,18 @@ ME ID を持たない売り手には払いません。本物のノードでの�
 ポリシー: `per_tx_limit`、`daily_limit`（任意の直近 24 時間）、`approve_above`（< `per_tx_limit`）、`vendors`（最大 32）、
 `any_verified_vendor`、`expires_at`（最大 366 日先）。オーナーごとの上限: エージェント 50、保留中の支払い 50。
 
+## ME Hub テストネットで、本物の ME ID を使って
+
+オーナーはテストネットの ME ID（`2611255912050`、KYC レベル 2、テストネットの KYC 審査担当が発行）を持っています。
+`scripts/testnet-pay.sh` がその ME ID で支払いの流れを記録します（[`runs/testnet-payments-2026-11-25T05-22-54Z.txt`](runs/testnet-payments-2026-11-25T05-22-54Z.txt)）。どの手順も取引として残ります。
+
+- KYC レベル 1 の本物の ME ID が入金しようとすると、チェーン上で拒否されます（`has KYC level 1, need 2`）。
+- エージェントはリードの範囲内で支払います。表記を変えた同じ請求書、上限超え、ME ID のない支払先、KYC レベル 1 の
+  支払先は拒否され、それぞれ理由付きの失敗した取引として残ります。
+- 別のユーザーの KYC 2 の ME ID に紐付いた EVM サブアカウントに支払うと、領収書にその ME ID が記録されます。
+- エージェント自身では出せない保留中の支払いをオーナーが承認、`multi_send` でのまとめ払い、取り消し → 拒否、再開 → 支払い。
+- 一度も MEC を持ったことのないエージェントの鍵が、オーナーの手数料肩代わりで支払い、それ以外は何も送れません。
+
 ## キルスイッチ（本物の ME Hub ノードで）
 
 テストネットの ME ID を私たち自身で停止することはできないため、`scripts/killswitch.sh` は `openmetaearth/me-hub` からビルドした
@@ -230,7 +242,7 @@ npm run docs & npm run e2e:owner   # そのノードに対して、本物のブ�
 
 ## ステータス
 
-v0.4、テストネット。MetaEarth Hackathon 2026「Harbor」（AI & Trust Infrastructure）向けに作りました。設計のアイデア（エージェントの
+v0.5（コントラクトは v0.4）、テストネット。本物のテストネット ME ID で支払いの流れを記録済み。MetaEarth Hackathon 2026「Harbor」（AI & Trust Infrastructure）向けに作りました。設計のアイデア（エージェントの
 支出リード、攻撃の再現、MCP で動くエージェント）は、別のチェーンで動かしていた以前のプロジェクト
 [Invoice Leash](https://github.com/eltociear/invoice-leash) から来ています。[CHANGELOG.md](CHANGELOG.md) も参照してください。
 

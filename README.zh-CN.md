@@ -71,6 +71,14 @@ http.createServer(paywall({ payTo: "me1你的地址…", priceUmec: "100000", mi
 - 每笔交易在广播前就计算好哈希：超时只会报告为“未知，请先查询”，不会导致重复付款。
 - 所有拒绝都先在模拟中完成，不收手续费。
 
+## 在 ME Hub 测试网上，使用真实的 ME ID
+
+我们的所有者持有测试网 ME ID（`2611255912050`，KYC 等级 2，由测试网 KYC 签发方签发）。`scripts/testnet-pay.sh`
+用它记录完整的支付流程（[`runs/testnet-payments-2026-11-25T05-22-54Z.txt`](runs/testnet-payments-2026-11-25T05-22-54Z.txt)），每一步都是可查询的交易：KYC 等级 1 的真实 ME ID 无法为代理注资（链上拒绝）；
+限额内支付成功；重复发票、超额、无 ME ID 的收款方、KYC 等级 1 的收款方均被拒绝；向绑定到他人 KYC 2 ME ID 的 EVM
+子账户付款，收据记录该 ME ID；超过阈值的付款由所有者批准；`multi_send` 批量支付；撤销后被拒、恢复后可付；从未持有
+MEC 的代理密钥依靠所有者的手续费授权（x/feegrant）付款，且无法转出任何其他资金。
+
 ## 快速开始
 
 ```bash

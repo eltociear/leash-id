@@ -5,8 +5,8 @@ email that Claude (with the agent key behind its tools) reads and acts on. The L
 outside the leash. Everything is answered by simulating against the live contract (same code path, no fee), except
 one fixed control payment to our own vendor address, which is broadcast under a daily cap.
 
-Status: runs locally against a devnet (`node scripts/sandbox-dev.mjs`). Hosting it on testnet needs a leash, and a
-leash needs an owner with a testnet ME ID; ours is pending.
+Status: runs locally against a devnet (`node scripts/sandbox-dev.mjs`). Our owner now holds a testnet ME ID, so the
+hosted testnet version needs only the steps below.
 
 ## Deploy on Vercel
 
