@@ -12,7 +12,14 @@ http.createServer(async (req, res) => {
   }
   const body = await new Promise((r) => { const c = []; req.on("data", (d) => c.push(d)); req.on("end", () => r(Buffer.concat(c))); });
   const target = p0.startsWith("/rpc") ? "http://localhost:36657" + req.url.slice(4) : "http://localhost:1317" + req.url;
-  const r = await fetch(target, { method: req.method, body: ["GET", "HEAD"].includes(req.method) ? undefined : body, headers: { "content-type": req.headers["content-type"] ?? "application/json" } }).catch(() => null);
+  // A busy single-node devnet sometimes answers a read with 503; reads are safe to repeat, so try a few times.
+  const read = ["GET", "HEAD"].includes(req.method);
+  let r = null;
+  for (let i = 0; i < (read ? 3 : 1); i++) {
+    if (i) await new Promise((ok) => setTimeout(ok, 300 * i));
+    r = await fetch(target, { method: req.method, body: read ? undefined : body, headers: { "content-type": req.headers["content-type"] ?? "application/json" } }).catch(() => null);
+    if (r && r.status < 500) break;
+  }
   if (!r) { res.writeHead(502); return res.end(); }
   res.writeHead(r.status, { "content-type": r.headers.get("content-type") ?? "application/json" }); res.end(Buffer.from(await r.arrayBuffer()));
 }).listen(Number(process.argv[2] ?? 18766), () => console.log(`docs on http://localhost:${process.argv[2] ?? 18766}`));
