@@ -8,7 +8,7 @@
 
 **Demo video (4:48):** https://www.youtube.com/watch?v=vySdFuWiGho ·
 **Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet) ·
-**Owner console:** https://eltociear.github.io/leash-id/owner.html (Keplr) ·
+**Owner console:** https://eltociear.github.io/leash-id/owner.html (Keplr; or [read-only, no wallet](https://eltociear.github.io/leash-id/owner.html#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq)) ·
 **Red-team it:** [`sandbox/`](sandbox/README.md) (attack a real agent key; runs locally today) ·
 **[Threat model](THREAT_MODEL.md)** · **[Security / deployment](SECURITY.md)** · **[Toward a standard: PQ Agent Mandate](MANDATE.md)** · **Is the deployed code this code?** `npm run verify`
 

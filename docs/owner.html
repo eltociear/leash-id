@@ -29,6 +29,12 @@
       <button id="keplr">Connect Keplr</button>
       <span id="connect-msg" class="note" aria-live="polite">Your wallet signs; this page never sees your key. Needs an account that holds an ME ID at KYC level ≥ 2.</span>
     </div>
+    <form class="row" id="viewf" style="margin-top:14px">
+      <label for="view-addr">No wallet? Look at any owner's console, read-only:</label>
+      <input id="view-addr" spellcheck="false" autocomplete="off" placeholder="owner address, me1…" style="flex:1;min-width:240px">
+      <button class="ghost">View</button>
+    </form>
+    <p class="note" style="margin:6px 0 0">For example <a href="#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq">our testnet owner</a> (ME ID 2611255912050): its agents, limits, fees and every payment, live from ME Hub.</p>
     <div id="dev" hidden>
       <details><summary>Local testing only: sign with a mnemonic</summary>
         <div class="stack" style="margin-top:10px">
@@ -41,6 +47,7 @@
   </div></section>
 
   <div id="app" hidden>
+    <div class="card note" id="ro" hidden role="status"></div>
     <section><h2>Account</h2><div class="card" id="acct" aria-live="polite"></div></section>
     <section><h2 id="pend-h">Waiting for your approval</h2><div class="card" id="pending" aria-live="polite"></div></section>
     <section id="co-sec" hidden><h2>Waiting for your co-approval</h2><div class="card" id="co" aria-live="polite"></div></section>
@@ -127,6 +134,25 @@ const chainInfo = () => ({
   features: ["cosmwasm"],
 });
 
+// Read-only: any owner's console, no wallet. Everything renders from the same queries; nothing can be signed.
+function viewOnly(addr) {
+  addr = String(addr ?? "").trim();
+  if (!isAddr(addr)) { $("connect-msg").textContent = "That isn't an ME Hub address (they start with me1)."; return; }
+  me = addr;
+  client = null;
+  document.body.dataset.readonly = "1";
+  $("connect").hidden = true;
+  $("app").hidden = false;
+  $("ro").hidden = false;
+  $("ro").innerHTML = `View only: this is <span class="mono">${esc(addr)}</span>'s console, read live from ME Hub. Buttons are off; nothing here can sign. <a href="./owner.html">Connect a wallet instead</a>.`;
+  refresh();
+}
+// in read-only mode every control that would sign stays disabled (the CSV export still works)
+const lockdown = () => { if (client) return; $("app").querySelectorAll("button, input, textarea, select").forEach((el) => { if (el.id !== "csv") el.disabled = true; }); };
+$("viewf").onsubmit = (e) => { e.preventDefault(); viewOnly($("view-addr").value); };
+const fromHash = () => { const m = location.hash.match(/^#view=(me1[0-9a-z]+)$/); if (m && !client) viewOnly(m[1]); };
+window.addEventListener("hashchange", fromHash);
+
 async function useSigner(signer) {
   const [acct] = await signer.getAccounts();
   client = await SigningCosmWasmClient.connectWithSigner(CFG.rpc, signer, { gasPrice: GasPrice.fromString(CFG.gasPrice) });
@@ -169,6 +195,7 @@ function reason(e) {
 }
 
 async function send(what, msg, funds = [], button) {
+  if (!client) return false; // read-only view
   if (button) button.disabled = true;
   const stamp = new Date().toISOString().slice(11, 19);
   try {
@@ -219,6 +246,7 @@ function grantMsgs(agent, limitUmec, days, replace) {
   ];
 }
 async function sendMsgs(what, msgs, button) {
+  if (!client) return false; // read-only view
   if (button) button.disabled = true;
   const stamp = new Date().toISOString().slice(11, 19);
   try {
@@ -269,7 +297,7 @@ function readPolicy(prefix, label) {
 let refreshing = 0;
 async function refresh() {
   document.body.dataset.busy = String(++refreshing);
-  try { await render(); } finally { if (--refreshing === 0) delete document.body.dataset.busy; }
+  try { await render(); lockdown(); } finally { if (--refreshing === 0) delete document.body.dataset.busy; }
 }
 async function render() {
   const [o, cfg, ident, appr, coOwners] = await Promise.all([q({ owner: { owner: me } }), q({ config: {} }), q({ identity: { address: me } }),
@@ -278,7 +306,7 @@ async function render() {
   const ok = id && id.active && id.kyc_level >= cfg.min_kyc_level;
   $("acct").innerHTML = `
     <dl>
-      <dt>You</dt><dd class="mono">${esc(me)}</dd>
+      <dt>${client ? "You" : "Owner"}</dt><dd class="mono">${esc(me)}</dd>
       <dt>ME ID</dt><dd>${id ? `<b>${esc(id.did)}</b> · ${id.active ? "active" : "<b>inactive</b>"} · KYC level ${id.kyc_level}` : "none"}
         ${ok ? `<span class="badge ok">can run agents</span>` : `<span class="badge bad">agents can't pay: needs an active ME ID at KYC ≥ ${cfg.min_kyc_level}</span>`}</dd>
       <dt>Budget</dt><dd>${mec(BigInt(o.balance) - BigInt(o.reserved))} available · ${mec(o.reserved)} reserved for ${o.pending_count} held payment(s)</dd>
@@ -443,6 +471,7 @@ $("offer").onsubmit = (e) => {
 
 $("net").textContent = CFG.chainName === CFG.chainId ? CFG.chainId : `${CFG.chainName} · ${CFG.chainId}`;
 $("foot").innerHTML = `Contract <span class="mono">${esc(CFG.contract)}</span>. Source: <a href="https://github.com/eltociear/leash-id">github.com/eltociear/leash-id</a>. This page is static; the signing library is bundled (<code>vendor/cosmjs.js</code>), nothing is loaded from third parties.`;
+fromHash();
 </script>
 </body>
 </html>

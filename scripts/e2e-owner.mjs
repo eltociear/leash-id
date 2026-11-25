@@ -107,6 +107,17 @@ expect(/from its own wallet/.test(await gasCard()), "the card is back to: fees f
 execSync(`. devnet/env.sh && node leash.mjs approvers --threshold 1`, { shell: "/bin/bash", stdio: "ignore" });
 expect(errs.length === 0, "no errors in the page", errs.join(" | "));
 
+// read-only view: no wallet, any owner's console; everything that would sign stays disabled
+const ro = await b.newPage();
+await ro.goto(url + "#view=" + (await address("owner")), { waitUntil: "networkidle0" });
+await ro.waitForFunction(() => document.querySelectorAll("#agents .card").length > 0 && !document.body.dataset.busy, { timeout: 60000, polling: 250 });
+const roState = await ro.evaluate(() => ({
+  banner: /View only/.test(document.getElementById("ro").innerText),
+  live: [...document.querySelectorAll("#app button, #app input, #app textarea, #app select")].filter((e) => !e.disabled).map((e) => e.id || e.textContent.trim()),
+}));
+expect(roState.banner && JSON.stringify(roState.live) === JSON.stringify(["csv"]), "read-only view of the owner's console: every control that signs is disabled (CSV stays)", JSON.stringify(roState));
+await ro.close();
+
 // accessibility (axe-core, WCAG 2 A/AA + best practice) on the signed-in console and the verifier
 const axeSrc = fs.readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
 for (const [name, page] of [["owner console", p], ["verifier", await b.newPage()]]) {

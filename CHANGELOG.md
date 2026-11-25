@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Owner console, read-only**: open any owner's console without a wallet (`owner.html#view=<owner>`), e.g. our
+  testnet owner. Same live queries; every control that signs is disabled. Checked in the e2e run.
+- The sandbox page escapes an unexpected status and links only http(s) tx URLs (an injection review of all three
+  pages; the verifier and the owner console already escaped every string that comes from the chain).
+
 ## 0.6.1 (contract 0.5.1, redeployed on testnet: code 44, `me1rmqthd…4066gc`, no admin)
 
 A second adversarial review, of 0.5.0 itself, found that the 0.5.0 fix was incomplete:

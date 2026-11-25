@@ -8,7 +8,7 @@
 
 **デモ動画（4分48秒、英語・字幕付き）:** https://www.youtube.com/watch?v=vySdFuWiGho ·
 **エージェントを確認:** https://eltociear.github.io/leash-id/ （ME Hub テストネットをその場で読み込み、ウォレット不要）·
-**オーナー用コンソール:** https://eltociear.github.io/leash-id/owner.html （Keplr）·
+**オーナー用コンソール:** https://eltociear.github.io/leash-id/owner.html （Keplr。[ウォレットなしの閲覧専用](https://eltociear.github.io/leash-id/owner.html#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq)も）·
 **攻撃してみる:** [`sandbox/`](sandbox/README.md) （本物のエージェント鍵を攻撃できるページ。現在はローカルで動作）·
 **[脅威モデル](THREAT_MODEL.md)** · **[セキュリティと運用](SECURITY.md)** · **[標準化に向けて: PQ Agent Mandate](MANDATE.md)** · **デプロイ済みのコードはこのコードか?** `npm run verify`
 
