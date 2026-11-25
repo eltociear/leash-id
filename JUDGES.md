@@ -139,7 +139,8 @@ cat runs/testnet-claude-*.jsonl | jq -r 'select(.type=="result").result'  # Clau
 
 ## Known limits, stated plainly
 
-- Suspending an ME ID needs the global DAO, so the kill switch is shown on a node we run, not on testnet. Every
+- Suspending an ME ID needs the global DAO or the KYC issuer, so the kill switch is shown on a node we run, not on
+  testnet (`scripts/testnet-killswitch.sh` waits for it on testnet and records the refusals when it happens). Every
   other flow is recorded on testnet too, and CI re-runs the obey-everything, kill-switch and commerce runs on a
   fresh node.
 - The owner console's Keplr path is written to Keplr's API but was tested with a mnemonic signer (`npm run

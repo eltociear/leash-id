@@ -145,6 +145,18 @@ if (toFile) {
   check((txt.match(/txs\/[0-9A-F]{64}/g) ?? []).length >= 8, "testnet obey: every attempt is a transaction anyone can look up");
 }
 
+// ---- testnet kill switch (optional: needs ME Hub's DAO or KYC issuer to suspend the owner's ME ID)
+const tkFile = latest(/^testnet-killswitch-.*\.txt$/);
+if (tkFile) {
+  const st = Object.fromEntries(fs.readFileSync(path.join(dir, tkFile), "utf8").split(/^## /m).slice(1).map((x) => [x[0], x]));
+  check(/ok\s+pay \(paid\)/.test(st[1] ?? "") && /ok\s+pay \(pending\)/.test(st[1] ?? ""), "testnet kill switch 1: paid while the ME ID is live; the larger one held");
+  if (st[3]) {
+    check(/"status":"DID_STATUS_(INACTIVE|[A-Z_]+)"/.test(st[2] ?? "") && !/"status":"DID_STATUS_ACTIVE"/.test(st[2] ?? ""), "testnet kill switch 2: x/did shows the owner's ME ID suspended");
+    check(/can pay\s+NO/.test(st[3]) && (st[3].match(/REFUSED by the contract: ME ID \d+ is not active|REFUSED by the contract: [^\n]*(not active|KYC level)/g) ?? []).length >= 2, "testnet kill switch 3: the agent's payment and the owner's approval refused on chain");
+  }
+  if (/ok\s+pay \(paid\)/.test(st[4] ?? "")) check(true, "testnet kill switch 4: re-activated, the same payment goes through");
+}
+
 // ---- testnet: sub-account resolution against real x/did records (optional: only if a record exists)
 const tnFile = latest(/^testnet-identity-.*\.txt$/);
 if (tnFile) {

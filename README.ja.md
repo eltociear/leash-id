@@ -216,8 +216,10 @@ ME ID を持たない売り手には払いません。本物のノードでの�
 
 ## キルスイッチ（本物の ME Hub ノードで）
 
-テストネットの ME ID を私たち自身で停止することはできないため、`scripts/killswitch.sh` は `openmetaearth/me-hub` からビルドした
-ローカルの ME Hub ノードで実行します（[`devnet/`](devnet/README.md) を参照）。記録は `runs/devnet-killswitch-*.txt` にあります。
+ME ID を停止できるのは ME Hub のグローバル DAO（`MsgUpdateDidStatus`）か KYC 審査担当（`MsgRemove`）だけで、テストネットでは
+私たちはどちらでもありません（現在テストネットの ME ID 253 件はすべて有効）。そのため `scripts/killswitch.sh` は `openmetaearth/me-hub` からビルドした
+ローカルの ME Hub ノードで、DAO の役も担って実行します（[`devnet/`](devnet/README.md) を参照）。テストネット用の
+`scripts/testnet-killswitch.sh` も用意してあり、支払いを保留にしたまま x/did を見張り、オーナーの ME ID が止まったブロックで拒否を記録します。記録は `runs/devnet-killswitch-*.txt` にあります。
 
 1. オーナーの ME ID は有効で、エージェントが Acme に支払う。**支払い済み。** 2 件目の大きな請求書は承認待ちで保留。
 2. グローバル DAO が `MsgUpdateDidStatus` を送り、オーナーの ME ID が無効になる。
