@@ -72,7 +72,8 @@ committed.
   - `devnet`: builds me-hub, runs the attack replay, the kill switch, the sub-account and two-signature flows
     and agent-to-agent commerce on a real node. [`scripts/check-runs.mjs`](scripts/check-runs.mjs) then
     asserts each outcome, and the owner console is driven in Chrome.
-  - `testnet`: `verify`.
+  - `testnet`: `verify`, and `check:chain`: every testnet tx the committed records link to is fetched from the
+    chain and must show the outcome (paid / refused, with the contract's reason) and the contract the record says.
 - Findings from two adversarial reviews are listed, with their fixes, in [CHANGELOG.md](CHANGELOG.md) (0.2.0, 0.4.0).
 - Sends hash the tx before broadcasting. An unconfirmed send is reported as UNKNOWN with its hash, never as
   "not sent", so a retry can't double-pay.
@@ -128,6 +129,7 @@ git clone https://github.com/eltociear/leash-id && cd leash-id && npm ci
 npm run verify                    # testnet: deployed code == this repo's build, no admin
 npm run test:js                   # 22 JS tests, no chain needed
 node scripts/check-runs.mjs       # the committed run records say what we claim
+npm run check:chain               # ...and each of their 40 testnet txs says the same on chain (read-only)
 cat runs/testnet-claude-*.jsonl | jq -r 'select(.type=="result").result'  # Claude's own report (testnet)
 ```
 

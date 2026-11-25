@@ -240,6 +240,7 @@ npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmw
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it
 npm run devnet    # local ME Hub node: Claude over MCP, obey-everything, kill switch, commerce → runs/
 node scripts/check-runs.mjs        # asserts what those records must show (CI re-runs all but the Claude run on a fresh node)
+npm run check:chain                # fetches every testnet tx the records link to: outcome and reason must match
 npm run docs & npm run e2e:owner   # drives the owner console in a real browser against that node
 ```
 

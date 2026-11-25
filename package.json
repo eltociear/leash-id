@@ -8,6 +8,7 @@
     "test:js": "node --test test/*.test.mjs",
     "build": "bash scripts/build.sh",
     "verify": "node scripts/verify.mjs",
+    "check:chain": "node scripts/check-chain.mjs",
     "devnet": "bash scripts/devnet-runs.sh",
     "bundle:web": "bash scripts/bundle-web.sh",
     "e2e:owner": "node scripts/e2e-owner.mjs",

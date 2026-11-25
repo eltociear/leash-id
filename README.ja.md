@@ -238,6 +238,7 @@ npm run build     # 再現可能な wasm（Rust 1.81 + wasm32、binaryen、cosmw
 npm run verify    # デプロイ済みのコード == artifacts/leash_id.wasm であり、admin がコードを差し替えられないこと
 npm run devnet    # ローカル ME Hub ノード: MCP 経由の Claude、obey-everything、キルスイッチ、取引 → runs/
 node scripts/check-runs.mjs        # 記録が示すべき結果を検証（CI は Claude の実行以外をまっさらなノードで再実行）
+npm run check:chain                # 記録にあるテストネットの取引をすべてチェーンから取得し、結果と理由が一致するか確認
 npm run docs & npm run e2e:owner   # そのノードに対して、本物のブラウザでオーナー用コンソールを操作
 ```
 

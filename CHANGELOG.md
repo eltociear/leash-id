@@ -6,6 +6,8 @@
   still move with nobody's signature (what's left of its 24-hour limit, out of the owner's free budget) and the
   largest single payment that goes through unsigned. Below the approval threshold, that is the exposure.
 - The obey-everything client is recorded on testnet too (`runs/testnet-obey-*.txt`), checked by `check-runs`.
+- `npm run check:chain` (and the `testnet` CI job): every testnet tx the committed records link to is fetched
+  from the chain; its outcome, the contract's reason for a refusal, and the contract called must match the record.
 - The verifier and the owner console repeat a read up to twice when the public endpoint drops it or answers 5xx.
 
 ## 0.5.0 (agent side; contract unchanged, still 0.4.0 on testnet)
