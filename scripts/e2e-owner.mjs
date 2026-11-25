@@ -20,7 +20,10 @@ const p = await b.newPage();
 await p.setViewport({ width: 1280, height: 2000 });
 const errs = [];
 p.on("pageerror", (e) => errs.push(e.message));
-p.on("console", (m) => m.type() === "error" && errs.push(m.text()));
+// A busy single-node devnet sometimes answers a read with 5xx; the pages repeat those reads, so the browser's own
+// "Failed to load resource: ... 50x" line is noise, not a page error. Everything else counts.
+const noise = (t) => /^Failed to load resource: the server responded with a status of 50[234]\b/.test(t);
+p.on("console", (m) => m.type() === "error" && !noise(m.text()) && errs.push(m.text()));
 let ok = true;
 const expect = (cond, what, got) => { ok &&= cond; console.log(`${cond ? "ok  " : "FAIL"}  ${what}${cond ? "" : `: ${got}`}`); };
 const press = async (sel) => { await p.waitForSelector(sel, { timeout: 30000 }); await new Promise((r) => setTimeout(r, 400)); await p.evaluate((s) => document.querySelector(s).click(), sel); };
