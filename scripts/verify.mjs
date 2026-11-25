@@ -41,7 +41,8 @@ check(!info.admin || process.env.ALLOW_ADMIN === "1", "no admin: the code can't 
   info.admin ? `admin ${info.admin} CAN migrate this contract` : `creator ${info.creator}`);
 try {
   const v = await smart({ version: {} });
-  console.log(`      version ${v.contract} ${v.version}`);
+  if (d.version) check(v.version === d.version, "version matches deployment.json", `${v.contract} ${v.version}`);
+  else console.log(`      version ${v.contract} ${v.version}`);
 } catch { console.log("      version (pre-0.2 contract, no version query)"); }
 
 const cfg = await smart({ config: {} });

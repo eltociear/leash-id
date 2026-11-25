@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.1 (contract 0.5.1, redeployed on testnet: code 44, `me1rmqthd…4066gc`, no admin)
+
+A second adversarial review, of 0.5.0 itself, found that the 0.5.0 fix was incomplete:
+
+- **An invoice paid at a sub-account before its link was recorded could still be paid at the main account.**
+  0.5.0 only looked for that older entry when paying the sub-account again. Now a lookup checks every address of
+  the vendor: the address itself, its main account, and that main account's registered sub-account. Test
+  `a_link_recorded_later_still_catches_the_duplicate_and_links_dont_move`.
+- **Sub-account links can't be moved.** If x/did moves a sub-account to another ME ID, the old link stays (and stops
+  resolving, so it fails closed); re-pointing it would have let invoices filed under the old main be paid again.
+- **Freeing an invoice removes exactly the entry the payment took**: payments record `invoice_party`.
+- **A held payment whose signatures stand again can be released.** If a co-approver's ME ID lapsed after signing and
+  came back, every signer got "already approved" and the payment waited until it expired. Now any signer can
+  release it once enough signatures stand. Test `a_payment_whose_signatures_stand_again_can_be_released`.
+- `leash revoke` no longer treats an unreadable fee grant as "none": it revokes the agent and tells you to run
+  `gas-revoke`.
+- The random-operation test now pays one vendor at two addresses, lapses and restores a co-approver's ME ID, and
+  checks that no invoice is handled twice unless the owner released it.
+- `deployment.json` records the contract's own version, and `npm run verify` checks it against the chain.
+- The 0.5.0 testnet records are kept in `runs/superseded-v0.5.0/`.
+
 ## 0.6.0 (contract 0.5.0, redeployed on testnet: code 43, `me1aqk3ej…3hjq79`, no admin)
 
 Found by an adversarial review of 0.5, fixed in the contract and recorded again on testnet:

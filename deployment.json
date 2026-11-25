@@ -1,14 +1,20 @@
 {
   "chainId": "mechain_400-1",
-  "codeId": 43,
-  "contract": "me1aqk3ej23q6ufv2ukgwl85t55etmdvgc0342ek3823g7mnzytxgeq3hjq79",
-  "version": "0.5.0",
+  "codeId": 44,
+  "contract": "me1rmqthdyqs03faugttrt6kkm2u73pwfr86aqe6s6jvlwq4wqdp6vq4066gc",
+  "version": "0.5.1",
   "admin": null,
-  "storeTx": "0DEFE0C57A16E4F154AD734917321F594FCE074B579AE1EB2DE73BDA2E0232B9",
-  "instantiateTx": "15514F78F1D545ADC68B28E15EC33BC4AD305BDEB2BA05DAC0DD857DBADB9CB1",
-  "wasmSha256": "3d245d0bbfd20a234e443b254d5a9f219e06efcda7c47820639e6cd85f697bd2",
-  "deployedAt": "2026-11-25T15:21:26.291Z",
+  "storeTx": "3381030D70CDAF5CA78FF33308C8A30BC500EA42055FF3868F0B25136165D81F",
+  "instantiateTx": "640D425C36E7B609141D94835D00A6B7FDF1292969781B0A8ECA2258316BB480",
+  "wasmSha256": "9c87e407c666371717bf40ba57eea437c04096c6b6332be4daa569979d95eb48",
+  "deployedAt": "2026-11-25T16:46:26.646Z",
   "superseded": [
+    {
+      "codeId": 43,
+      "contract": "me1aqk3ej23q6ufv2ukgwl85t55etmdvgc0342ek3823g7mnzytxgeq3hjq79",
+      "version": "0.5.0",
+      "why": "v0.5.0: an invoice paid at a vendor's EVM sub-account before its link was recorded could be paid again at the main account; a sub-account link could be re-pointed; a held payment whose signatures stood again after a co-approver's ME ID lapsed and came back could not be released (superseded by 0.5.1)"
+    },
     {
       "codeId": 36,
       "contract": "me1pggva37n3yr92stjc4vquvsl4dulgm7z34ja24e23t5nck3ezjpqhr958v",

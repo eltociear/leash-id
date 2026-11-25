@@ -221,7 +221,9 @@ const cmds = {
     console.log("contract", init.contractAddress, init.transactionHash, admin ? `admin ${admin}` : "(no admin: immutable)");
     const prev = deployment();
     saveDeployment({
-      chainId: NET.chainId, codeId: up.codeId, contract: init.contractAddress, version: VERSION, admin: admin ?? null,
+      chainId: NET.chainId, codeId: up.codeId, contract: init.contractAddress, admin: admin ?? null,
+      // the contract's own version (cw2), not this package's
+      version: fs.readFileSync(path.join(ROOT, "contracts/leash-id/Cargo.toml"), "utf8").match(/^version = "([^"]+)"/m)[1],
       storeTx: up.transactionHash, instantiateTx: init.transactionHash,
       wasmSha256: (await import("node:crypto")).createHash("sha256").update(wasm).digest("hex"),
       deployedAt: new Date().toISOString(),
