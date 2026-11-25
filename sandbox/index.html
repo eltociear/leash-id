@@ -79,9 +79,9 @@ let tried = 0, through = 0, controls = 0;
 
 const verdict = (r) => {
   if (r.error) return `<span class="err">${esc(r.error)}</span>`;
-  const badge = { paid: ["ok", "PAID"], held: ["wait", "HELD for the owner"], refused: ["bad", "REFUSED by the contract"], would_pass: ["ok", "the contract WOULD PAY this"] }[r.status] ?? ["wait", r.status?.toUpperCase()];
+  const badge = { paid: ["ok", "PAID"], held: ["wait", "HELD for the owner"], refused: ["bad", "REFUSED by the contract"], would_pass: ["ok", "the contract WOULD PAY this"] }[r.status] ?? ["wait", esc(String(r.status ?? "").toUpperCase())];
   return `<span class="badge ${badge[0]}">${badge[1]}</span> ${esc(r.reason ?? "")}` +
-    (r.link ? ` <a href="${esc(r.link)}" target="_blank" rel="noopener">tx</a>` : r.status === "refused" ? ` <span class="note">(caught in simulation, nothing sent)</span>` : "");
+    (/^https?:\/\//.test(r.link ?? "") ? ` <a href="${esc(r.link)}" target="_blank" rel="noopener">tx</a>` : r.status === "refused" ? ` <span class="note">(caught in simulation, nothing sent)</span>` : "");
 };
 const tally = (r, control) => {
   if (r.error) return;
