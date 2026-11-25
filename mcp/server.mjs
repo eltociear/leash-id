@@ -172,6 +172,8 @@ server.registerTool("whoami", {
     `vendors: ${p.vendors.join(", ") || "(none listed)"}${p.any_verified_vendor ? " + any vendor with a verified ME ID" : ""}\n` +
     `spent in the last 24h ${fmt(w.spent_24h)}, remaining ${fmt(w.remaining_24h)}, owner budget ${fmt(w.owner_balance)}, ` +
     `${w.pending_count} payment(s) waiting for the owner\n` +
+    `without the owner's signature you can still pay at most ${fmt(!w.can_pay_now ? 0n : BigInt(w.remaining_24h) < BigInt(w.owner_balance) ? w.remaining_24h : w.owner_balance)} in the next 24h, ` +
+    `≤ ${fmt(p.approve_above && BigInt(p.approve_above) < BigInt(p.per_tx_limit) ? p.approve_above : p.per_tx_limit)} per payment\n` +
     `leash expires ${when(p.expires_at)}${w.revoked ? " — REVOKED" : ""}\n` +
     (GRANTER ? `fees: paid by ${GRANTER === w.owner ? "your owner's" : GRANTER + "'s"} fee grant (${await feeGrant(AGENT, GRANTER).then((g) => (g?.spend_limit ? fmt(g.spend_limit) + " left" : "no cap")).catch(() => "?")}); your own wallet: ${fmt(await balance(AGENT))}`
       : `your own wallet (gas only): ${fmt(await balance(AGENT))}`) +
