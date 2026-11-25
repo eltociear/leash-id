@@ -6,7 +6,7 @@
 
 [![ci](https://github.com/eltociear/leash-id/actions/workflows/ci.yml/badge.svg)](https://github.com/eltociear/leash-id/actions/workflows/ci.yml)
 
-**デモ動画:** https://www.youtube.com/watch?v=HahwUgfdINE （0.1 時点の旧版。0.4 版はアップロード準備中）·
+**デモ動画（4分48秒、英語・字幕付き）:** https://www.youtube.com/watch?v=vySdFuWiGho ·
 **エージェントを確認:** https://eltociear.github.io/leash-id/ （ME Hub テストネットをその場で読み込み、ウォレット不要）·
 **オーナー用コンソール:** https://eltociear.github.io/leash-id/owner.html （Keplr）·
 **攻撃してみる:** [`sandbox/`](sandbox/README.md) （本物のエージェント鍵を攻撃できるページ。現在はローカルで動作）·

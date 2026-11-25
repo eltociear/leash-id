@@ -6,7 +6,7 @@
 
 [![ci](https://github.com/eltociear/leash-id/actions/workflows/ci.yml/badge.svg)](https://github.com/eltociear/leash-id/actions/workflows/ci.yml)
 
-**Demo video:** https://www.youtube.com/watch?v=HahwUgfdINE (an earlier 0.1 cut; the 0.6 cut, recorded on testnet, is being uploaded) ·
+**Demo video (4:48):** https://www.youtube.com/watch?v=vySdFuWiGho ·
 **Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet) ·
 **Owner console:** https://eltociear.github.io/leash-id/owner.html (Keplr) ·
 **Red-team it:** [`sandbox/`](sandbox/README.md) (attack a real agent key; runs locally today) ·
