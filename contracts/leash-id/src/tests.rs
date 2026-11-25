@@ -945,3 +945,82 @@ fn parsers_survive_arbitrary_input() {
         }
     }
 }
+
+/// One vendor, two addresses (its main account and its registered EVM sub-account): an invoice is still paid once.
+#[test]
+fn an_invoice_is_paid_once_across_a_vendors_addresses() {
+    let mut t = setup();
+    let (shop, stranger) = (t.shop.clone(), t.stranger.clone());
+    let shop_evm = t.deps.api.addr_make("shop-evm");
+    let mut p = t.policy();
+    p.any_verified_vendor = true;
+    p.vendors.push(shop_evm.to_string());
+    t.set_policy(p);
+    // paid at the EVM address before anyone recorded the link
+    t.pay(&shop_evm, 10, "PRE-1").unwrap();
+    t.subs.borrow_mut().insert(shop.to_string(), shop_evm.to_string());
+    t.exec(&stranger, ExecuteMsg::RegisterSubAccount { sub: shop_evm.to_string(), main: shop.to_string() }, &[]).unwrap();
+    // ...is still a duplicate at that address after the link
+    assert!(matches!(t.pay(&shop_evm, 10, "pre 1").unwrap_err(), ContractError::DuplicateInvoice { id: 1, .. }));
+    // paid at the main account, then again at the sub-account, spelled differently: refused
+    t.pay(&shop, 10, "INV-9").unwrap();
+    assert!(matches!(t.pay(&shop_evm, 10, "inv_9").unwrap_err(), ContractError::DuplicateInvoice { id: 2, .. }));
+    // and the other way round
+    t.pay(&shop_evm, 10, "INV-10").unwrap();
+    assert!(matches!(t.pay(&shop, 10, "INV-10").unwrap_err(), ContractError::DuplicateInvoice { id: 3, .. }));
+    let found: Option<Payment> = t.q(QueryMsg::Invoice { owner: t.owner.to_string(), vendor: shop.to_string(), invoice: "inv 10".into() });
+    assert_eq!(found.map(|p| p.id), Some(3));
+    // both addresses in one batch
+    assert!(matches!(t.batch(&[(&shop, 5, "B-1"), (&shop_evm, 5, "B-1")]).unwrap_err(), ContractError::DuplicateInBatch { .. }));
+    // the owner can still release the number, from either address
+    t.owner_does(ExecuteMsg::ReleaseInvoice { vendor: shop_evm.to_string(), invoice: "INV-9".into() }).unwrap();
+    t.pay(&shop, 10, "INV-9").unwrap();
+}
+
+/// Two-person approval needs two people: two addresses of one ME ID count once, whichever way they got there.
+#[test]
+fn two_signatures_must_come_from_two_me_ids() {
+    let mut t = setup();
+    let (o, v, s) = (t.owner.clone(), t.vendor.clone(), t.stranger.clone());
+    let set = |list: Vec<&Addr>, threshold: u8| ExecuteMsg::SetApprovers { approvers: list.iter().map(|x| x.to_string()).collect(), threshold };
+    let reg = |sub: &Addr, main: &Addr| ExecuteMsg::RegisterSubAccount { sub: sub.to_string(), main: main.to_string() };
+    // the owner's own EVM sub-account is the owner, not a second person
+    let owner_evm = t.deps.api.addr_make("owner-evm");
+    t.subs.borrow_mut().insert(o.to_string(), owner_evm.to_string());
+    t.exec(&s, reg(&owner_evm, &o), &[]).unwrap();
+    assert!(matches!(t.owner_does(set(vec![&owner_evm], 2)).unwrap_err(), ContractError::Invalid { .. }));
+    // nor are a co-approver's two addresses two people
+    let cfo = t.deps.api.addr_make("cfo");
+    let cfo_evm = t.deps.api.addr_make("cfo-evm");
+    t.dids.borrow_mut().insert(cfo.to_string(), ("1000000000007".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
+    t.subs.borrow_mut().insert(cfo.to_string(), cfo_evm.to_string());
+    t.exec(&s, reg(&cfo_evm, &cfo), &[]).unwrap();
+    assert!(matches!(t.owner_does(set(vec![&cfo, &cfo_evm], 3)).unwrap_err(), ContractError::Invalid { .. }));
+
+    // an address that only later becomes another signer's sub-account: its signature stops counting separately
+    let aud = t.deps.api.addr_make("auditor");
+    let aud_evm = t.deps.api.addr_make("auditor-evm");
+    t.dids.borrow_mut().insert(aud.to_string(), ("1000000000008".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
+    t.dids.borrow_mut().insert(aud_evm.to_string(), ("1000000000009".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
+    t.owner_does(set(vec![&aud, &aud_evm], 3)).unwrap();
+    t.dids.borrow_mut().remove(aud_evm.as_str());
+    t.subs.borrow_mut().insert(aud.to_string(), aud_evm.to_string());
+    t.exec(&s, reg(&aud_evm, &aud), &[]).unwrap();
+    t.pay(&v, 180, "BIG-1").unwrap();
+    t.owner_does(ExecuteMsg::Approve { id: 1 }).unwrap();
+    t.exec(&aud, ExecuteMsg::Approve { id: 1 }, &[]).unwrap();
+    assert!(matches!(t.exec(&aud_evm, ExecuteMsg::Approve { id: 1 }, &[]).unwrap_err(), ContractError::AlreadyApproved { have: 2, need: 3, .. }));
+    assert_eq!(t.payment(1).status, PayStatus::Pending);
+
+    // a signer can't approve a payment to their own sub-account
+    t.owner_does(set(vec![&cfo], 2)).unwrap();
+    let mut p = t.policy();
+    p.vendors.push(cfo_evm.to_string());
+    t.set_policy(p);
+    t.later(DAY);
+    t.pay(&cfo_evm, 170, "TO-CFO").unwrap();
+    let held: PaymentsResponse = t.q(QueryMsg::Pending { owner: o.to_string(), start_after: None, limit: None });
+    let to_cfo = held.payments.iter().find(|p| p.vendor == cfo_evm).unwrap().id;
+    t.owner_does(ExecuteMsg::Approve { id: to_cfo }).unwrap();
+    assert!(matches!(t.exec(&cfo, ExecuteMsg::Approve { id: to_cfo }, &[]).unwrap_err(), ContractError::SelfDealing { .. }));
+}

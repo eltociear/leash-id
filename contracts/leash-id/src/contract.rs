@@ -361,6 +361,34 @@ fn vendor_sane(deps: Deps, env: &Env, agent: &Addr, vendor: &Addr) -> Result<(),
     Ok(())
 }
 
+/// The party an invoice number is filed under. A registered EVM sub-account files under its main account, so
+/// one vendor can't be paid the same invoice once at each of its addresses.
+fn invoice_party(storage: &dyn Storage, vendor: &Addr) -> Addr {
+    SUB_ACCOUNTS.may_load(storage, vendor).ok().flatten().unwrap_or_else(|| vendor.clone())
+}
+
+/// The payment an invoice was handled by: filed under the vendor's main account, or under the address itself
+/// (a payment made before its sub-account link was recorded).
+fn invoice_lookup(storage: &dyn Storage, owner: &Addr, vendor: &Addr, key: &str) -> StdResult<Option<u64>> {
+    let party = invoice_party(storage, vendor);
+    match INVOICES.may_load(storage, (owner, &party, key))? {
+        Some(id) => Ok(Some(id)),
+        None if party != *vendor => INVOICES.may_load(storage, (owner, vendor, key)),
+        None => Ok(None),
+    }
+}
+
+/// Frees an invoice number held by payment `id`, wherever it was filed.
+fn invoice_forget(storage: &mut dyn Storage, owner: &Addr, vendor: &Addr, key: &str, id: u64) -> StdResult<()> {
+    let party = invoice_party(storage, vendor);
+    for v in [party, vendor.clone()] {
+        if INVOICES.may_load(storage, (owner, &v, key))? == Some(id) {
+            INVOICES.remove(storage, (owner, &v, key));
+        }
+    }
+    Ok(())
+}
+
 fn offer(deps: DepsMut, env: Env, info: MessageInfo, agent: String, p: PolicyMsg) -> Res {
     let cfg = CONFIG.load(deps.storage)?;
     let id = verified(deps.as_ref(), &cfg, &info.sender)?;
@@ -517,7 +545,7 @@ fn close_pending(storage: &mut dyn Storage, acct: &mut OwnerAcct, p: &mut Paymen
         acct.balance -= p.amount;
         p.status = PayStatus::Paid;
     } else {
-        INVOICES.remove(storage, (&p.owner, &p.vendor, p.invoice_key.as_str()));
+        invoice_forget(storage, &p.owner, &p.vendor, p.invoice_key.as_str(), p.id)?;
         p.status = PayStatus::Rejected;
     }
     p.settled_at = Some(env.block.time.seconds());
@@ -567,14 +595,13 @@ fn leave(deps: DepsMut, env: Env, info: MessageInfo) -> Res {
 fn release_invoice(deps: DepsMut, info: MessageInfo, vendor: String, invoice: String) -> Res {
     let vendor = deps.api.addr_validate(&vendor)?;
     let (_, key) = invoice_key(&invoice)?;
-    let id = INVOICES
-        .may_load(deps.storage, (&info.sender, &vendor, key.as_str()))?
+    let id = invoice_lookup(deps.storage, &info.sender, &vendor, key.as_str())?
         .ok_or_else(|| invalid("no such invoice for this owner and vendor"))?;
     let p = PAYMENTS.load(deps.storage, id)?;
     if p.status == PayStatus::Pending {
         return Err(invalid("that invoice is pending; reject it instead"));
     }
-    INVOICES.remove(deps.storage, (&info.sender, &vendor, key.as_str()));
+    invoice_forget(deps.storage, &info.sender, &vendor, key.as_str(), id)?;
     Ok(Response::new()
         .add_attribute("action", "release_invoice")
         .add_attribute("owner", info.sender)
@@ -707,12 +734,13 @@ fn evaluate(
     // every agent under it stops paying on the next block.
     let owner_id = verified(deps, cfg, &rec.owner)?;
     // Duplicates first: "already paid as #N" is the useful answer, even when a limit would also refuse.
-    if in_flight.iter().any(|(v, k)| v == vendor && k == invoice_key) {
+    let party = invoice_party(deps.storage, vendor);
+    if in_flight.iter().any(|(v, k)| *v == party && k == invoice_key) {
         return Err(ContractError::DuplicateInBatch {
             invoice: shown.to_string(),
         });
     }
-    if let Some(id) = INVOICES.may_load(deps.storage, (&rec.owner, vendor, invoice_key))? {
+    if let Some(id) = invoice_lookup(deps.storage, &rec.owner, vendor, invoice_key)? {
         return Err(ContractError::DuplicateInvoice {
             invoice: shown.to_string(),
             id,
@@ -818,7 +846,8 @@ fn record(
         created_at: now,
         settled_at: if d.needs_approval { None } else { Some(now) },
     };
-    INVOICES.save(storage, (&rec.owner, vendor, key), &id)?;
+    let party = invoice_party(storage, vendor);
+    INVOICES.save(storage, (&rec.owner, &party, key), &id)?;
     PAYMENTS.save(storage, id, &p)?;
     AGENT_PAYMENTS.save(storage, (agent, id), &())?;
     OWNER_PAYMENTS.save(storage, (&rec.owner, id), &())?;
@@ -929,7 +958,7 @@ fn pay_batch(deps: DepsMut, env: Env, info: MessageInfo, items: Vec<PayItem>) ->
         )?;
         ids.push(p.id.to_string());
         events.push(payment_event("created", &p));
-        in_flight.push((vendor.clone(), key));
+        in_flight.push((invoice_party(deps.storage, &vendor), key));
         total += it.amount;
         outputs.push(Output {
             address: vendor.to_string(),
@@ -958,7 +987,9 @@ fn approvers_of(storage: &dyn Storage, owner: &Addr) -> StdResult<Approvers> {
 fn set_approvers(deps: DepsMut, info: MessageInfo, list: Vec<String>, threshold: u8) -> Res {
     let cfg = CONFIG.load(deps.storage)?;
     let owner = info.sender;
-    verified(deps.as_ref(), &cfg, &owner)?;
+    // Two-person approval means two people: every signer must hold a different ME ID. An owner's own EVM
+    // sub-account resolves to the owner's ME ID, so it can't be the owner's co-approver.
+    let mut dids = vec![verified(deps.as_ref(), &cfg, &owner)?.did];
     if list.len() > MAX_APPROVERS {
         return Err(invalid("at most 5 co-approvers"));
     }
@@ -972,7 +1003,13 @@ fn set_approvers(deps: DepsMut, info: MessageInfo, list: Vec<String>, threshold:
             return Err(invalid("an agent key cannot be a co-approver"));
         }
         // Each co-approver is a verified human too, checked now and again whenever they sign.
-        verified(deps.as_ref(), &cfg, &a)?;
+        let did = verified(deps.as_ref(), &cfg, &a)?.did;
+        if dids.contains(&did) {
+            return Err(invalid(&format!(
+                "{a} holds ME ID {did}, the same person as you or another co-approver; each signer needs their own ME ID"
+            )));
+        }
+        dids.push(did);
         addrs.push(a);
     }
     if threshold == 0 || threshold as usize > addrs.len() + 1 {
@@ -1027,22 +1064,34 @@ fn settle(deps: DepsMut, env: Env, info: MessageInfo, id: u64, approve: bool) ->
     if env.block.time.seconds() > p.created_at + PENDING_TTL {
         return Err(ContractError::PendingExpired { id });
     }
-    if signer == p.vendor {
+    // Approving moves money, so the signer, and the owner whose budget it is, must hold a live ME ID.
+    let signer_did = verified(deps.as_ref(), &cfg, &signer)?.did;
+    verified(deps.as_ref(), &cfg, &p.owner)?;
+    // Not to themselves, at any of their addresses (an EVM sub-account resolves to its main account's ME ID).
+    if signer == p.vendor || me_id_of(deps.as_ref(), p.vendor.as_str()).map_or(false, |v| v.did == signer_did) {
         return Err(ContractError::SelfDealing { why: "a signer cannot approve a payment to themselves".into() });
     }
-    // Approving moves money, so the signer, and the owner whose budget it is, must hold a live ME ID.
-    verified(deps.as_ref(), &cfg, &signer)?;
-    verified(deps.as_ref(), &cfg, &p.owner)?;
-    if p.approved_by.contains(&signer) {
-        return Err(ContractError::AlreadyApproved { id, have: p.approved_by.len() as u8, need: signers.threshold });
+    // Count only signatures that still stand (still a signer, ME ID still live), one per person (ME ID).
+    let standing_dids = |list: &[Addr]| {
+        let mut seen: Vec<String> = vec![];
+        for a in list {
+            if *a != p.owner && !signers.list.contains(a) {
+                continue;
+            }
+            if let Ok(m) = verified(deps.as_ref(), &cfg, a) {
+                if !seen.contains(&m.did) {
+                    seen.push(m.did);
+                }
+            }
+        }
+        seen
+    };
+    let before = standing_dids(&p.approved_by);
+    if p.approved_by.contains(&signer) || before.contains(&signer_did) {
+        return Err(ContractError::AlreadyApproved { id, have: before.len() as u8, need: signers.threshold });
     }
     p.approved_by.push(signer);
-    // Count only signatures that still stand: still a signer, ME ID still live.
-    let standing = p
-        .approved_by
-        .iter()
-        .filter(|a| (**a == p.owner || signers.list.contains(a)) && verified(deps.as_ref(), &cfg, a).is_ok())
-        .count();
+    let standing = before.len() + 1;
     res = res
         .add_attribute("approvals", standing.to_string())
         .add_attribute("needed", signers.threshold.to_string());
@@ -1177,7 +1226,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             let owner = deps.api.addr_validate(&owner)?;
             let vendor = deps.api.addr_validate(&vendor)?;
             let found = match invoice_key(&invoice) {
-                Ok((_, key)) => match INVOICES.may_load(deps.storage, (&owner, &vendor, key.as_str()))? {
+                Ok((_, key)) => match invoice_lookup(deps.storage, &owner, &vendor, key.as_str())? {
                     Some(id) => PAYMENTS.may_load(deps.storage, id)?,
                     None => None,
                 },
