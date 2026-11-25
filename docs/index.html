@@ -80,12 +80,16 @@ const when = (s) => new Date(s * 1000).toISOString().replace("T", " ").slice(0, 
 
 class NotFound extends Error {}
 async function rest(path) {
-  let r;
-  try {
-    r = await fetch(`${CFG.rest}${path}`, { signal: AbortSignal.timeout(15000) });
-  } catch (e) {
-    throw new Error(e.name === "TimeoutError" ? "ME Hub took too long to answer" : "couldn't reach ME Hub");
+  // Reads are safe to repeat: a public endpoint that drops a request or answers 5xx gets two more tries.
+  let r, err;
+  for (let i = 0; i < 3; i++) {
+    if (i) await new Promise((ok) => setTimeout(ok, 700 * i));
+    try {
+      r = await fetch(`${CFG.rest}${path}`, { signal: AbortSignal.timeout(15000) });
+      if (r.status < 500) break;
+    } catch (e) { r = null; err = e; }
   }
+  if (!r) throw new Error(err?.name === "TimeoutError" ? "ME Hub took too long to answer" : "couldn't reach ME Hub");
   let j;
   try { j = await r.json(); } catch { throw new Error(`ME Hub answered with HTTP ${r.status}`); }
   if (!r.ok) {
@@ -166,6 +170,7 @@ async function show(agent) {
       <dt>Owner identity</dt><dd>${meId(w.owner_me_id)} <span style="color:var(--muted)">(this contract requires KYC level ≥ ${w.min_kyc_level})</span></dd>
       <dt>Per payment</dt><dd>up to ${mec(pol.per_tx_limit)}${pol.approve_above ? `; the owner approves anything above ${mec(pol.approve_above)}` : ""}</dd>
       <dt>Any 24 hours</dt><dd>${mec(w.spent_24h)} of ${mec(pol.daily_limit)} used<div class="meter" role="img" aria-label="${used}% of the 24-hour limit used"><div style="width:${Math.min(100, used)}%"></div></div></dd>
+      <dt>Before the owner signs</dt><dd>${w.can_pay_now ? `at most <b>${mec(BigInt(w.remaining_24h) < BigInt(w.owner_balance) ? w.remaining_24h : w.owner_balance)}</b> more, in payments of ≤ ${mec(pol.approve_above && BigInt(pol.approve_above) < BigInt(pol.per_tx_limit) ? pol.approve_above : pol.per_tx_limit)}` : "nothing: it can't pay right now"} <span style="color:var(--muted)">(the rest of the 24-hour limit, out of the owner's free budget)</span></dd>
       <dt>May pay</dt><dd>${pol.vendors.length ? `<ul class="vendors">${pol.vendors.map((v) => `<li class="mono">${esc(v)}</li>`).join("")}</ul>` : "no listed vendors"}${pol.any_verified_vendor ? `${pol.vendors.length ? "plus " : ""}any vendor holding a live ME ID at KYC level ≥ ${w.min_kyc_level}` : ""}</dd>
       <dt>Owner's bond</dt><dd>${w.owner_bond ? `<b>${mec(w.owner_bond.amount)}</b> locked in ${w.owner_bond.deposits.length} ME Hub fixed deposit(s) until at least ${when(w.owner_bond.earliest_unlock)} <span style="color:var(--muted)">(read live from x/wstaking)</span>` : `<span style="color:var(--muted)">none posted</span>`}</dd>
       <dt>Owner budget left</dt><dd>${mec(w.owner_balance)}${w.pending_count ? ` · ${w.pending_count} payment(s) waiting for the owner` : ""}</dd>

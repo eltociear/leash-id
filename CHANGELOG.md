@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **"Before the owner signs"**: `leash whois`, the verifier and the owner console show the most an agent can
+  still move with nobody's signature (what's left of its 24-hour limit, out of the owner's free budget) and the
+  largest single payment that goes through unsigned. Below the approval threshold, that is the exposure.
+- The obey-everything client is recorded on testnet too (`runs/testnet-obey-*.txt`), checked by `check-runs`.
+- The verifier and the owner console repeat a read up to twice when the public endpoint drops it or answers 5xx.
+
 ## 0.5.0 (agent side; contract unchanged, still 0.4.0 on testnet)
 
 - **The agent key can hold 0 MEC.** `leash gas-grant <agent> --limit <MEC>` gives the agent an x/feegrant

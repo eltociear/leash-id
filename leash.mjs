@@ -285,6 +285,11 @@ const cmds = {
       console.log(`can pay    ${w.can_pay_now ? "yes" : `NO: ${w.blocked_by}`}`);
       console.log(`limits     ≤ ${fmt(p.per_tx_limit)} per payment, ≤ ${fmt(p.daily_limit)} per 24h, approval above ${p.approve_above ? fmt(p.approve_above) : "never"}`);
       console.log(`24h spend  ${fmt(w.spent_24h)} (remaining ${fmt(w.remaining_24h)}); owner budget ${fmt(w.owner_balance)}; ${w.pending_count} held, ${w.approvals_needed} signature(s) release one`);
+      // the most it can move before anyone signs: what's left of the 24h limit, out of the owner's free budget
+      const big = (x) => BigInt(x), min = (a, b) => (a < b ? a : b);
+      const alone = w.can_pay_now ? min(big(w.remaining_24h), big(w.owner_balance)) : 0n;
+      const each = p.approve_above ? min(big(p.per_tx_limit), big(p.approve_above)) : big(p.per_tx_limit);
+      console.log(`unsigned   at most ${fmt(alone)} more before the owner signs anything (payments of ≤ ${fmt(each)} each)`);
       console.log(`vendors    ${p.vendors.join(", ") || "(none)"}${p.any_verified_vendor ? " + any verified ME ID holder" : ""}\nexpires    ${when(p.expires_at)}${w.revoked ? "  REVOKED" : ""}`);
       return 0;
     } catch (e) {

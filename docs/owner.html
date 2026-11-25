@@ -100,9 +100,20 @@ const ago = (s) => { const h = Math.floor((Date.now() / 1000 - s) / 3600); retur
 const PENDING_TTL = 7 * 86400;
 
 let ro, client, me;
+// Reads are safe to repeat: a dropped connection or a 5xx from the public RPC gets two more tries.
+// Answers from the contract itself (not found, bad query) are returned at once.
+const transient = (e) => /fetch|network|timeout|socket|bad status|\b50\d\b/i.test(String(e?.message ?? e));
 const q = async (msg) => {
-  ro ??= await CosmWasmClient.connect(CFG.rpc);
-  return ro.queryContractSmart(CFG.contract, msg);
+  for (let i = 0; ; i++) {
+    try {
+      ro ??= await CosmWasmClient.connect(CFG.rpc);
+      return await ro.queryContractSmart(CFG.contract, msg);
+    } catch (e) {
+      if (i >= 2 || !transient(e)) throw e;
+      ro = null;
+      await new Promise((ok) => setTimeout(ok, 700 * (i + 1)));
+    }
+  }
 };
 
 // ---------- connect ----------
@@ -322,6 +333,12 @@ async function render() {
   else {
     const ws = await Promise.all(o.agents.map((a) => q({ whois: { agent: a } })));
     const gas = await Promise.all(o.agents.map(async (a) => ({ grant: await grantOf(a), own: await balanceOf(a) })));
+    // the most an agent can move before the owner signs anything: the rest of its 24h limit, out of the free budget
+    const unsigned = (w) => {
+      const p = w.policy, lo = (a, b) => (BigInt(a) < BigInt(b) ? a : b);
+      const alone = w.can_pay_now ? lo(w.remaining_24h, w.owner_balance) : "0";
+      return `at most ${mec(alone)} more right now, in payments of ≤ ${mec(p.approve_above ? lo(p.per_tx_limit, p.approve_above) : p.per_tx_limit)}`;
+    };
     box.innerHTML = ws.map((w, i) => {
       const p = w.policy, k = `a${i}`;
       const [cls, label] = w.can_pay_now ? ["ok", "can pay"] : w.revoked ? ["bad", "revoked"] : ["wait", esc(w.blocked_by)];
@@ -330,6 +347,7 @@ async function render() {
         <dl>
           <dt>Limits</dt><dd>≤ ${mec(p.per_tx_limit)} per payment · ≤ ${mec(p.daily_limit)} in any 24 h${p.approve_above ? ` · you approve above ${mec(p.approve_above)}` : ""}</dd>
           <dt>Last 24 hours</dt><dd>${mec(w.spent_24h)} spent, ${mec(w.remaining_24h)} left</dd>
+          <dt>Without you</dt><dd>${unsigned(w)}</dd>
           <dt>Vendors</dt><dd>${p.vendors.length ? p.vendors.map((v) => `<span class="mono">${esc(v)}</span>`).join("<br>") : "none listed"}${p.any_verified_vendor ? "<br>+ any verified ME ID holder" : ""}</dd>
           <dt>Valid until</dt><dd>${when(p.expires_at)}</dd>
           <dt>Fees</dt><dd>${gas[i].grant
