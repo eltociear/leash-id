@@ -1,6 +1,26 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (contract 0.5.0, redeployed on testnet: code 43, `me1aqk3ej…3hjq79`, no admin)
+
+Found by an adversarial review of 0.5, fixed in the contract and recorded again on testnet:
+
+- **An invoice is filed under the vendor's main account.** 0.4 keyed duplicates on the raw vendor address, so an
+  invoice paid at a vendor's main account could be paid again at its registered EVM sub-account (and the other way
+  round). Now one vendor, all of its addresses, one invoice. Test `an_invoice_is_paid_once_across_a_vendors_addresses`;
+  on testnet in `runs/testnet-payments-*.txt` step 4.
+- **Two-person approval needs two ME IDs.** 0.4 let an owner name their own EVM sub-account as the co-approver,
+  which resolves to the owner's ME ID: one person met a 2-of-2. Now `set_approvers` refuses two addresses of one
+  ME ID, `approve` counts one signature per ME ID, and a signer can't approve a payment to their own sub-account.
+  Test `two_signatures_must_come_from_two_me_ids`; on testnet in step 5b.
+- **Revoking an agent ends its fee grant in the same tx** (`leash revoke`, the owner console; `--keep-gas` to keep
+  it), so a stolen key can't keep burning the owner's grant on failing calls. THREAT_MODEL T7 now counts the grant.
+- `pay_for_api` checks that the seller's ME ID is live and at the contract's KYC level (not just present), and
+  won't start a purchase whose price would be held for approval (the seller couldn't answer in time).
+- The paywall takes a shared `spent` store (`claim`/`release`) for several replicas or restarts.
+- Reads, simulations, signing and the paywall's tx lookup retry dropped connections (never a contract's answer),
+  so a flaky public endpoint doesn't turn into "not sent".
+- The owner console counts only signatures that still stand and disables Approve once you signed.
+- The 0.4 testnet records are kept in `runs/superseded-v0.4/`.
 
 - **"Before the owner signs"**: `leash whois`, the verifier and the owner console show the most an agent can
   still move with nobody's signature (what's left of its 24-hour limit, out of the owner's free budget) and the

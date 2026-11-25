@@ -1,14 +1,20 @@
 {
   "chainId": "mechain_400-1",
-  "codeId": 36,
-  "contract": "me1pggva37n3yr92stjc4vquvsl4dulgm7z34ja24e23t5nck3ezjpqhr958v",
-  "version": "0.4.0",
+  "codeId": 43,
+  "contract": "me1aqk3ej23q6ufv2ukgwl85t55etmdvgc0342ek3823g7mnzytxgeq3hjq79",
+  "version": "0.5.0",
   "admin": null,
-  "storeTx": "F7507A5A6A96724B3740238227A9054EC2BEA413B296DB4D9E6C885618162BCE",
-  "instantiateTx": "A73A30C11A72718DAB16C0B337CA4B9A863F5B31E61BEB603DCDA4B36E15A2C3",
-  "wasmSha256": "8854a4e2051fbb45bc2db5e1750a3d7d5b07680309bc16bbf4720c49d0876e02",
-  "deployedAt": "2026-11-24T06:44:45.664Z",
+  "storeTx": "0DEFE0C57A16E4F154AD734917321F594FCE074B579AE1EB2DE73BDA2E0232B9",
+  "instantiateTx": "15514F78F1D545ADC68B28E15EC33BC4AD305BDEB2BA05DAC0DD857DBADB9CB1",
+  "wasmSha256": "3d245d0bbfd20a234e443b254d5a9f219e06efcda7c47820639e6cd85f697bd2",
+  "deployedAt": "2026-11-25T15:21:26.291Z",
   "superseded": [
+    {
+      "codeId": 36,
+      "contract": "me1pggva37n3yr92stjc4vquvsl4dulgm7z34ja24e23t5nck3ezjpqhr958v",
+      "version": "0.4.0",
+      "why": "v0.4: an invoice paid at a vendor's main account could be paid again at its registered EVM sub-account, and an owner's (or co-approver's) own sub-account counted as a second person for two-person approval (superseded by 0.5)"
+    },
     {
       "codeId": 35,
       "contract": "me12ffftreetcpm7z698k4d3jm6ewvljrza0aj7lrc5zrdkkrqkr69sp668r9",

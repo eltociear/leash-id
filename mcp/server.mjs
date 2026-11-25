@@ -326,8 +326,17 @@ server.registerTool("pay_for_api", {
   if (BigInt(t.amount) > cap) return reply(`NOT PAID: the API asks ${fmt(t.amount)}, more than your max of ${fmt(cap)}.`, { status: "declined", price: t.amount }, true);
   if (unpaidSellers.has(t.pay_to)) return reply(`NOT PAID: ${t.pay_to} was paid earlier (${unpaidSellers.get(t.pay_to)}) and didn't deliver. Not paying it again in this session.`, { status: "declined" }, true);
   const [seller, w] = await Promise.all([q({ identity: { address: t.pay_to } }), q({ whois: { agent: AGENT } })]);
-  if (!seller.me_id && !w.policy.vendors.includes(t.pay_to)) {
-    return reply(`NOT PAID: the seller ${t.pay_to} holds no ME ID and isn't on your vendor list, so nobody verified answers for it.`, { status: "declined" }, true);
+  // "Verified" means what the contract means by it: a live ME ID at the contract's KYC level, not just any ME ID.
+  const sid = seller.me_id;
+  const sellerOk = sid && sid.active && sid.kyc_level >= w.min_kyc_level;
+  if (!sellerOk && !w.policy.vendors.includes(t.pay_to)) {
+    const why = !sid ? "holds no ME ID" : !sid.active ? `has ME ID ${sid.did}, but it isn't active` : `has ME ID ${sid.did} at KYC level ${sid.kyc_level}, below ${w.min_kyc_level}`;
+    return reply(`NOT PAID: the seller ${t.pay_to} ${why}, and isn't on your vendor list, so nobody verified answers for it.`, { status: "declined" }, true);
+  }
+  // A paid API has to answer now. If this price would be held for the owner, the seller couldn't see the payment
+  // until much later (and the buyer would never get the answer), so don't start it.
+  if (w.policy.approve_above && BigInt(t.amount) > BigInt(w.policy.approve_above)) {
+    return reply(`NOT PAID: the API asks ${fmt(t.amount)}, above your owner's approval threshold of ${fmt(w.policy.approve_above)}; a held payment can't buy an answer now. Ask your owner.`, { status: "declined", price: t.amount }, true);
   }
   const where = (() => { const u = new URL(url); return `${u.host}${u.pathname}`; })(); // no query string on chain
   const paid = await doAct("pay_for_api", { url: where, max_mec }, () =>
@@ -343,7 +352,7 @@ server.registerTool("pay_for_api", {
     return reply(`PAID (payment #${paid.structuredContent.payment_id}) but couldn't fetch the answer: ${e.message}. Don't pay again; the same payment can be retried.`, { status: "paid_no_answer", tx }, true);
   }
   if (!r2.ok) unpaidSellers.set(t.pay_to, `payment #${paid.structuredContent.payment_id}, HTTP ${r2.status}`);
-  return reply(`PAID ${fmt(t.amount)} to ${t.pay_to} (${seller.me_id ? `seller's ME ID ${seller.me_id.did}${seller.via_main ? " via its main account" : ""}` : "an allow-listed vendor without an ME ID"}), payment #${paid.structuredContent.payment_id}. ` +
+  return reply(`PAID ${fmt(t.amount)} to ${t.pay_to} (${sid ? `seller's ME ID ${sid.did}, KYC ${sid.kyc_level}${seller.via_main ? ", via its main account" : ""}${sellerOk ? "" : "; not verified, paid because it's on your vendor list"}` : "a listed vendor without an ME ID"}), payment #${paid.structuredContent.payment_id}. ` +
     `API answered HTTP ${r2.status}${r2.truncated ? " (cut at 64 KB)" : ""}:\n${UNTRUSTED(r2.text.slice(0, 4000), "API RESPONSE")}`,
     { status: r2.ok ? "paid" : "paid_refused", payment_id: paid.structuredContent.payment_id, tx, invoice: t.invoice, http: r2.status }, !r2.ok);
 });

@@ -18,18 +18,18 @@ R=https://beta-hub-1317.explorer-testnet.me
 DID=""
 while read -r d m sb; do
   if node leash.mjs identity "$sb" | grep -q "^ME ID    none"; then DID=$d MAIN=$m SUB=$sb; break; fi
-done < <(curl -s "$R/metaearth/did/did_infos?pagination.limit=200" | jq -r '.infos[] | select(.sub_account != "" and .status == "DID_STATUS_ACTIVE" and .kycLevel == "KYC_LEVEL_TWO") | "\(.did) \(.address) \(.sub_account)"')
+done < <(curl -s --retry 5 --retry-all-errors --retry-delay 2 "$R/metaearth/did/did_infos?pagination.limit=200" | jq -r '.infos[] | select(.sub_account != "" and .status == "DID_STATUS_ACTIVE" and .kycLevel == "KYC_LEVEL_TWO") | "\(.did) \(.address) \(.sub_account)"')
 [ -n "$DID" ] || { echo "no unlinked sub-account left in the first 200 ME IDs"; exit 1; }
-OTHER=$(curl -s "$R/metaearth/did/did_infos?pagination.limit=200" | jq -r --arg m "$MAIN" '[.infos[] | select(.sub_account != "" and .address != $m)][0].address')
+OTHER=$(curl -s --retry 5 --retry-all-errors --retry-delay 2 "$R/metaearth/did/did_infos?pagination.limit=200" | jq -r --arg m "$MAIN" '[.infos[] | select(.sub_account != "" and .address != $m)][0].address')
 
 log "Leash ID on ME Hub TESTNET (mechain_400-1), contract $(jq -r .contract deployment.json) (code $(jq -r .codeId deployment.json), no admin)"
 log "a real x/did record: ME ID $DID, main account $MAIN, EVM sub-account $SUB"
 
 step "1. x/did, straight from REST: the main account holds the ME ID and lists the sub-account"
 log "\$ curl $R/metaearth/did/did?address=$MAIN"
-curl -s "$R/metaearth/did/did?address=$MAIN" | jq -c '.info | {did, address, status, kycLevel, sub_account}' | tee -a "$OUT"
+curl -s --retry 5 --retry-all-errors --retry-delay 2 "$R/metaearth/did/did?address=$MAIN" | jq -c '.info | {did, address, status, kycLevel, sub_account}' | tee -a "$OUT"
 log "\$ curl $R/metaearth/did/did?address=$SUB"
-curl -s "$R/metaearth/did/did?address=$SUB" | jq -c . | tee -a "$OUT"
+curl -s --retry 5 --retry-all-errors --retry-delay 2 "$R/metaearth/did/did?address=$SUB" | jq -c . | tee -a "$OUT"
 
 step "2. the contract, before anyone records the link: the EVM address has no ME ID of its own"
 run node leash.mjs identity "$SUB"

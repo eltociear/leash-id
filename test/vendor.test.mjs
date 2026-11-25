@@ -49,3 +49,17 @@ test("paywall: 402 terms with a signed invoice, and requests without a proper pr
     srv.close();
   }
 });
+
+test("paywall: a shared spent store is asked before the chain, so a tx another replica redeemed is refused", async () => {
+  const payTo = await address("alice");
+  const claimed = new Set(["CD".repeat(32)]);
+  const store = { claim: async (h) => (claimed.has(h) ? false : (claimed.add(h), true)), release: async (h) => claimed.delete(h) };
+  assert.throws(() => paywall({ payTo, priceUmec: "1", spent: {} }, () => {}), /claim/);
+  const srv = await serve(paywall({ payTo, priceUmec: "100000", secret: Buffer.alloc(32, 7), spent: store }, (req, res) => res.end("data")));
+  try {
+    const proof = Buffer.from(JSON.stringify({ pub_key: "x", signature: "y" })).toString("base64");
+    const r = await fetch(srv.url, { headers: { "x-leash-payment": "cd".repeat(32), "x-leash-proof": proof } });
+    assert.equal(r.status, 402);
+    assert.match((await r.json()).error, /already used/);
+  } finally { srv.close(); }
+});

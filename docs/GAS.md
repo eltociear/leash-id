@@ -20,5 +20,5 @@ Fee = gas × 0.1umec (testnet's price). The chain charges for the gas a tx *requ
 | revoke_agent | 195,857 | 0.00019586 MEC |
 | resume_agent | 188,435 | 0.00018844 MEC |
 
-A refused payment costs nothing: it is caught in simulation and never broadcast.
+A refused payment costs nothing: it is caught in simulation and never broadcast. (The recorded demo runs set `LEASH_ONCHAIN_REFUSALS=1` so refusals are sent and anyone can look them up; those pay the fee of a failed tx.)
 The largest message, a 20-item batch, stays far below the block gas limit (300,000,000 on our node; unlimited, -1, on testnet).

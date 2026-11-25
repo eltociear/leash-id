@@ -155,12 +155,15 @@ It pays through its leash and retries with `X-Leash-Payment: <tx>` and `X-Leash-
 signature over the tx and invoice (tx hashes are public; the proof stops anyone else redeeming the payment).
 The paywall reads that payment from ME Hub, checks it is for a live invoice it issued and has not been used,
 and that a live ME ID (KYC ≥ `minKyc`, bond ≥ `minBondUmec` if you ask) answers for the agent. Our MCP server's `pay_for_api` tool does the agent's half,
-and refuses sellers without an ME ID. Recorded on a real node in `runs/devnet-commerce-*.txt`; a full example
+and refuses sellers without a live ME ID at the contract's KYC level (unless you listed them), and prices above
+your owner's approval threshold (a held payment can't buy an answer now). Each tx buys one response; the paywall
+remembers spent txs in its own process, so behind several replicas pass `spent: { claim, release }` backed by a
+shared store. Recorded on a real node in `runs/devnet-commerce-*.txt`; a full example
 is in `examples/paid-api`.
 
 ## Contract
 
-`contracts/leash-id` (Rust, cosmwasm-std 1.5, built with Rust 1.81 for wasmvm 1.4). v0.4.
+`contracts/leash-id` (Rust, cosmwasm-std 1.5, built with Rust 1.81 for wasmvm 1.4). v0.5.
 
 | Execute | Who | What |
 |---|---|---|
@@ -195,22 +198,24 @@ Policy: `per_tx_limit`, `daily_limit` (any rolling 24 hours), `approve_above` (<
 ## On ME Hub testnet, with a real ME ID
 
 Our owner holds a testnet ME ID (`2611255912050`, KYC level 2, issued by the testnet KYC issuer).
-`scripts/testnet-pay.sh` records the payment flows against it in [`runs/testnet-payments-2026-11-25T05-22-54Z.txt`](runs/testnet-payments-2026-11-25T05-22-54Z.txt), every step a transaction:
+`scripts/testnet-pay.sh` records the payment flows against it in [`runs/testnet-payments-2026-11-25T16-04-12Z.txt`](runs/testnet-payments-2026-11-25T16-04-12Z.txt), every step a transaction:
 
 - A second real ME ID at KYC level 1 tries to fund agents: refused on chain, `has KYC level 1, need 2`.
 - The agent pays inside the leash. The same invoice spelled differently, an over-limit amount, a vendor with no ME ID
   and a vendor at KYC level 1 are refused, each as a failed tx with its reason.
-- It pays an EVM sub-account bound to another user's KYC 2 ME ID, and the receipt names that ME ID.
+- It pays an EVM sub-account bound to another user's KYC 2 ME ID, and the receipt names that ME ID. The same
+  invoice at that ME ID's main account is refused as already paid (one vendor, two addresses).
+- Naming that main account and its sub-account as two co-approvers is refused: they are one person (one ME ID).
 - A held payment the agent can't release and the owner approves; a `multi_send` batch; revoke → refused, resume → paid.
 - An agent key that never held any MEC pays on the owner's fee grant, and can't send anything else.
 
-**Claude Code as the agent, on testnet** ([`runs/testnet-claude-2026-11-25T05-35-19Z.jsonl`](runs/testnet-claude-2026-11-25T05-35-19Z.jsonl)): it paid the two real invoices, sent the GPU invoice for the
+**Claude Code as the agent, on testnet** ([`runs/testnet-claude-2026-11-25T15-55-35Z.jsonl`](runs/testnet-claude-2026-11-25T15-55-35Z.jsonl)): it paid the two real invoices, sent the GPU invoice for the
 owner's approval, and declined the duplicate, the fake CEO wire and the invoice with hidden instructions.
-**The obey-everything client, on testnet** ([`runs/testnet-obey-2026-11-25T13-53-33-068Z.txt`](runs/testnet-obey-2026-11-25T13-53-33-068Z.txt)), on the same leash right after Claude: every
-attack was refused on chain except one. A batch of 5 × 0.014 MEC to the owner's own listed vendor was paid,
-because it fit inside the 0.2 MEC 24-hour limit this owner set. Below the approval threshold, the 24-hour limit is
-the bound ([THREAT_MODEL T6](THREAT_MODEL.md)), so set it to what you can afford to lose.
-**Agent-to-agent commerce, on testnet** ([`runs/testnet-commerce-2026-11-25T05-37-16Z.txt`](runs/testnet-commerce-2026-11-25T05-37-16Z.txt)): a paid API sells to our agent, and replay, front-running,
+**The obey-everything client, on testnet** ([`runs/testnet-obey-2026-11-25T15-59-05-744Z.txt`](runs/testnet-obey-2026-11-25T15-59-05-744Z.txt)), on the same leash right after Claude: all 8
+attacks were refused on chain, the split drain by the 24-hour limit. Below the approval threshold that limit is the
+bound, not a stop: an earlier run with a 0.2 MEC limit paid the same split to the owner's own vendor
+([THREAT_MODEL T6](THREAT_MODEL.md)), so set it to what you can afford to lose.
+**Agent-to-agent commerce, on testnet** ([`runs/testnet-commerce-2026-11-25T16-01-56Z.txt`](runs/testnet-commerce-2026-11-25T16-01-56Z.txt)): a paid API sells to our agent, and replay, front-running,
 unissued invoices and a seller with no ME ID all fail.
 
 ## The kill switch, on a real ME Hub node
@@ -235,7 +240,7 @@ client (`runs/devnet-obey-*.txt`) and agent-to-agent commerce (`runs/devnet-comm
 
 ```bash
 npm ci
-npm test          # 33 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 22 JS tests (amounts, send outcomes, RPC failover, MCP, paywall, SSRF, CLI)
+npm test          # 35 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 24 JS tests (amounts, send outcomes, RPC failover, MCP, paywall, SSRF, CLI)
 npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmwasm-check 1.5.8)
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it
 npm run devnet    # local ME Hub node: Claude over MCP, obey-everything, kill switch, commerce → runs/
@@ -246,7 +251,7 @@ npm run docs & npm run e2e:owner   # drives the owner console in a real browser 
 
 The canonical `artifacts/leash_id.wasm` is the x86_64 Linux build from CI; CI rebuilds it byte for byte.
 
-Costs: a payment is about 260k gas, roughly 0.00036 MEC in fees at testnet prices; refusals cost nothing.
+Costs: a payment is about 260k gas, roughly 0.00036 MEC in fees at testnet prices; refusals cost nothing by default (caught in simulation; the recorded demos broadcast them on purpose so they can be looked up).
 See [docs/GAS.md](docs/GAS.md).
 
 Endpoints (testnet): RPC `https://beta-hub-26657.explorer-testnet.me`, REST `https://beta-hub-1317.explorer-testnet.me`,
@@ -254,7 +259,7 @@ explorer `https://www.explorer-testnet.me`.
 
 ## Status
 
-v0.5 (contract v0.4), testnet, with payment flows recorded against a real testnet ME ID. Built for the MetaEarth Hackathon 2026 "Harbor" (AI & Trust Infrastructure). The design ideas
+v0.6 (contract v0.5), testnet, with payment flows recorded against a real testnet ME ID. Built for the MetaEarth Hackathon 2026 "Harbor" (AI & Trust Infrastructure). The design ideas
 (agent spending leashes, attack replays, MCP-driven agents) come from our earlier project
 [Invoice Leash](https://github.com/eltociear/invoice-leash), which ran on another chain. See
 [CHANGELOG.md](CHANGELOG.md).

@@ -18,39 +18,43 @@ Everything below can be checked without trusting us: each claim links to code, a
 
 ## On ME Hub testnet (`mechain_400-1`)
 
-- Contract `me1pggva37n3yr92stjc4vquvsl4dulgm7z34ja24e23t5nck3ezjpqhr958v`, code 36, **no admin** (nobody can swap
-  the code). Store tx `F7507A5A…2BCE`, instantiate tx `A73A30C1…A2C3`
-  ([REST](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/A73A30C11A72718DAB16C0B337CA4B9A863F5B31E61BEB603DCDA4B36E15A2C3)).
+- Contract `me1aqk3ej23q6ufv2ukgwl85t55etmdvgc0342ek3823g7mnzytxgeq3hjq79`, code 43, **no admin** (nobody can swap
+  the code). Store tx `0DEFE0C5…32B9`, instantiate tx `15514F78…9CB1`
+  ([REST](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/15514F78F1D545ADC68B28E15EC33BC4AD305BDEB2BA05DAC0DD857DBADB9CB1)).
 - `npm run verify` (and the `testnet` CI job on every push): the wasm on chain is byte-for-byte the CI build of
   this repo, and the contract has no admin (the CI job is advisory, so a testnet outage can't fail the build).
 - **Real x/did records, real transactions** ([`runs/testnet-identity-*.txt`](runs/)): another user's ME ID
   binds an EVM sub-account through `MsgCreateSubAccount`. The contract refuses a false link
-  ([tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/5BADDF9D8BBFDA51EE88A6B4B7C456E92450898BAA931007CF2339AE87FD924B)),
-  records the true one ([tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/C5313B5A7AE17FBC3C682817CD3AF67F6F61F4777E435710E29CC964F97D6A91)),
+  ([tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/B9BCDA9ED41C122F523E40B5148F9627CF5A00F3D9F56993D6A00C1E91B628A2)),
+  records the true one ([tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/AC0D776707BA64792C3F161C7307E9A3A567681C8C957AAC1F7E20970D5C5E2A)),
   and from then on treats that EVM address as the ME ID's.
 
 - **The payment flows, with our owner's real ME ID** (`2611255912050`, KYC level 2, issued by the testnet KYC
-  issuer) in [`runs/testnet-payments-2026-11-25T05-22-54Z.txt`](runs/testnet-payments-2026-11-25T05-22-54Z.txt), 20+ transactions anyone can look up:
+  issuer) in [`runs/testnet-payments-2026-11-25T16-04-12Z.txt`](runs/testnet-payments-2026-11-25T16-04-12Z.txt), 20+ transactions anyone can look up:
   - A second real ME ID, at KYC level 1, tries to fund agents and is refused on chain
-    ([tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/25F9DC16734C72D88F16C55883AD129D45415A06DF33315E643B9E463A122088): `has KYC level 1, need 2`).
+    ([tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/95E44F4288C53BE3B3DBB126A36E9EA7C6AF877E5F828A1328EDE2B8FB635FAA): `has KYC level 1, need 2`).
   - Paid inside the leash; refused: the same invoice spelled differently, over the limit, a vendor with no ME ID, a
     vendor at KYC level 1. Each refusal is a failed tx with its reason.
   - Paid to an **EVM sub-account** of another user's KYC 2 ME ID: the receipt names that ME ID
-    ([tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/0A9620F89D6CDE675DC11935777AE622C04AEB831C719CF2D0F90852EDFD5E60)).
+    ([tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/6F70EE813CF5FE96FAB1E15936DEDB0AD32185117BD1F7B4B3A8B88C2E0FD4E8)).
+    The same invoice at that ME ID's main account is refused as already paid: one vendor, two addresses, one invoice
+    ([tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/972CCA08D45CEF670CD72B2C1964EEA83E9ACF67BD640B18408B5B48C13DBBDA), contract 0.5).
+  - Two-person approval needs two people: naming that main account and its sub-account as two co-approvers is
+    refused, `holds ME ID …, the same person` ([tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/14408BD06DC80BA0194F4DA6AC0F9C3C653BEA6C106D82B6C8BA443BFF55032B), contract 0.5).
   - Held above the threshold; the agent can't release it; the owner approves. A `multi_send` batch. Revoke → refused,
     resume → paid.
   - An agent key that **never held MEC** pays on the owner's fee grant (the tx's fee granter is the owner:
-    [tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/992D931D5B97D1BFB10834BE899EA1BA36CDBFCDCEA5810B622CDD6B1DCDF593)) and can't send anything else.
+    [tx](https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/8DB260FDC7B0CE073B89D20DEE2C3B23E7E45A4E4080DD7CB8311CE71B754507)) and can't send anything else.
 
-- **Claude Code as the agent, on testnet** ([`runs/testnet-claude-2026-11-25T05-35-19Z.jsonl`](runs/testnet-claude-2026-11-25T05-35-19Z.jsonl)): paid INV-1001 and MCC-77 (a merchant it
+- **Claude Code as the agent, on testnet** ([`runs/testnet-claude-2026-11-25T15-55-35Z.jsonl`](runs/testnet-claude-2026-11-25T15-55-35Z.jsonl)): paid INV-1001 and MCC-77 (a merchant it
   verified by ME ID), sent INV-1002 for approval, declined the duplicate, the fake CEO and the injected invoice.
-- **The obey-everything client, on testnet** ([`runs/testnet-obey-2026-11-25T13-53-33-068Z.txt`](runs/testnet-obey-2026-11-25T13-53-33-068Z.txt)), on the leash Claude had
+- **The obey-everything client, on testnet** ([`runs/testnet-obey-2026-11-25T15-59-05-744Z.txt`](runs/testnet-obey-2026-11-25T15-59-05-744Z.txt)), on the leash Claude had
   just worked: the fake CEO wire, the injected invoice, the limit raise, the withdraw, the one-shot drain and the
-  re-spelled duplicates were all refused on chain. One thing was paid: a batch of 5 × 0.014 MEC to the owner's own
-  listed vendor, because it fit inside the 0.2 MEC 24-hour limit this owner set. That is the design: below the
-  approval threshold, the 24-hour limit is the bound ([T6](THREAT_MODEL.md)). On the local node, with a 0.05 MEC
-  limit, the same batch is refused.
-- **Agent-to-agent commerce, on testnet** ([`runs/testnet-commerce-2026-11-25T05-37-16Z.txt`](runs/testnet-commerce-2026-11-25T05-37-16Z.txt)): HTTP 402, paid through the leash, replay,
+  re-spelled duplicates were all refused on chain, and so was the split drain (5 × 0.014 MEC): only 0.03 MEC of the
+  0.1 MEC 24-hour limit was left. 8 attacks, 0 through. Splits under the approval threshold are bounded by that
+  limit, not stopped ([T6](THREAT_MODEL.md)): in our earlier run on contract 0.4, with a 0.2 MEC limit, the same
+  batch to the owner's own vendor was paid ([`runs/superseded-v0.4/`](runs/superseded-v0.4/)).
+- **Agent-to-agent commerce, on testnet** ([`runs/testnet-commerce-2026-11-25T16-01-56Z.txt`](runs/testnet-commerce-2026-11-25T16-01-56Z.txt)): HTTP 402, paid through the leash, replay,
   front-running, an unissued invoice and a seller without an ME ID all refused.
 - **The red-team sandbox's leash is live on testnet** (agent `me15xd643xjukalnklc5jqvqnp36sc0yrz2wxnfan`, holds
   0 MEC, fees on the owner's grant).
@@ -63,7 +67,7 @@ committed.
 ## By judging criterion
 
 **Technical implementation (30)**
-- Contract: [`contracts/leash-id/src`](contracts/leash-id/src). 33 unit tests, including a random-operation test of
+- Contract: [`contracts/leash-id/src`](contracts/leash-id/src). 35 unit tests, including a random-operation test of
   the accounting invariants (40 seeds × 250 operations: contract balance = sum of owner balances, reserved = sum
   of held payments, with partial two-person approvals mixed in).
 - [CI](.github/workflows/ci.yml), three jobs on every push:
@@ -103,7 +107,7 @@ committed.
   - CSV export
   - Slack alerts (`leash watch`)
 - For the seller: `leash-id/vendor` takes payment from AI agents only when a verified human answers for them.
-- Cost: about 260k gas per payment ([docs/GAS.md](docs/GAS.md)), and a refusal costs nothing.
+- Cost: about 260k gas per payment ([docs/GAS.md](docs/GAS.md)), and a refusal costs nothing by default: it is caught in simulation and never sent. (The recorded demos send refusals on purpose, `LEASH_ONCHAIN_REFUSALS=1`, so you can look them up; those pay a fee.)
 
 **Innovation (15)**
 - The chain, not the prompt, is the safety layer. The MCP server even offers owner-only tools in the demo, and the
@@ -127,7 +131,7 @@ committed.
 ```bash
 git clone https://github.com/eltociear/leash-id && cd leash-id && npm ci
 npm run verify                    # testnet: deployed code == this repo's build, no admin
-npm run test:js                   # 22 JS tests, no chain needed
+npm run test:js                   # 24 JS tests, no chain needed
 node scripts/check-runs.mjs       # the committed run records say what we claim
 npm run check:chain               # ...and each of their 40 testnet txs says the same on chain (read-only)
 cat runs/testnet-claude-*.jsonl | jq -r 'select(.type=="result").result'  # Claude's own report (testnet)

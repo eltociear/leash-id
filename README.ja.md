@@ -159,7 +159,7 @@ ME ID を持たない売り手には払いません。本物のノードでの�
 
 ## コントラクト
 
-`contracts/leash-id`（Rust、cosmwasm-std 1.5。wasmvm 1.4 向けに Rust 1.81 でビルド）。v0.4。
+`contracts/leash-id`（Rust、cosmwasm-std 1.5。wasmvm 1.4 向けに Rust 1.81 でビルド）。v0.5。
 
 | 実行メッセージ | 誰が | 内容 |
 |---|---|---|
@@ -194,22 +194,24 @@ ME ID を持たない売り手には払いません。本物のノードでの�
 ## ME Hub テストネットで、本物の ME ID を使って
 
 オーナーはテストネットの ME ID（`2611255912050`、KYC レベル 2、テストネットの KYC 審査担当が発行）を持っています。
-`scripts/testnet-pay.sh` がその ME ID で支払いの流れを記録します（[`runs/testnet-payments-2026-11-25T05-22-54Z.txt`](runs/testnet-payments-2026-11-25T05-22-54Z.txt)）。どの手順も取引として残ります。
+`scripts/testnet-pay.sh` がその ME ID で支払いの流れを記録します（[`runs/testnet-payments-2026-11-25T16-04-12Z.txt`](runs/testnet-payments-2026-11-25T16-04-12Z.txt)）。どの手順も取引として残ります。
 
 - KYC レベル 1 の本物の ME ID が入金しようとすると、チェーン上で拒否されます（`has KYC level 1, need 2`）。
 - エージェントはリードの範囲内で支払います。表記を変えた同じ請求書、上限超え、ME ID のない支払先、KYC レベル 1 の
   支払先は拒否され、それぞれ理由付きの失敗した取引として残ります。
-- 別のユーザーの KYC 2 の ME ID に紐付いた EVM サブアカウントに支払うと、領収書にその ME ID が記録されます。
+- 別のユーザーの KYC 2 の ME ID に紐付いた EVM サブアカウントに支払うと、領収書にその ME ID が記録されます。同じ請求書を
+  その ME ID の親アカウントに払おうとすると、支払い済みとして拒否されます（取引先は 1 つ、アドレスが 2 つ）。
+- その親アカウントとサブアカウントを 2 人の承認者として登録しようとすると拒否されます（ME ID が 1 つ、つまり同じ 1 人です）。
 - エージェント自身では出せない保留中の支払いをオーナーが承認、`multi_send` でのまとめ払い、取り消し → 拒否、再開 → 支払い。
 - 一度も MEC を持ったことのないエージェントの鍵が、オーナーの手数料肩代わりで支払い、それ以外は何も送れません。
 
-**テストネットでエージェントとして動く Claude Code**（[`runs/testnet-claude-2026-11-25T05-35-19Z.jsonl`](runs/testnet-claude-2026-11-25T05-35-19Z.jsonl)）: 正規の請求書 2 件を支払い、GPU の請求書は
+**テストネットでエージェントとして動く Claude Code**（[`runs/testnet-claude-2026-11-25T15-55-35Z.jsonl`](runs/testnet-claude-2026-11-25T15-55-35Z.jsonl)）: 正規の請求書 2 件を支払い、GPU の請求書は
 オーナーの承認待ちに回し、二重請求、偽 CEO の送金依頼、隠し指示入りの請求書は払いませんでした。
-**テストネットで、どんな指示にも従うクライアント**（[`runs/testnet-obey-2026-11-25T13-53-33-068Z.txt`](runs/testnet-obey-2026-11-25T13-53-33-068Z.txt)）: Claude の直後に同じリードで実行。
-攻撃は 1 つを除いてすべてチェーン上で拒否されました。通ったのは、オーナー自身が登録した取引先への 0.014 MEC × 5 件のバッチです。
-このオーナーが決めた 24 時間の上限 0.2 MEC に収まっていたためです。承認の閾値より下では 24 時間の上限が歯止めになる設計なので
-（[THREAT_MODEL T6](THREAT_MODEL.md)）、上限は失っても困らない額にしてください。
-**テストネットでのエージェント同士の取引**（[`runs/testnet-commerce-2026-11-25T05-37-16Z.txt`](runs/testnet-commerce-2026-11-25T05-37-16Z.txt)）: 有料 API がエージェントに販売し、使い回し、横取り、
+**テストネットで、どんな指示にも従うクライアント**（[`runs/testnet-obey-2026-11-25T15-59-05-744Z.txt`](runs/testnet-obey-2026-11-25T15-59-05-744Z.txt)）: Claude の直後に同じリードで実行。
+8 回の攻撃はすべてチェーン上で拒否され、分割による抜き取りは 24 時間の上限で止まりました。承認の閾値より下では、この上限が歯止めで、
+止める仕組みではありません。上限 0.2 MEC で行った以前の実行では、同じ分割払いがオーナー自身の取引先に支払われました
+（[THREAT_MODEL T6](THREAT_MODEL.md)）。上限は失っても困らない額にしてください。
+**テストネットでのエージェント同士の取引**（[`runs/testnet-commerce-2026-11-25T16-01-56Z.txt`](runs/testnet-commerce-2026-11-25T16-01-56Z.txt)）: 有料 API がエージェントに販売し、使い回し、横取り、
 発行していない請求書、ME ID のない売り手はすべて失敗します。
 
 ## キルスイッチ（本物の ME Hub ノードで）
@@ -233,7 +235,7 @@ ME ID を持たない売り手には払いません。本物のノードでの�
 
 ```bash
 npm ci
-npm test          # コントラクトのテスト 33 件（ランダム操作による帳尻テスト、ゴミ入力でのパーサー検査を含む）+ JS のテスト 22 件（金額、送信結果、RPC の切り替え、MCP、ペイウォール、SSRF、CLI）
+npm test          # コントラクトのテスト 35 件（ランダム操作による帳尻テスト、ゴミ入力でのパーサー検査を含む）+ JS のテスト 24 件（金額、送信結果、RPC の切り替え、MCP、ペイウォール、SSRF、CLI）
 npm run build     # 再現可能な wasm（Rust 1.81 + wasm32、binaryen、cosmwasm-check 1.5.8 が必要）
 npm run verify    # デプロイ済みのコード == artifacts/leash_id.wasm であり、admin がコードを差し替えられないこと
 npm run devnet    # ローカル ME Hub ノード: MCP 経由の Claude、obey-everything、キルスイッチ、取引 → runs/
@@ -244,7 +246,7 @@ npm run docs & npm run e2e:owner   # そのノードに対して、本物のブ�
 
 正式な `artifacts/leash_id.wasm` は CI の x86_64 Linux ビルドで、CI がバイト単位で同じものを再ビルドします。
 
-コスト: 支払い 1 件はおよそ 26 万ガス、テストネットの価格で手数料は約 0.00036 MEC。拒否には費用がかかりません。
+コスト: 支払い 1 件はおよそ 26 万ガス、テストネットの価格で手数料は約 0.00036 MEC。拒否は既定では費用がかかりません（シミュレーションで止まり、送信されません。記録用のデモでは確認できるように、あえて送信しています）。
 [docs/GAS.md](docs/GAS.md) を参照してください。
 
 エンドポイント（テストネット）: RPC `https://beta-hub-26657.explorer-testnet.me`、REST `https://beta-hub-1317.explorer-testnet.me`、
@@ -252,7 +254,7 @@ npm run docs & npm run e2e:owner   # そのノードに対して、本物のブ�
 
 ## ステータス
 
-v0.5（コントラクトは v0.4）、テストネット。本物のテストネット ME ID で支払いの流れを記録済み。MetaEarth Hackathon 2026「Harbor」（AI & Trust Infrastructure）向けに作りました。設計のアイデア（エージェントの
+v0.6（コントラクトは v0.5）、テストネット。本物のテストネット ME ID で支払いの流れを記録済み。MetaEarth Hackathon 2026「Harbor」（AI & Trust Infrastructure）向けに作りました。設計のアイデア（エージェントの
 支出リード、攻撃の再現、MCP で動くエージェント）は、別のチェーンで動かしていた以前のプロジェクト
 [Invoice Leash](https://github.com/eltociear/invoice-leash) から来ています。[CHANGELOG.md](CHANGELOG.md) も参照してください。
 

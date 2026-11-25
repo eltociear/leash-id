@@ -69,7 +69,7 @@ const CFG = {
   chainName: "ME Hub testnet",
   rpc: "https://beta-hub-26657.explorer-testnet.me",
   rest: "https://beta-hub-1317.explorer-testnet.me",
-  contract: "me1pggva37n3yr92stjc4vquvsl4dulgm7z34ja24e23t5nck3ezjpqhr958v",
+  contract: "me1aqk3ej23q6ufv2ukgwl85t55etmdvgc0342ek3823g7mnzytxgeq3hjq79",
   explorer: "https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/",
   gasPrice: "0.1umec",
 };
@@ -298,14 +298,17 @@ async function render() {
   };
   $("wd").onclick = () => { try { const a = toUmec($("amt").value, "amount"); send(`withdraw ${mec(a)}`, { withdraw: { amount: a } }, [], $("wd")); } catch (err) { logLine(`<span class="err">${esc(err.message)}</span>`); } };
 
+  // Signatures that still count: from the owner or a current co-approver (the contract also drops any whose ME ID
+  // lapsed, and counts one per ME ID).
+  const signedBy = (p, a) => new Set((p.approved_by ?? []).filter((x) => x === p.owner || a.list.includes(x))).size;
   const pend = (await q({ pending: { owner: me, limit: 50 } })).payments;
   $("pending").innerHTML = pend.length ? `<div class="scroll"><table><thead><tr><th scope="col">#</th><th scope="col">Agent</th><th scope="col">Vendor</th><th scope="col">Amount</th><th scope="col">Invoice</th><th scope="col">Waiting</th><th scope="col"><span class="sr">Actions</span></th></tr></thead><tbody>
     ${pend.map((p) => {
       const stale = Date.now() / 1000 > p.created_at + PENDING_TTL;
       return `<tr><td>${p.id}</td><td class="mono">${esc(p.agent.slice(0, 10))}…</td>
         <td class="mono">${esc(p.vendor.slice(0, 10))}…${p.vendor_did ? `<br><span style="color:var(--ok)">ME ID ${esc(p.vendor_did)}</span>` : ""}</td>
-        <td>${mec(p.amount)}</td><td>${esc(p.invoice)}${p.memo ? `<br><span class="note">${esc(p.memo.slice(0, 80))}</span>` : ""}</td><td>${ago(p.created_at)}${appr.threshold > 1 ? `<br><span class="note">${(p.approved_by ?? []).length}/${appr.threshold} signed</span>` : ""}</td>
-        <td><div class="row" style="flex-wrap:nowrap"><button class="small" data-approve="${p.id}" ${stale ? "disabled title=\"older than 7 days: reject it and have the agent pay again\"" : ""}>Approve</button>
+        <td>${mec(p.amount)}</td><td>${esc(p.invoice)}${p.memo ? `<br><span class="note">${esc(p.memo.slice(0, 80))}</span>` : ""}</td><td>${ago(p.created_at)}${appr.threshold > 1 ? `<br><span class="note">${signedBy(p, appr)}/${appr.threshold} signed${(p.approved_by ?? []).includes(me) ? " (you signed)" : ""}</span>` : ""}</td>
+        <td><div class="row" style="flex-wrap:nowrap"><button class="small" data-approve="${p.id}" ${stale ? "disabled title=\"older than 7 days: reject it and have the agent pay again\"" : (p.approved_by ?? []).includes(me) ? "disabled title=\"you signed this one\"" : ""}>Approve</button>
         <button class="small danger ghost" data-reject="${p.id}">Reject</button></div></td></tr>`;
     }).join("")}</tbody></table></div>` : "Nothing is waiting for you.";
   $("pending").onclick = (e) => {
@@ -318,12 +321,12 @@ async function render() {
   const coRows = [];
   for (const owner of coOwners) {
     const [pp, oa] = await Promise.all([q({ pending: { owner, limit: 50 } }), q({ approvers: { owner } })]);
-    for (const p of pp.payments) coRows.push({ ...p, need: oa.threshold });
+    for (const p of pp.payments) coRows.push({ ...p, need: oa.threshold, signed: signedBy(p, oa) });
   }
   $("co-sec").hidden = !coOwners.length;
   $("co").innerHTML = coRows.length ? `<div class="scroll"><table><thead><tr><th scope="col">#</th><th scope="col">Owner</th><th scope="col">Vendor</th><th scope="col">Amount</th><th scope="col">Invoice</th><th scope="col">Signed</th><th scope="col"><span class="sr">Actions</span></th></tr></thead><tbody>
     ${coRows.map((p) => `<tr><td>${p.id}</td><td class="mono">${esc(p.owner.slice(0, 10))}…</td><td class="mono">${esc(p.vendor.slice(0, 10))}…</td><td>${mec(p.amount)}</td><td>${esc(p.invoice)}</td>
-      <td>${(p.approved_by ?? []).length}/${p.need}${(p.approved_by ?? []).includes(me) ? " (you signed)" : ""}</td>
+      <td>${p.signed}/${p.need}${(p.approved_by ?? []).includes(me) ? " (you signed)" : ""}</td>
       <td><div class="row" style="flex-wrap:nowrap"><button class="small" data-approve="${p.id}" ${(p.approved_by ?? []).includes(me) ? "disabled" : ""}>Approve</button><button class="small danger ghost" data-reject="${p.id}">Reject</button></div></td></tr>`).join("")}
     </tbody></table></div>` : "Nothing waits on your signature.";
   $("co").onclick = $("pending").onclick;
@@ -355,7 +358,7 @@ async function render() {
             : "from its own wallet"} · its wallet holds ${mec(gas[i].own)}${!gas[i].grant && BigInt(gas[i].own) > 0n ? ` <span class="muted">(anything there is outside the leash)</span>` : ""}</dd>
         </dl>
         <div class="row" style="margin-top:12px">
-          ${w.revoked ? `<button class="ghost small" data-resume="${esc(w.agent)}">Resume</button>` : `<button class="danger small" data-revoke="${esc(w.agent)}">Revoke now</button>`}
+          ${w.revoked ? `<button class="ghost small" data-resume="${esc(w.agent)}">Resume</button>` : `<button class="danger small" data-revoke="${esc(w.agent)}" ${gas[i].grant ? 'data-hasgrant="1" title="also stops paying its fees, in the same transaction"' : ""}>Revoke now</button>`}
         </div>
         <details><summary>${gas[i].grant ? "Change or stop paying its fees" : "Pay its fees, so its key can hold 0 MEC"}</summary>
           <form data-gas="${esc(w.agent)}" data-replace="${gas[i].grant ? 1 : ""}" class="grid2" style="margin-top:10px">
@@ -372,7 +375,12 @@ async function render() {
     }).join("");
     box.onclick = (e) => {
       const rv = e.target.dataset.revoke, rs = e.target.dataset.resume;
-      if (rv) send(`revoke ${rv.slice(0, 10)}…`, { revoke_agent: { agent: rv } }, [], e.target);
+      // A revoked key may be a stolen one: end the fee grant in the same transaction, so it can't keep spending it.
+      if (rv && e.target.dataset.hasgrant) sendMsgs(`revoke ${rv.slice(0, 10)}… and stop paying its fees`, [
+        { typeUrl: EXEC, value: { sender: me, contract: CFG.contract, msg: new TextEncoder().encode(JSON.stringify({ revoke_agent: { agent: rv } })), funds: [] } },
+        { typeUrl: "/cosmos.feegrant.v1beta1.MsgRevokeAllowance", value: { granter: me, grantee: rv } },
+      ], e.target);
+      else if (rv) send(`revoke ${rv.slice(0, 10)}…`, { revoke_agent: { agent: rv } }, [], e.target);
       if (rs) send(`resume ${rs.slice(0, 10)}…`, { resume_agent: { agent: rs } }, [], e.target);
       const ug = e.target.dataset.ungas;
       if (ug) sendMsgs(`stop paying fees of ${ug.slice(0, 10)}…`, [{ typeUrl: "/cosmos.feegrant.v1beta1.MsgRevokeAllowance", value: { granter: me, grantee: ug } }], e.target);

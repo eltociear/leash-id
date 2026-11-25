@@ -76,3 +76,13 @@ test("RPC failover: a dead first endpoint falls through to the next", async () =
   srv.close();
   assert.equal(out.so.trim(), "failover-test", out.se);
 });
+
+test("retry: repeats dropped connections, never a contract's answer (even one that contains 502)", async () => {
+  const { retry } = await import("../lib/chain.mjs");
+  let n = 0;
+  assert.equal(await retry(async () => { if (++n < 2) throw new Error("fetch failed"); return "ok"; }), "ok");
+  assert.equal(n, 2);
+  n = 0;
+  await assert.rejects(retry(async () => { n++; throw new Error("over daily limit: 1502000 > 1000000: execute wasm contract failed"); }), /daily limit/);
+  assert.equal(n, 1);
+});

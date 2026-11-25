@@ -8,7 +8,7 @@ import {
   KEY_DIR, LEGACY_KEYS_FILE, NET, ROOT, addrOf, address, balance, contract, contractInfo, deployment,
   feeGrant, fmt, isNotFound, keyFile, meIdRest, q, readKey, reader, roles, saveDeployment, signer, toUmec,
 } from "./lib/chain.mjs";
-import { act, grantGasMsg, mecAmounts, revokeGasMsg, sendTx } from "./lib/tx.mjs";
+import { act, executeMsg, grantGasMsg, mecAmounts, revokeGasMsg, sendTx } from "./lib/tx.mjs";
 
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
 
@@ -38,6 +38,7 @@ const OPTS = {
   threshold: { type: "string" },
   from: { type: "string" },
   once: { type: "boolean" },
+  "keep-gas": { type: "boolean" },
   csv: { type: "boolean" },
   interval: { type: "string" },
   help: { type: "boolean", short: "h" },
@@ -57,7 +58,7 @@ const HELP = {
   "cancel-offer": ["cancel-offer <agent>", "withdraw an offer the agent hasn't accepted"],
   offers: ["offers <agent>", "leashes offered to an agent and not yet accepted"],
   policy: ["policy <agent> [--per-tx] [--daily] [--approve-above <MEC|none>] [--vendors a,b] [--add-vendor a] [--remove-vendor a] [--any-verified-vendor yes|no] [--days N] [--label]", "change only the given parts of a leash"],
-  revoke: ["revoke <agent>", "stop an agent now; its held payments are rejected"],
+  revoke: ["revoke <agent> [--keep-gas]", "stop an agent now; its held payments are rejected, and your fee grant to it ends in the same tx"],
   resume: ["resume <agent>", "lift a revoke"],
   pay: ["pay <vendor> <MEC> <invoice> [--memo text] [--as agent]", "pay as the agent"],
   batch: ["batch <vendor:MEC:invoice>… [--as agent]", "several payments in one multi_send"],
@@ -242,7 +243,17 @@ const cmds = {
     const cur = (await q({ whois: { agent } })).policy;
     return send(as("owner"), { update_policy: { agent, policy: await policyFrom(cur) } });
   },
-  revoke: async () => send(as("owner"), { revoke_agent: { agent: await addrOf(need(args[0], "agent")) } }),
+  // A revoked agent key may be a stolen one: stop paying its fees in the same transaction, so it can't keep
+  // spending the owner's fee grant on failing calls. `gas-grant` gives it back after a resume.
+  async revoke() {
+    const agent = await addrOf(need(args[0], "agent"));
+    const { addr } = await signer(as("owner"), o["key-file"]);
+    const grant = o["keep-gas"] ? null : await feeGrant(agent, addr).catch(() => null);
+    if (!grant) return send(as("owner"), { revoke_agent: { agent } });
+    const r = outcome(await sendTx(as("owner"), [executeMsg(addr, { revoke_agent: { agent } }), revokeGasMsg(addr, agent)], { file: o["key-file"], granter: null }));
+    if (r === 0) console.log(`     and you no longer pay ${agent}'s fees (give them back with: leash gas-grant ${agent} --limit <MEC>)`);
+    return r;
+  },
   resume: async () => send(as("owner"), { resume_agent: { agent: await addrOf(need(args[0], "agent")) } }),
   async pay() {
     const [vendor, amount, invoice] = args;
