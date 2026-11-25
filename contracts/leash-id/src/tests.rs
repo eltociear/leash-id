@@ -780,18 +780,27 @@ fn accounting_invariants_hold_under_random_operations() {
         let cfo2 = api.addr_make("cfo2");
         t.dids.borrow_mut().insert(cfo2.to_string(), ("1000000000004".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
         t.exec(&owner2, ExecuteMsg::SetApprovers { approvers: vec![cfo2.to_string()], threshold: 2 }, &[]).unwrap();
+        // the shop also takes payment at its EVM sub-account: one vendor, two addresses
+        let shop_evm = api.addr_make("shop-evm");
+        t.subs.borrow_mut().insert(shop.to_string(), shop_evm.to_string());
+        t.exec(&owner2, ExecuteMsg::RegisterSubAccount { sub: shop_evm.to_string(), main: shop.to_string() }, &[]).unwrap();
+        let person = |a: &Addr| if *a == shop_evm { shop.clone() } else { a.clone() };
+        let mut released: HashMap<(Addr, Addr, String), u32> = HashMap::new();
+        let mut cfo2_live = true;
         let mut bank: u128 = 3_000;
         let owners = [o1.clone(), owner2.clone()];
         let agents = [a1.clone(), agent2.clone(), agent3.clone()];
-        let vendors = [v.clone(), shop.clone()];
+        let vendors = [v.clone(), shop.clone(), shop_evm.clone()];
         for step in 0..250 {
-            let op = match rng.pick(15) {
+            let op = match rng.pick(17) {
                 12..=14 => 6, // approvals need more tries now that some owners need two signatures
+                15 => 12,
+                16 => 7, // and rejections, so freed invoice numbers get exercised too
                 x => x,
             };
             let owner = owners[rng.pick(2) as usize].clone();
             let agent = agents[rng.pick(3) as usize].clone();
-            let vendor = vendors[rng.pick(2) as usize].clone();
+            let vendor = vendors[rng.pick(3) as usize].clone();
             let amt = 1 + rng.pick(220) as u128;
             let inv = format!("I{}", rng.pick(40));
             let r = match op {
@@ -809,7 +818,19 @@ fn accounting_invariants_hold_under_random_operations() {
                 }
                 8 => t.exec(&owner, ExecuteMsg::RevokeAgent { agent: agent.to_string() }, &[]),
                 9 => t.exec(&owner, ExecuteMsg::ResumeAgent { agent: agent.to_string() }, &[]),
-                10 => t.exec(&owner, ExecuteMsg::ReleaseInvoice { vendor: vendor.to_string(), invoice: inv }, &[]),
+                10 => {
+                    let r = t.exec(&owner, ExecuteMsg::ReleaseInvoice { vendor: vendor.to_string(), invoice: inv.clone() }, &[]);
+                    if r.is_ok() {
+                        *released.entry((owner.clone(), person(&vendor), invoice_key(&inv).unwrap().1)).or_default() += 1;
+                    }
+                    r
+                }
+                11 => {
+                    // the co-approver's ME ID lapses and comes back
+                    cfo2_live = !cfo2_live;
+                    t.set_did(&cfo2, if cfo2_live { "DID_STATUS_ACTIVE" } else { "DID_STATUS_INACTIVE" }, "KYC_LEVEL_TWO");
+                    Ok(Response::new())
+                }
                 _ => {
                     t.later(rng.pick(30) * HOUR);
                     continue;
@@ -848,6 +869,24 @@ fn accounting_invariants_hold_under_random_operations() {
             }
             assert_eq!(total, bank, "seed {seed} step {step} op {op}: owner balances != contract bank balance");
         }
+        // an invoice is paid (or held) at most once per owner and vendor, across the vendor's addresses, unless
+        // the owner released the number in between
+        let mut all: Vec<Payment> = vec![];
+        loop {
+            let page: PaymentsResponse = t.q(QueryMsg::Payments { start_after: all.last().map(|p| p.id), limit: Some(100) });
+            if page.payments.is_empty() {
+                break;
+            }
+            all.extend(page.payments);
+        }
+        let mut seen: HashMap<(Addr, Addr, String), u32> = HashMap::new();
+        for p in all.iter().filter(|p| p.status != PayStatus::Rejected) {
+            *seen.entry((p.owner.clone(), person(&p.vendor), p.invoice_key.clone())).or_default() += 1;
+        }
+        for (k, n) in &seen {
+            assert!(*n <= 1 + released.get(k).copied().unwrap_or(0), "seed {seed}: invoice {k:?} handled {n} times");
+        }
+        assert!(all.iter().any(|p| p.vendor == shop_evm && p.status == PayStatus::Paid), "seed {seed}: never paid the sub-account");
     }
     // the sequences must actually exercise every path, not just bounce off refusals
     for (op, name) in [(0, "deposit"), (1, "withdraw"), (2, "pay"), (5, "batch"), (6, "approve"), (7, "reject"), (8, "revoke"), (9, "resume"), (10, "release")] {
@@ -1023,4 +1062,76 @@ fn two_signatures_must_come_from_two_me_ids() {
     let to_cfo = held.payments.iter().find(|p| p.vendor == cfo_evm).unwrap().id;
     t.owner_does(ExecuteMsg::Approve { id: to_cfo }).unwrap();
     assert!(matches!(t.exec(&cfo, ExecuteMsg::Approve { id: to_cfo }, &[]).unwrap_err(), ContractError::SelfDealing { .. }));
+}
+
+/// Paid at a sub-account before anyone recorded its link: after the link, the main account can't be paid it again.
+/// And a link can't be moved to another main account later.
+#[test]
+fn a_link_recorded_later_still_catches_the_duplicate_and_links_dont_move() {
+    let mut t = setup();
+    let (shop, stranger) = (t.shop.clone(), t.stranger.clone());
+    let shop_evm = t.deps.api.addr_make("shop-evm");
+    let shop2 = t.deps.api.addr_make("shop2");
+    t.dids.borrow_mut().insert(shop2.to_string(), ("1000000000003".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
+    let mut p = t.policy();
+    p.any_verified_vendor = true;
+    p.vendors.push(shop_evm.to_string());
+    t.set_policy(p);
+    t.pay(&shop_evm, 10, "PRE-1").unwrap();
+    t.subs.borrow_mut().insert(shop.to_string(), shop_evm.to_string());
+    let reg = |sub: &Addr, main: &Addr| ExecuteMsg::RegisterSubAccount { sub: sub.to_string(), main: main.to_string() };
+    t.exec(&stranger, reg(&shop_evm, &shop), &[]).unwrap();
+    assert!(matches!(t.pay(&shop, 10, "pre-1").unwrap_err(), ContractError::DuplicateInvoice { id: 1, .. }));
+    let found: Option<Payment> = t.q(QueryMsg::Invoice { owner: t.owner.to_string(), vendor: shop.to_string(), invoice: "PRE-1".into() });
+    assert_eq!(found.map(|p| p.id), Some(1));
+    // the owner can still free it, from the main account's side, and then pay it there
+    t.owner_does(ExecuteMsg::ReleaseInvoice { vendor: shop.to_string(), invoice: "PRE-1".into() }).unwrap();
+    t.pay(&shop, 10, "PRE-1").unwrap();
+    // x/did moves the sub-account to another ME ID: the link here doesn't follow, so nothing can be paid twice
+    t.pay(&shop_evm, 10, "X-1").unwrap();
+    t.subs.borrow_mut().remove(shop.as_str());
+    t.subs.borrow_mut().insert(shop2.to_string(), shop_evm.to_string());
+    assert!(matches!(t.exec(&stranger, reg(&shop_evm, &shop2), &[]).unwrap_err(), ContractError::Invalid { .. }));
+    assert!(matches!(t.pay(&shop_evm, 10, "X-1").unwrap_err(), ContractError::DuplicateInvoice { .. }));
+}
+
+/// A held payment's rejection frees exactly the invoice entry it took.
+#[test]
+fn rejecting_a_held_payment_at_a_sub_account_frees_its_invoice() {
+    let mut t = setup();
+    let (shop, stranger) = (t.shop.clone(), t.stranger.clone());
+    let shop_evm = t.deps.api.addr_make("shop-evm");
+    let mut p = t.policy();
+    p.any_verified_vendor = true;
+    t.set_policy(p);
+    t.subs.borrow_mut().insert(shop.to_string(), shop_evm.to_string());
+    t.exec(&stranger, ExecuteMsg::RegisterSubAccount { sub: shop_evm.to_string(), main: shop.to_string() }, &[]).unwrap();
+    t.pay(&shop_evm, 180, "HELD-1").unwrap();
+    assert_eq!(t.payment(1).invoice_party.as_ref(), Some(&shop));
+    t.owner_does(ExecuteMsg::Reject { id: 1 }).unwrap();
+    t.later(DAY);
+    t.pay(&shop, 180, "HELD-1").unwrap();
+}
+
+/// 3-of-3: a co-approver signs, lapses, the others sign, the lapsed ME ID comes back: the payment can be released.
+#[test]
+fn a_payment_whose_signatures_stand_again_can_be_released() {
+    let mut t = setup();
+    let (o, v) = (t.owner.clone(), t.vendor.clone());
+    let a = t.deps.api.addr_make("cfo");
+    let b = t.deps.api.addr_make("auditor");
+    t.dids.borrow_mut().insert(a.to_string(), ("1000000000007".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
+    t.dids.borrow_mut().insert(b.to_string(), ("1000000000008".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
+    t.owner_does(ExecuteMsg::SetApprovers { approvers: vec![a.to_string(), b.to_string()], threshold: 3 }).unwrap();
+    t.pay(&v, 180, "BIG-1").unwrap();
+    t.exec(&a, ExecuteMsg::Approve { id: 1 }, &[]).unwrap();
+    t.set_did(&a, "DID_STATUS_INACTIVE", "KYC_LEVEL_TWO");
+    t.owner_does(ExecuteMsg::Approve { id: 1 }).unwrap();
+    assert!(sent(&t.exec(&b, ExecuteMsg::Approve { id: 1 }, &[]).unwrap()).is_empty());
+    assert_eq!(t.payment(1).status, PayStatus::Pending);
+    t.set_did(&a, "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO");
+    let res = t.owner_does(ExecuteMsg::Approve { id: 1 }).unwrap();
+    assert_eq!(sent(&res), vec![(v.to_string(), 180)]);
+    assert_eq!(t.payment(1).status, PayStatus::Paid);
+    let _ = o;
 }

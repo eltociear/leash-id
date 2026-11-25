@@ -74,6 +74,10 @@ pub struct Payment {
     /// As the agent sent it (trimmed). Duplicates are matched on `invoice_key`.
     pub invoice: String,
     pub invoice_key: String,
+    /// The address the invoice number is filed under: the vendor's main account when the vendor is a registered
+    /// EVM sub-account, else the vendor. Freeing the number (reject, release) removes exactly this entry.
+    #[serde(default)]
+    pub invoice_party: Option<Addr>,
     pub memo: Option<String>,
     pub status: PayStatus,
     /// Who has approved a held payment so far (owner and/or co-approvers).

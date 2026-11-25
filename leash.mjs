@@ -248,7 +248,16 @@ const cmds = {
   async revoke() {
     const agent = await addrOf(need(args[0], "agent"));
     const { addr } = await signer(as("owner"), o["key-file"]);
-    const grant = o["keep-gas"] ? null : await feeGrant(agent, addr).catch(() => null);
+    // If we can't tell whether a grant exists, don't guess "no": a revoke that silently leaves a stolen key its
+    // fee allowance is the case this exists for.
+    let grant = null;
+    if (!o["keep-gas"]) {
+      try { grant = await feeGrant(agent, addr); } catch (e) {
+        console.error(`couldn't read your fee grant to ${agent} (${e.message}); revoking the agent now — then run: leash gas-revoke ${agent}`);
+        await send(as("owner"), { revoke_agent: { agent } });
+        return 1; // even if the revoke went through, the grant still needs your attention
+      }
+    }
     if (!grant) return send(as("owner"), { revoke_agent: { agent } });
     const r = outcome(await sendTx(as("owner"), [executeMsg(addr, { revoke_agent: { agent } }), revokeGasMsg(addr, agent)], { file: o["key-file"], granter: null }));
     if (r === 0) console.log(`     and you no longer pay ${agent}'s fees (give them back with: leash gas-grant ${agent} --limit <MEC>)`);

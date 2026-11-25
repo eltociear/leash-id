@@ -367,24 +367,40 @@ fn invoice_party(storage: &dyn Storage, vendor: &Addr) -> Addr {
     SUB_ACCOUNTS.may_load(storage, vendor).ok().flatten().unwrap_or_else(|| vendor.clone())
 }
 
-/// The payment an invoice was handled by: filed under the vendor's main account, or under the address itself
-/// (a payment made before its sub-account link was recorded).
-fn invoice_lookup(storage: &dyn Storage, owner: &Addr, vendor: &Addr, key: &str) -> StdResult<Option<u64>> {
-    let party = invoice_party(storage, vendor);
-    match INVOICES.may_load(storage, (owner, &party, key))? {
-        Some(id) => Ok(Some(id)),
-        None if party != *vendor => INVOICES.may_load(storage, (owner, vendor, key)),
-        None => Ok(None),
+/// Every address an invoice to `vendor` may be filed under: the vendor itself, its main account (if it is a
+/// registered sub-account), and that main account's registered sub-account. A payment made at one address before
+/// the link was recorded stays filed under that address, so all of them are checked.
+fn invoice_parties(deps: Deps, vendor: &Addr) -> Vec<Addr> {
+    let party = invoice_party(deps.storage, vendor);
+    let mut out = vec![vendor.clone()];
+    if party != *vendor {
+        out.push(party.clone());
     }
+    if let Some(id) = did::lookup(deps, party.as_str()) {
+        if let Ok(sub) = deps.api.addr_validate(&id.sub_account.to_ascii_lowercase()) {
+            if SUB_ACCOUNTS.may_load(deps.storage, &sub).ok().flatten().as_ref() == Some(&party) && !out.contains(&sub) {
+                out.push(sub);
+            }
+        }
+    }
+    out
 }
 
-/// Frees an invoice number held by payment `id`, wherever it was filed.
-fn invoice_forget(storage: &mut dyn Storage, owner: &Addr, vendor: &Addr, key: &str, id: u64) -> StdResult<()> {
-    let party = invoice_party(storage, vendor);
-    for v in [party, vendor.clone()] {
-        if INVOICES.may_load(storage, (owner, &v, key))? == Some(id) {
-            INVOICES.remove(storage, (owner, &v, key));
+/// The payment an invoice to this vendor (at any of its addresses) was handled by.
+fn invoice_lookup(deps: Deps, owner: &Addr, vendor: &Addr, key: &str) -> StdResult<Option<u64>> {
+    for v in invoice_parties(deps, vendor) {
+        if let Some(id) = INVOICES.may_load(deps.storage, (owner, &v, key))? {
+            return Ok(Some(id));
         }
+    }
+    Ok(None)
+}
+
+/// Frees the invoice number held by payment `p`, exactly where `record` filed it.
+fn invoice_forget(storage: &mut dyn Storage, p: &Payment) -> StdResult<()> {
+    let party = p.invoice_party.as_ref().unwrap_or(&p.vendor);
+    if INVOICES.may_load(storage, (&p.owner, party, p.invoice_key.as_str()))? == Some(p.id) {
+        INVOICES.remove(storage, (&p.owner, party, p.invoice_key.as_str()));
     }
     Ok(())
 }
@@ -545,7 +561,7 @@ fn close_pending(storage: &mut dyn Storage, acct: &mut OwnerAcct, p: &mut Paymen
         acct.balance -= p.amount;
         p.status = PayStatus::Paid;
     } else {
-        invoice_forget(storage, &p.owner, &p.vendor, p.invoice_key.as_str(), p.id)?;
+        invoice_forget(storage, p)?;
         p.status = PayStatus::Rejected;
     }
     p.settled_at = Some(env.block.time.seconds());
@@ -595,13 +611,13 @@ fn leave(deps: DepsMut, env: Env, info: MessageInfo) -> Res {
 fn release_invoice(deps: DepsMut, info: MessageInfo, vendor: String, invoice: String) -> Res {
     let vendor = deps.api.addr_validate(&vendor)?;
     let (_, key) = invoice_key(&invoice)?;
-    let id = invoice_lookup(deps.storage, &info.sender, &vendor, key.as_str())?
+    let id = invoice_lookup(deps.as_ref(), &info.sender, &vendor, key.as_str())?
         .ok_or_else(|| invalid("no such invoice for this owner and vendor"))?;
     let p = PAYMENTS.load(deps.storage, id)?;
     if p.status == PayStatus::Pending {
         return Err(invalid("that invoice is pending; reject it instead"));
     }
-    invoice_forget(deps.storage, &info.sender, &vendor, key.as_str(), id)?;
+    invoice_forget(deps.storage, &p)?;
     Ok(Response::new()
         .add_attribute("action", "release_invoice")
         .add_attribute("owner", info.sender)
@@ -623,6 +639,13 @@ fn register_sub(deps: DepsMut, sub: String, main: String) -> Res {
             sub: sub.to_string(),
             main: main.to_string(),
         });
+    }
+    // A link is permanent here. Invoices paid through the sub-account are filed under this main account, so
+    // re-pointing it would let them be paid again; if x/did moves the sub-account, it simply stops resolving.
+    if let Some(old) = SUB_ACCOUNTS.may_load(deps.storage, &sub)? {
+        if old != main {
+            return Err(invalid(&format!("{sub} is already linked to {old}; a sub-account link can't be moved")));
+        }
     }
     SUB_ACCOUNTS.save(deps.storage, &sub, &main)?;
     Ok(Response::new()
@@ -740,7 +763,7 @@ fn evaluate(
             invoice: shown.to_string(),
         });
     }
-    if let Some(id) = invoice_lookup(deps.storage, &rec.owner, vendor, invoice_key)? {
+    if let Some(id) = invoice_lookup(deps, &rec.owner, vendor, invoice_key)? {
         return Err(ContractError::DuplicateInvoice {
             invoice: shown.to_string(),
             id,
@@ -836,6 +859,7 @@ fn record(
         amount,
         invoice: shown.to_string(),
         invoice_key: key.to_string(),
+        invoice_party: Some(invoice_party(storage, vendor)),
         memo,
         status: if d.needs_approval {
             PayStatus::Pending
@@ -846,7 +870,7 @@ fn record(
         created_at: now,
         settled_at: if d.needs_approval { None } else { Some(now) },
     };
-    let party = invoice_party(storage, vendor);
+    let party = p.invoice_party.clone().unwrap_or_else(|| vendor.clone());
     INVOICES.save(storage, (&rec.owner, &party, key), &id)?;
     PAYMENTS.save(storage, id, &p)?;
     AGENT_PAYMENTS.save(storage, (agent, id), &())?;
@@ -1087,11 +1111,17 @@ fn settle(deps: DepsMut, env: Env, info: MessageInfo, id: u64, approve: bool) ->
         seen
     };
     let before = standing_dids(&p.approved_by);
-    if p.approved_by.contains(&signer) || before.contains(&signer_did) {
-        return Err(ContractError::AlreadyApproved { id, have: before.len() as u8, need: signers.threshold });
-    }
-    p.approved_by.push(signer);
-    let standing = before.len() + 1;
+    let standing = if p.approved_by.contains(&signer) || before.contains(&signer_did) {
+        // Signed already. If enough signatures stand again (a lapsed co-approver's ME ID came back), any signer
+        // may release it now; otherwise a second signature from the same person changes nothing.
+        if before.len() < signers.threshold as usize {
+            return Err(ContractError::AlreadyApproved { id, have: before.len() as u8, need: signers.threshold });
+        }
+        before.len()
+    } else {
+        p.approved_by.push(signer);
+        before.len() + 1
+    };
     res = res
         .add_attribute("approvals", standing.to_string())
         .add_attribute("needed", signers.threshold.to_string());
@@ -1226,7 +1256,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             let owner = deps.api.addr_validate(&owner)?;
             let vendor = deps.api.addr_validate(&vendor)?;
             let found = match invoice_key(&invoice) {
-                Ok((_, key)) => match invoice_lookup(deps.storage, &owner, &vendor, key.as_str())? {
+                Ok((_, key)) => match invoice_lookup(deps, &owner, &vendor, key.as_str())? {
                     Some(id) => PAYMENTS.may_load(deps.storage, id)?,
                     None => None,
                 },
