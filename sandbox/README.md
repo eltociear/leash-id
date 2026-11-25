@@ -25,7 +25,7 @@ needs only the Vercel step below.
    leash keygen sandbox-agent                 # then put that mnemonic in LEASH_AGENT_MNEMONIC
    leash deposit 0.2
    leash offer <sandbox agent address> --per-tx 0.02 --daily 0.05 --approve-above 0.015 --vendors <your vendor address> --any-verified-vendor no
-   leash gas-grant <sandbox agent address> --limit 0.3 --days 40   # the owner pays its fees; the key holds 0 MEC
+   leash gas-grant <sandbox agent address> --limit 0.1 --days 40   # the owner pays its fees; the key holds 0 MEC
    leash accept <owner address> --as sandbox-agent --fee-granter <owner address>
    ```
    Keep the budget small: the sandbox is meant to be attacked.
