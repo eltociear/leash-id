@@ -2,23 +2,37 @@
 # Agent-to-agent commerce on a local ME Hub node: a paid API (examples/paid-api) sells only to agents with a
 # verified human behind them; our agent buys through its leash, and only from sellers that hold an ME ID.
 # Run after the demo leash is in place (scripts/devnet-runs.sh does it). Writes runs/devnet-commerce-<ts>.txt.
+# TESTNET=1: on ME Hub testnet instead, selling as SHOP_ROLE (default lowkyc: a real ME ID, KYC level 1, which the
+# agent's leash lists as a vendor); writes runs/testnet-commerce-<ts>.txt.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-source devnet/env.sh
+if [ -n "${TESTNET:-}" ]; then
+  unset ME_CHAIN_ID ME_RPC ME_REST LEASH_DEPLOYMENT
+  SHOP=${SHOP_ROLE:-lowkyc} NET=testnet
+else
+  source devnet/env.sh
+  SHOP=shop NET=devnet
+fi
 mkdir -p runs
-OUT="runs/devnet-commerce-$(date -u +%Y-%m-%dT%H-%M-%SZ).txt"
+OUT="runs/$NET-commerce-$(date -u +%Y-%m-%dT%H-%M-%SZ).txt"
 log() { echo "$*" | tee -a "$OUT"; }
 step() { log ""; log "## $*"; }
 run() { log "\$ $*"; "$@" 2>&1 | sed "s#$PWD/##g" | tee -a "$OUT"; }
 api() { curl -s -w '\n(HTTP %{http_code})\n' "$@"; }
 
-PORT=18790 LEASH_PAY_TO_ROLE=shop node examples/paid-api/server.mjs 2>/dev/null & A=$!
+PORT=18790 LEASH_PAY_TO_ROLE=$SHOP node examples/paid-api/server.mjs 2>/dev/null & A=$!
 PORT=18791 LEASH_PAY_TO_ROLE=rogue node examples/paid-api/server.mjs 2>/dev/null & B=$!
 trap 'kill $A $B 2>/dev/null' EXIT
 for _ in $(seq 100); do curl -s localhost:18790/ >/dev/null && curl -s localhost:18791/ >/dev/null && break; sleep 0.3; done
 
-log "Agent-to-agent commerce on a LOCAL ME Hub node ($ME_CHAIN_ID)"
-log "seller: a paid API, payments to the shop (ME ID 1000000000103); buyer: our leashed agent over MCP"
+SHOPA=$(node -e "import('./lib/chain.mjs').then(async c => console.log(await c.address('$SHOP')))")
+if [ "$NET" = testnet ]; then
+  log "Agent-to-agent commerce on ME Hub TESTNET (mechain_400-1), contract $(jq -r .contract deployment.json)"
+  log "seller: a paid API, payments to $SHOPA (ME ID $(curl -s "https://beta-hub-1317.explorer-testnet.me/metaearth/did/did?address=$SHOPA" | jq -r '.info.did + ", " + .info.kycLevel')); buyer: our leashed agent over MCP"
+else
+  log "Agent-to-agent commerce on a LOCAL ME Hub node ($ME_CHAIN_ID)"
+  log "seller: a paid API, payments to the shop (ME ID 1000000000103); buyer: our leashed agent over MCP"
+fi
 
 step "1. the API asks for payment (HTTP 402) with its Leash ID terms"
 run api localhost:18790/chain-stats
@@ -35,7 +49,7 @@ run api -H "X-Leash-Payment: $TX" -H "X-Leash-Proof: $(proof agent "$TX" "$INV")
 
 step "4. tx hashes are public: someone watching the chain tries to redeem a fresh payment first"
 INV3=$(curl -s localhost:18790/chain-stats | jq -r .leash_id.invoice)
-run node leash.mjs pay shop 0.001 "$INV3" --as agent
+run node leash.mjs pay "$SHOP" 0.001 "$INV3" --as agent
 TX3=$(grep -oE 'txs/[0-9A-F]{64}' "$OUT" | tail -1 | cut -d/ -f2)
 run api -H "X-Leash-Payment: $TX3" -H "X-Leash-Proof: $(proof rogue "$TX3" "$INV3")" localhost:18790/chain-stats
 log "# the agent that paid, with its own signature"
@@ -44,7 +58,7 @@ run api -H "X-Leash-Payment: $TX3" -H "X-Leash-Proof: $(proof agent "$TX3" "$INV
 step "5. a made-up payment, and a real leash payment that isn't for an invoice the API issued"
 FAKE=$(openssl rand -hex 32 | tr a-f A-F)
 run api -H "X-Leash-Payment: $FAKE" -H "X-Leash-Proof: $(proof agent "$FAKE" x)" localhost:18790/chain-stats
-run node leash.mjs pay shop 0.001 "NOT-ISSUED-$(date +%s)" --as agent
+run node leash.mjs pay "$SHOP" 0.001 "NOT-ISSUED-$(date +%s)" --as agent
 TX2=$(grep -oE 'txs/[0-9A-F]{64}' "$OUT" | tail -1 | cut -d/ -f2)
 INV2=$(grep -oE 'invoice=NOT-ISSUED-[0-9]+' "$OUT" | tail -1 | cut -d= -f2)
 run api -H "X-Leash-Payment: $TX2" -H "X-Leash-Proof: $(proof agent "$TX2" "$INV2")" localhost:18790/chain-stats

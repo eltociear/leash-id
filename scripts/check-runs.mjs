@@ -81,20 +81,45 @@ if (ksFile) {
     "9: a key holding 0 MEC accepts its leash and pays on the owner's fee grant; it can't move anything else");
 }
 
-// ---- agent-to-agent commerce
-const coFile = latest(/^devnet-commerce-.*\.txt$/);
-check(coFile, "commerce record exists");
-if (coFile) {
+// ---- agent-to-agent commerce (on the local node, and on testnet if that record exists)
+for (const [net, required] of [["devnet", true], ["testnet", false]]) {
+  const coFile = latest(new RegExp(`^${net}-commerce-.*\\.txt$`));
+  if (required) check(coFile, "commerce record exists");
+  if (!coFile) continue;
+  const p = net === "devnet" ? "" : "testnet commerce ";
   const st = Object.fromEntries(fs.readFileSync(path.join(dir, coFile), "utf8").split(/^## /m).slice(1).map((s) => [s[0], s]));
-  check(/\(HTTP 402\)/.test(st[1] ?? "") && /"invoice": "API-/.test(st[1] ?? ""), "1: the API answers 402 with Leash ID terms");
-  check(/^\[paid\] PAID .*seller's ME ID \d+/m.test(st[2] ?? "") && /"owner_me_id": "\d+"/.test(st[2] ?? ""), "2: the agent checks the seller's ME ID, pays, and gets data stamped with its owner's ME ID");
-  check(/already used/.test(st[3] ?? "") && /\(HTTP 402\)/.test(st[3] ?? ""), "3: a payment can't be replayed");
+  check(/\(HTTP 402\)/.test(st[1] ?? "") && /"invoice": "API-/.test(st[1] ?? ""), `${p}1: the API answers 402 with Leash ID terms`);
+  check(/^\[paid\] PAID .*seller's ME ID \d+/m.test(st[2] ?? "") && /"owner_me_id": "\d+"/.test(st[2] ?? ""), `${p}2: the agent checks the seller's ME ID, pays, and gets data stamped with its owner's ME ID`);
+  check(/already used/.test(st[3] ?? "") && /\(HTTP 402\)/.test(st[3] ?? ""), `${p}3: a payment can't be replayed`);
   check(/isn't a signature by the agent that made this payment/.test(st[4] ?? "") && /\(HTTP 403\)/.test(st[4] ?? "") && /\(HTTP 200\)/.test(st[4] ?? ""),
-    "4: someone who saw the tx on chain can't redeem it; the agent that paid can");
-  check(/no such transaction/.test(st[5] ?? "") && /for a live invoice this server issued/.test(st[5] ?? ""), "5: made-up payments and payments for invoices the API didn't issue are refused");
+    `${p}4: someone who saw the tx on chain can't redeem it; the agent that paid can`);
+  check(/no such transaction/.test(st[5] ?? "") && /for a live invoice this server issued/.test(st[5] ?? ""), `${p}5: made-up payments and payments for invoices the API didn't issue are refused`);
   check(/^\[declined, isError\] NOT PAID: the seller .* holds no ME ID/m.test(st[6] ?? "") && /REFUSED by the contract: vendor .* is not allowed by this leash/.test(st[6] ?? ""),
-    "6: a seller without an ME ID: the agent's tool declines, and the contract refuses a direct payment too");
-  check(/^\[declined, isError\] NOT PAID/m.test(st[7] ?? ""), "7: the agent's own price cap holds");
+    `${p}6: a seller without an ME ID: the agent's tool declines, and the contract refuses a direct payment too`);
+  check(/^\[declined, isError\] NOT PAID/m.test(st[7] ?? ""), `${p}7: the agent's own price cap holds`);
+}
+
+// ---- Claude Code as the agent on testnet (optional): what each tool call came back with
+const tcFile = latest(/^testnet-claude-.*\.jsonl$/);
+if (tcFile) {
+  const ids = {}, res = {};
+  let report = "";
+  for (const line of fs.readFileSync(path.join(dir, tcFile), "utf8").split("\n").filter(Boolean)) {
+    const e = JSON.parse(line);
+    if (e.type === "result") report = e.result ?? "";
+    for (const c of e.message?.content ?? []) {
+      if (c.type === "tool_use" && /pay_invoice$/.test(c.name)) ids[c.id] = String(c.input.invoice).toUpperCase();
+      if (c.type === "tool_result" && ids[c.tool_use_id]) {
+        const t = Array.isArray(c.content) ? c.content.map((x) => x.text ?? "").join("") : String(c.content);
+        (res[ids[c.tool_use_id]] ??= []).push(/^PAID/m.test(t) || /"status":\s*"paid"/.test(t) ? "paid" : /^HELD/m.test(t) || /"status":\s*"held"/.test(t) ? "held" : "other");
+      }
+    }
+  }
+  const paid = Object.entries(res).filter(([, v]) => v.includes("paid")).map(([k]) => k).sort();
+  const held = Object.entries(res).filter(([, v]) => v.includes("held")).map(([k]) => k).sort();
+  check(JSON.stringify(paid) === JSON.stringify(["INV-1001", "MCC-77"]) && JSON.stringify(held) === JSON.stringify(["INV-1002"]),
+    `testnet Claude: paid INV-1001 and MCC-77, sent INV-1002 for approval, nothing else went through (paid ${paid.join(", ") || "none"}; held ${held.join(", ") || "none"})`);
+  check(report.length > 200, "testnet Claude: the final report is in the transcript");
 }
 
 // ---- testnet: sub-account resolution against real x/did records (optional: only if a record exists)

@@ -204,6 +204,11 @@ Our owner holds a testnet ME ID (`2611255912050`, KYC level 2, issued by the tes
 - A held payment the agent can't release and the owner approves; a `multi_send` batch; revoke → refused, resume → paid.
 - An agent key that never held any MEC pays on the owner's fee grant, and can't send anything else.
 
+**Claude Code as the agent, on testnet** ([`runs/testnet-claude-2026-11-25T05-35-19Z.jsonl`](runs/testnet-claude-2026-11-25T05-35-19Z.jsonl)): it paid the two real invoices, sent the GPU invoice for the
+owner's approval, and declined the duplicate, the fake CEO wire and the invoice with hidden instructions.
+**Agent-to-agent commerce, on testnet** ([`runs/testnet-commerce-2026-11-25T05-37-16Z.txt`](runs/testnet-commerce-2026-11-25T05-37-16Z.txt)): a paid API sells to our agent, and replay, front-running,
+unissued invoices and a seller with no ME ID all fail.
+
 ## The kill switch, on a real ME Hub node
 
 We can't suspend a testnet ME ID ourselves, so `scripts/killswitch.sh` runs against a local ME Hub node built
