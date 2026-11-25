@@ -79,6 +79,11 @@ http.createServer(paywall({ payTo: "me1你的地址…", priceUmec: "100000", mi
 子账户付款，收据记录该 ME ID；超过阈值的付款由所有者批准；`multi_send` 批量支付；撤销后被拒、恢复后可付；从未持有
 MEC 的代理密钥依靠所有者的手续费授权（x/feegrant）付款，且无法转出任何其他资金。
 
+测试网上还记录了：Claude Code 作为代理（`runs/testnet-claude-*.jsonl`）；“服从一切”的客户端（[`runs/testnet-obey-2026-11-25T13-53-33-068Z.txt`](runs/testnet-obey-2026-11-25T13-53-33-068Z.txt)），
+除一项外所有攻击都在链上被拒——向所有者自己列出的收款方分 5 笔各 0.014 MEC 的批量付款成功了，因为它在所有者设定的
+24 小时限额 0.2 MEC 之内（低于审批阈值时，24 小时限额就是上限，见 THREAT_MODEL T6）；以及代理之间的交易
+（`runs/testnet-commerce-*.txt`）。
+
 ## 快速开始
 
 ```bash

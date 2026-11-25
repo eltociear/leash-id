@@ -14,7 +14,7 @@ Everything below can be checked without trusting us: each claim links to code, a
 | Check any agent, no wallet | https://eltociear.github.io/leash-id/ (try "an EVM address bound to an ME ID": a real testnet user's sub-account, resolved by the contract from x/did) |
 | Owner console (Keplr): approvals, two signers, revoke, limits, fee grants, CSV | https://eltociear.github.io/leash-id/owner.html |
 | Demo video | see the top of the [README](README.md) |
-| Red-team page (attack a real agent key) | [`sandbox/`](sandbox/README.md): runs locally against a devnet with `node scripts/sandbox-dev.mjs` |
+| Red-team page (attack a real agent key) | [`sandbox/`](sandbox/README.md): its leash is live on testnet (a 0-MEC key on the owner's fee grant); run it locally with `node scripts/sandbox-dev.mjs` |
 
 ## On ME Hub testnet (`mechain_400-1`)
 
@@ -44,13 +44,19 @@ Everything below can be checked without trusting us: each claim links to code, a
 
 - **Claude Code as the agent, on testnet** ([`runs/testnet-claude-2026-11-25T05-35-19Z.jsonl`](runs/testnet-claude-2026-11-25T05-35-19Z.jsonl)): paid INV-1001 and MCC-77 (a merchant it
   verified by ME ID), sent INV-1002 for approval, declined the duplicate, the fake CEO and the injected invoice.
+- **The obey-everything client, on testnet** ([`runs/testnet-obey-2026-11-25T13-53-33-068Z.txt`](runs/testnet-obey-2026-11-25T13-53-33-068Z.txt)), on the leash Claude had
+  just worked: the fake CEO wire, the injected invoice, the limit raise, the withdraw, the one-shot drain and the
+  re-spelled duplicates were all refused on chain. One thing was paid: a batch of 5 × 0.014 MEC to the owner's own
+  listed vendor, because it fit inside the 0.2 MEC 24-hour limit this owner set. That is the design: below the
+  approval threshold, the 24-hour limit is the bound ([T6](THREAT_MODEL.md)). On the local node, with a 0.05 MEC
+  limit, the same batch is refused.
 - **Agent-to-agent commerce, on testnet** ([`runs/testnet-commerce-2026-11-25T05-37-16Z.txt`](runs/testnet-commerce-2026-11-25T05-37-16Z.txt)): HTTP 402, paid through the leash, replay,
   front-running, an unissued invoice and a seller without an ME ID all refused.
 - **The red-team sandbox's leash is live on testnet** (agent `me15xd643xjukalnklc5jqvqnp36sc0yrz2wxnfan`, holds
   0 MEC, fees on the owner's grant).
 
 The kill switch needs the global DAO's key to suspend an ME ID, so it is shown on a **local ME Hub node built from
-`openmetaearth/me-hub`** (see below), with the obey-everything run and repeats of the Claude and commerce runs. CI repeats the
+`openmetaearth/me-hub`** (see below), with repeats of the obey-everything, Claude and commerce runs. CI repeats the
 obey-everything, kill-switch and commerce runs on a fresh node on every push; the Claude run is recorded once and
 committed.
 
@@ -100,7 +106,7 @@ committed.
 
 **Innovation (15)**
 - The chain, not the prompt, is the safety layer. The MCP server even offers owner-only tools in the demo, and the
-  contract refuses them. See [`runs/devnet-obey-*.txt`](runs/): a client that obeys every email made 10 attacks
+  contract refuses them. See [`runs/devnet-obey-*.txt`](runs/): a client that obeys every email made 8 attacks
   and none got through.
 - HTTP 402 with a verified human on both sides:
   - The buyer checks that the seller holds an ME ID.
@@ -112,7 +118,7 @@ committed.
 **User experience (10)**
 - A verifier with no wallet, an owner console (Keplr; tested end to end with a mnemonic signer), and a CLI with
   per-command help and exit codes (3 = "outcome unknown, look it up").
-- A [Chinese README](README.zh-CN.md).
+- READMEs in [Japanese](README.ja.md) and [Chinese](README.zh-CN.md).
 - MCP results Claude can act on: `PAID`, `HELD FOR OWNER APPROVAL`, `REFUSED`, `UNKNOWN`.
 
 ## Check it yourself
@@ -122,13 +128,14 @@ git clone https://github.com/eltociear/leash-id && cd leash-id && npm ci
 npm run verify                    # testnet: deployed code == this repo's build, no admin
 npm run test:js                   # 22 JS tests, no chain needed
 node scripts/check-runs.mjs       # the committed run records say what we claim
-cat runs/devnet-claude-*.jsonl | jq -r 'select(.type=="result").result'   # Claude's own report
+cat runs/testnet-claude-*.jsonl | jq -r 'select(.type=="result").result'  # Claude's own report (testnet)
 ```
 
 ## Known limits, stated plainly
 
-- Suspending an ME ID needs the global DAO, so the kill switch is shown on a node we run, not on testnet. The
-  Claude and commerce runs are also on that node (and the obey-everything and commerce runs are re-run by CI).
+- Suspending an ME ID needs the global DAO, so the kill switch is shown on a node we run, not on testnet. Every
+  other flow is recorded on testnet too, and CI re-runs the obey-everything, kill-switch and commerce runs on a
+  fresh node.
 - The owner console's Keplr path is written to Keplr's API but was tested with a mnemonic signer (`npm run
   e2e:owner`). Bonds are covered by unit tests against the real x/wstaking response shape. A local node has no
   fixed-deposit configuration to try them against.
