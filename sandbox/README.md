@@ -9,6 +9,7 @@ from the chain, so every server instance agrees; `SANDBOX_BROADCASTS_PER_DAY`). 
 Status: the sandbox's leash is live on ME Hub testnet: agent `me15xd643xjukalnklc5jqvqnp36sc0yrz2wxnfan`, owner ME ID
 2611255912050, ≤ 0.02 MEC per payment, ≤ 0.05 MEC per 24 h, our vendor only. The agent key holds **0 MEC**: the owner
 pays its fees through a fee grant (contract calls only). Hosted at https://leash-id-sandbox.vercel.app/ (Vercel, built with the steps below).
+The hosted page has no Anthropic key, so its "prompt-inject Claude" box is off there; run it locally with yours.
 
 ## Deploy on Vercel
 

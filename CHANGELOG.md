@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The hosted sandbox's nav linked to `/docs/…`, which Vercel doesn't serve (404): it now links to the Pages site,
+  and every Pages page links to the sandbox ("Red-team it"). Sandbox tx links open the readable tx page.
+- The sandbox's control-payment label says when it's only simulated (chain halted); `/api/state` gives the policy
+  in MEC only (it mixed umec and MEC). `npm run judge` starts with the latest testnet block and its age.
+- JUDGES: the hosted page has no Claude (said plainly, with the recorded run linked); who it's for and how it
+  would reach mainnet; x/feegrant moved from "ME depth" to product (it's a stock Cosmos module); the bond line
+  no longer says testnet has no fixed-deposit config (it does: `me_earth`, 1 day).
+
 - **The red-team sandbox is hosted**: https://leash-id-sandbox.vercel.app/ (the testnet sandbox agent's key, fees on
   the owner's grant). Vercel's loader can't `require()` an ES module, which `@cosmjs/encoding` does with
   `@scure/base` 2.x, so the functions are bundled with esbuild at deploy (`scripts/bundle-api.mjs`); local runs and CI

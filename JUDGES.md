@@ -30,7 +30,7 @@ Everything below can be checked without trusting us: each claim links to code, a
 | Owner console, read-only, no wallet: our testnet owner's agents, limits, fees, payments | https://eltociear.github.io/leash-id/owner.html#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq |
 | Owner console (Keplr): approvals, two signers, revoke, limits, fee grants, CSV | https://eltociear.github.io/leash-id/owner.html |
 | Demo video (4:48, captions) | https://www.youtube.com/watch?v=vySdFuWiGho |
-| Red-team page: attack a live testnet agent's real key | https://leash-id-sandbox.vercel.app/ : one-click attacks, your own payments, and an email that Claude reads with the key behind its tools. Or run it yourself with no key: `npm ci && node scripts/sandbox-dev.mjs` simulates every action as the same agent ([`sandbox/`](sandbox/README.md)) |
+| Red-team page: attack a live testnet agent's real key | https://leash-id-sandbox.vercel.app/ : one-click attacks and your own payments, each answered by the deployed contract. The prompt-injection box (an email Claude reads with the key behind its tools) needs an Anthropic key, which the hosted page doesn't have: run it locally with yours, or read the recorded testnet run [`runs/testnet-claude-*.jsonl`](runs/). Or run the page yourself with no key at all: `npm ci && node scripts/sandbox-dev.mjs` simulates every action as the same agent ([`sandbox/`](sandbox/README.md)) |
 | Your own Claude as the agent, no key | `claude --mcp-config mcp/judge.mcp.json`, then ask: *"Who is behind you, and what are you allowed to spend? Then check paying 0.5 MEC to me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p for invoice URGENT-1."* It reads the demo agent's real leash and dry-runs against the contract; it can't send anything ([`mcp/judge.mcp.json`](mcp/judge.mcp.json)) |
 
 ## On ME Hub testnet (`mechain_400-1`)
@@ -116,7 +116,10 @@ committed.
 - EVM sub-accounts (x/kyc `MsgCreateSubAccount`) resolve to their ME ID. This is shown on testnet with real
   records (above) and on the node (step 7).
 - Payments and fees are in MEC, and receipts store the owner's and the vendor's ME ID numbers.
-- The agent key can hold 0 MEC: the owner pays its fees through x/feegrant, contract calls only (step 9).
+- Two-person approval means two ME IDs: co-approvers are counted one per ME ID, so an owner's own EVM sub-account
+  can't be their second signature (refused on testnet, `runs/testnet-payments-*.txt` 5b).
+- `leash lock` makes the bond with ME Hub's own `MsgDoFixedDeposit` (x/wstaking, hand-encoded: cosmjs has no type
+  for it), in the owner's KYC region's term.
 
 **Product value (20)**
 - The problem, with sources: [README → Why now](README.md). Business email compromise cost close to $2.8B in
@@ -128,7 +131,17 @@ committed.
   - revoke and resume
   - CSV export
   - Slack alerts (`leash watch`)
+  - an agent key that holds 0 MEC: the owner pays its fees through x/feegrant, contract calls only (step 9)
 - For the seller: `leash-id/vendor` takes payment from AI agents only when a verified human answers for them.
+- Who it's for, and how it gets used:
+  - Accounts-payable teams letting an agent clear routine invoices (SaaS bills, cloud credits, contractor
+    payouts), with the CFO as co-approver above a line; DAO and project treasuries that want an agent to pay
+    grants or bounties without handing it the multisig.
+  - Sellers of APIs and data to agents (`leash-id/vendor`): they get paid only by agents a live ME ID answers for.
+  - What would carry it to mainnet: the same contract (no admin, so it would be a fresh deploy), an ME ID KYC
+    issuer hook to suspend an ME ID from the owner's side (today only the DAO or the issuer can), and a hosted
+    owner console. A business model fits the vendor side: a hosted paywall (verified-agent checkout) priced per
+    settled payment, with the contract itself free to use.
 - Cost: about 260k gas per payment ([docs/GAS.md](docs/GAS.md)), and a refusal costs nothing by default: it is caught in simulation and never sent. (The recorded demos send refusals on purpose, `LEASH_ONCHAIN_REFUSALS=1`, so you can look them up; those pay a fee.)
 
 **Innovation (15)**
@@ -169,6 +182,7 @@ cat runs/testnet-claude-*.jsonl | jq -r 'select(.type=="result").result'  # Clau
   other flow is recorded on testnet too, and CI re-runs the obey-everything, kill-switch and commerce runs on a
   fresh node.
 - The owner console's Keplr path is written to Keplr's API but was tested with a mnemonic signer (`npm run
-  e2e:owner`). Bonds are covered by unit tests against the real x/wstaking response shape. A local node has no
-  fixed-deposit configuration to try them against.
+  e2e:owner`). Bonds are covered by unit tests against the real x/wstaking response shape, and `leash lock` was
+  checked by simulation on testnet (region `me_earth` offers a 1-day term). A bond on testnet only lasts that day;
+  the recorded one goes in when the halted chain is back.
 - The threat model lists what Leash ID does not protect against: [THREAT_MODEL.md](THREAT_MODEL.md).

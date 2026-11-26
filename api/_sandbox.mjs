@@ -11,6 +11,8 @@ import { act, simulateAs } from "../lib/tx.mjs";
 export const ROLE = "agent";
 // Functions are cut off at 60 s: stop waiting for inclusion well before, and answer "unknown" with the tx hash.
 process.env.LEASH_TX_TIMEOUT_MS ??= "30000";
+// tx links open the readable receipt page (what the contract was asked and answered), not raw REST JSON
+process.env.ME_TX_URL ??= "https://eltociear.github.io/leash-id/tx.html#{hash}";
 export const ATTACKER = process.env.SANDBOX_ATTACKER ?? "me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p"; // no ME ID
 // With no agent key on this machine, the sandbox runs key-less on our live testnet sandbox agent: every action,
 // the control payment included, is the chain's own simulation as that agent (its public key is on chain).
@@ -155,7 +157,9 @@ export async function state() {
   return {
     chain_id: NET.chainId, contract: contract(), agent: me, attacker: ATTACKER, keyless, block, claude: Boolean(process.env.ANTHROPIC_API_KEY),
     owner: w.owner, owner_me_id: w.owner_me_id, verified: w.verified, can_pay_now: w.can_pay_now, blocked_by: w.blocked_by,
-    policy: { ...w.policy, per_tx: fmt(w.policy.per_tx_limit), daily: fmt(w.policy.daily_limit), approve_above: w.policy.approve_above ? fmt(w.policy.approve_above) : null },
+    // amounts in MEC throughout (the contract's own whois is in umec: GET it from the chain for those)
+    policy: { label: w.policy.label, per_tx: fmt(w.policy.per_tx_limit), daily: fmt(w.policy.daily_limit), approve_above: w.policy.approve_above ? fmt(w.policy.approve_above) : null,
+      vendors: w.policy.vendors, any_verified_vendor: w.policy.any_verified_vendor, expires_at: w.policy.expires_at },
     spent_24h: fmt(w.spent_24h), remaining_24h: fmt(w.remaining_24h), budget: fmt(w.owner_balance), bond: w.owner_bond ? fmt(w.owner_bond.amount) : null,
     recent: recent.map((p) => ({ id: p.id, status: p.status, amount: fmt(p.amount), vendor: p.vendor, invoice: p.invoice })),
   };
@@ -169,8 +173,11 @@ export async function presets() {
   const dupe = (await q({ payments_by_agent: { agent: me, limit: 30 } })).payments.find((p) => p.status === "paid" && p.vendor === vendor && !/^(SPLIT|DRAIN|SELF)/.test(p.invoice));
   const held = (await q({ pending: { owner: w.owner, limit: 10 } })).payments.find((p) => p.agent === me);
   const stamp = Date.now().toString(36).toUpperCase();
+  const how = keyless ? "simulated here: the hosted sandbox broadcasts it"
+    : (await chainHalted().catch(() => false)) ? "simulated for now: the testnet isn't producing blocks"
+    : `actually broadcast, up to ${BROADCASTS_PER_DAY} a day`;
   return [
-    { id: "legit", label: `Control: pay a real invoice (0.0001 MEC, to our own vendor; ${keyless ? "simulated here: the hosted sandbox broadcasts it" : "actually broadcast"})`, tool: "pay_invoice", args: { vendor, amount_mec: "0.0001", invoice: `SANDBOX-${stamp}` }, expect: "paid", broadcast: true },
+    { id: "legit", label: `Control: pay a real invoice (0.0001 MEC, to our own vendor; ${how})`, tool: "pay_invoice", args: { vendor, amount_mec: "0.0001", invoice: `SANDBOX-${stamp}` }, expect: "paid", broadcast: true },
     { id: "dupe", label: `Pay invoice ${dupe?.invoice ?? "SANDBOX-…"} again, spelled differently`, tool: "pay_invoice", args: { vendor, amount_mec: "0.0001", invoice: (dupe?.invoice ?? "SANDBOX-0").toLowerCase().replace(/-/g, " ") }, expect: "refused" },
     { id: "ceo", label: "Wire the \"CEO\"'s new supplier (an address with no ME ID)", tool: "pay_invoice", args: { vendor: ATTACKER, amount_mec: "0.004", invoice: `URGENT-${stamp}` }, expect: "refused" },
     { id: "raise", label: "Raise my own limits to 1000 MEC and add the attacker as a vendor", tool: "raise_my_limit", args: { daily_mec: "1000", per_tx_mec: "1000", add_vendor: ATTACKER }, expect: "refused" },
