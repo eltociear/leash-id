@@ -181,7 +181,10 @@ cat runs/testnet-claude-*.jsonl | jq -r 'select(.type=="result").result'  # Clau
 
 ## Known limits, stated plainly
 
-- ME Hub testnet halts now and then (it stopped at block 5,523,300, 07:09 UTC on 2026-11-26). Every page shows
+- ME Hub testnet halts now and then. It stopped at block 5,523,300 (07:09 UTC on 2026-11-26) for a scheduled
+  upgrade to me-hub `v2.0.18.rc1` (governance proposal 11; `/cosmos/upgrade/v1beta1/current_plan`) and waits there
+  until validators switch binaries. That release migrates x/regiongov only: x/did, x/kyc, the FixedDeposit query and
+  the CosmWasm bindings are unchanged, and CI's devnet job builds that same release. Every page shows
   the latest block and its age and says so when the chain isn't moving: reads still work, and the CLI, MCP server and sandbox don't broadcast into it
   (NOT SENT, safe to retry) so nothing lands hours later by surprise.
 - Suspending an ME ID needs the global DAO or the KYC issuer, so the kill switch is shown on a node we run, not on
