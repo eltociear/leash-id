@@ -24,7 +24,7 @@ pub enum ContractError {
     #[error("no leash offered to this agent by {owner}")]
     NoOffer { owner: String },
 
-    #[error("unauthorized: only the owner can do this")]
+    #[error("unauthorized: only the owner (or, to approve, reject or revoke, a co-approver) can do this")]
     Unauthorized {},
 
     #[error("this leash starts working at {at} (unix s): its owner needs co-signatures, so co-approvers get 24 hours to revoke a leash set up alone")]
