@@ -5,3 +5,5 @@ target/
 devnet/home/
 devnet/*.log
 inbox/devnet.json
+.vercel
+.env*

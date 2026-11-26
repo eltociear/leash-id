@@ -5,7 +5,8 @@ devnet/
 contracts/
 artifacts/
 test/
-scripts/
+scripts/*
+!scripts/bundle-api.mjs
 examples/
 web/
 mcp/
@@ -13,3 +14,8 @@ assets/
 *.md
 !sandbox/README.md
 .github/
+.env*
+.vercel
+node_modules/
+public/
+*.log

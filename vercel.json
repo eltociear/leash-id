@@ -1,8 +1,26 @@
 {
-  "rewrites": [{ "source": "/", "destination": "/sandbox/index.html" }],
+  "framework": null,
+  "buildCommand": "npm i --no-save esbuild@0.25.0 && node scripts/bundle-api.mjs",
+  "installCommand": "npm ci --omit=dev",
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/sandbox/index.html"
+    }
+  ],
   "functions": {
-    "api/agent.mjs": { "maxDuration": 60, "includeFiles": "deployment.json" },
-    "api/attack.mjs": { "maxDuration": 60, "includeFiles": "deployment.json" },
-    "api/state.mjs": { "maxDuration": 20, "includeFiles": "deployment.json" }
-  }
+    "api/agent.mjs": {
+      "maxDuration": 60,
+      "includeFiles": "deployment.json"
+    },
+    "api/attack.mjs": {
+      "maxDuration": 60,
+      "includeFiles": "deployment.json"
+    },
+    "api/state.mjs": {
+      "maxDuration": 20,
+      "includeFiles": "deployment.json"
+    }
+  },
+  "outputDirectory": "public"
 }

@@ -117,7 +117,7 @@ export async function run(tool, args, { broadcast = false } = {}) {
   }
   const a = r.attrs ?? {};
   const status = r.status === "ok" ? (a.status === "pending" ? "held" : "paid") : r.status;
-  return { tool, args, status, reason: r.status === "not_sent" ? "couldn't send right now" : r.reason, payment_id: a.payment_id, tx: r.hash, link: r.link, simulated: r.simulated ?? false };
+  return { tool, args, status, reason: r.status === "not_sent" ? `couldn't send right now: ${String(r.reason ?? "").slice(0, 160)}` : r.reason, payment_id: a.payment_id, tx: r.hash, link: r.link, simulated: r.simulated ?? false };
 }
 
 export async function state() {
