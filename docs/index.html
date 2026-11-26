@@ -175,6 +175,7 @@ async function show(agent) {
       <dt>May pay</dt><dd>${pol.vendors.length ? `<ul class="vendors">${pol.vendors.map((v) => `<li class="mono">${esc(v)}</li>`).join("")}</ul>` : "no listed vendors"}${pol.any_verified_vendor ? `${pol.vendors.length ? "plus " : ""}any vendor holding a live ME ID at KYC level ≥ ${w.min_kyc_level}` : ""}</dd>
       <dt>Owner's bond</dt><dd>${w.owner_bond ? `<b>${mec(w.owner_bond.amount)}</b> locked in ${w.owner_bond.deposits.length} ME Hub fixed deposit(s) until at least ${when(w.owner_bond.earliest_unlock)} <span style="color:var(--muted)">(read live from x/wstaking)</span>` : `<span style="color:var(--muted)">none posted</span>`}</dd>
       <dt>Owner budget left</dt><dd>${mec(w.owner_balance)}${w.pending_count ? ` · ${w.pending_count} payment(s) waiting for the owner` : ""}</dd>
+      <dt>Signatures</dt><dd>${w.approvals_needed > 1 ? `${w.approvals_needed} people (different ME IDs) release a held payment; a change that loosens this leash waits 24 h for any of them to cancel it` : "the owner alone"}${w.pending_change ? `<br><b>Under review:</b> ${Object.keys(w.pending_change.kind)[0] === "resume" ? "a resume" : "a looser policy"}, from ${when(w.pending_change.effective_at)} unless a co-approver cancels it` : ""}</dd>
       <dt>Leash valid until</dt><dd>${when(pol.expires_at)}</dd>
       <dt>Fees</dt><dd>${fees}${ownLine}</dd>
     </dl>
