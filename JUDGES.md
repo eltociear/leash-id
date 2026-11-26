@@ -100,10 +100,11 @@ committed.
     asserts each outcome, and the owner console is driven in Chrome.
   - `testnet`: `verify`, and `check:chain`: every testnet tx the committed records link to is fetched from the
     chain and must show the outcome (paid / refused, with the contract's reason) and the contract the record says.
-- Seven independent reviews so far, each finding listed with its fix and a test in [CHANGELOG.md](CHANGELOG.md):
+- Nine independent reviews so far, each finding listed with its fix and a test in [CHANGELOG.md](CHANGELOG.md):
   adversarial reviews of the contract (0.2.0, 0.4.0, 0.6.0, 0.6.1), a fresh-eyes accounting review (0.7.0, the
-  daily window), an injection review of the pages (0.7.0) and a review of the off-chain code: MCP server, paywall,
-  CLI, sandbox (Unreleased). Nothing found has been left unfixed without being written down in
+  daily window), an injection review of the pages (0.7.0), a judge-style review that found the owner alone could
+  go around two signatures and a second review of that fix before deploying it (contract 0.5.3), and a review of
+  the off-chain code: MCP server, paywall, CLI, sandbox. Nothing found has been left unfixed without being written down in
   [THREAT_MODEL.md](THREAT_MODEL.md).
 - Sends hash the tx before broadcasting. An unconfirmed send is reported as UNKNOWN with its hash, never as
   "not sent", so a retry can't double-pay. While the testnet is halted a send isn't broadcast at all: it comes back
