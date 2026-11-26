@@ -23,7 +23,7 @@ async function tools(env) {
   return names;
 }
 
-const SAFE = ["action_log", "check_payment", "find_invoice", "list_inbox", "lookup_me_id", "my_payments", "pay_batch", "pay_for_api", "pay_invoice", "payment_status", "read_message", "verify_agent", "whoami"];
+const SAFE = ["action_log", "check_payment", "find_invoice", "list_inbox", "lookup_me_id", "my_payments", "pay_batch", "pay_for_api", "pay_invoice", "payment_status", "read_message", "retry_api_answer", "verify_agent", "whoami"];
 
 test("default tool set has no owner-only tools", async () => {
   assert.deepEqual(await tools({ LEASH_READONLY: "1", LEASH_AGENT_ADDRESS: AGENT }), SAFE);
@@ -71,6 +71,14 @@ test("read-only mode needs an agent address", () => {
   const r = spawnSync(process.execPath, [SERVER], { env: { ...base, LEASH_READONLY: "1" }, input: "" });
   assert.equal(r.status, 1);
   assert.match(r.stderr.toString(), /LEASH_AGENT_ADDRESS/);
+});
+
+test("the server refuses to run when another role's key sits in its environment (a model's shell inherits it)", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "leash-keys-"));
+  fs.writeFileSync(path.join(dir, "agent.mnemonic"), (await DirectSecp256k1HdWallet.generate(24)).mnemonic, { mode: 0o600 });
+  const r = spawnSync(process.execPath, [SERVER], { env: { ...base, LEASH_KEY_DIR: dir, LEASH_OWNER_MNEMONIC: (await DirectSecp256k1HdWallet.generate(24)).mnemonic }, input: "" });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr.toString(), /env LEASH_OWNER_MNEMONIC/);
 });
 
 test("the server refuses to run next to readable owner keys", async () => {

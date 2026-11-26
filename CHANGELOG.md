@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **Fixes from an independent review of the off-chain code** (no high-severity findings; all of these are fixed):
+  - Paywall: a tx is claimed only after the payer's proof checks out. Before, anyone who saw the payment on chain could
+    send its hash first with a junk proof and burn it, so the real buyer paid and got "already used".
+  - MCP `pay_for_api`: if the seller hasn't seen the tx yet (402/503), it asks again a few times; the new
+    `retry_api_answer` tool asks later without paying again. After an UNKNOWN payment it names the invoice for
+    `find_invoice` and won't call that seller again until it's settled (a second call would get a fresh invoice that
+    the contract's invoice dedupe can't match).
+  - MCP key check also refuses keys of other roles in its environment (`LEASH_OWNER_MNEMONIC`…), which a model's
+    shell inherits. New test.
+  - Vendor-supplied invoice references must be plain characters and are quoted in headlines; `action_log` is framed
+    as untrusted (its arguments came from emails and APIs).
+  - SSRF guard: NAT64, 6to4, Teredo, site-local, hex-mapped IPv4, 192.0.0.0/24 and 198.18.0.0/15 count as private.
+  - "tx already in mempool" (sdk code 19) is UNKNOWN, not NOT SENT: those bytes did reach a node.
+  - Sandbox: control payments at least 2 minutes apart and one at a time per instance, closing the seconds before a
+    payment shows on chain in which two instances could both see room under the daily cap.
+  - The `send_mec` honeypot no longer sends: it refuses, so a hijacked model can't drain the agent's gas money.
+  29 JS tests.
+
 - Link previews: every page (verifier, owner console, about, tx, sandbox) has Open Graph / Twitter tags and a
   1120×630 card (`docs/og.jpg`), so a link pasted in Telegram, X or Discord shows the project, not a bare URL.
 

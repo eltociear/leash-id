@@ -73,14 +73,26 @@ async function chainHalted() {
 // (this agent's SANDBOX-… payments in the last 24 h), which every server instance sees the same way; a per-instance
 // counter alone would multiply the cap by however many instances the host runs.
 export const BROADCASTS_PER_DAY = Number(process.env.SANDBOX_BROADCASTS_PER_DAY ?? 10);
+// The chain only counts a payment once it has landed (a few seconds), so two instances asked at the same moment could
+// both see room under the cap. Two rules close most of that window: at most one control payment per instance at a
+// time, and none within 2 minutes of the last one on chain. The hard limit underneath is the owner's fee grant.
+export const BROADCAST_GAP_S = Number(process.env.SANDBOX_BROADCAST_GAP_S ?? 120);
+let inFlight = false;
+/** True = this instance now holds the one broadcast slot; give it back with `inFlight = false` once the send has an outcome. */
 async function broadcastAllowed() {
-  if ((await incr(`sbx:broadcast:${new Date().toISOString().slice(0, 10)}`, 1, 86400)) > BROADCASTS_PER_DAY) return false;
+  if (inFlight) return false;
+  inFlight = true; // taken before any await, so two requests on one instance can't both pass
+  let ok = false;
   try {
-    const since = Date.now() / 1000 - 86400;
-    const recent = (await q({ payments_by_agent: { agent: await agent(), limit: 30 } })).payments;
-    return recent.filter((p) => /^SANDBOX-/.test(p.invoice) && p.created_at >= since).length < BROADCASTS_PER_DAY;
+    if ((await incr(`sbx:broadcast:${new Date().toISOString().slice(0, 10)}`, 1, 86400)) > BROADCASTS_PER_DAY) return false;
+    const now = Date.now() / 1000;
+    const recent = (await q({ payments_by_agent: { agent: await agent(), limit: 30 } })).payments.filter((p) => /^SANDBOX-/.test(p.invoice));
+    if (recent.some((p) => p.created_at > now - BROADCAST_GAP_S)) return false;
+    return (ok = recent.filter((p) => p.created_at >= now - 86400).length < BROADCASTS_PER_DAY);
   } catch {
     return false; // can't count: simulate instead of spending
+  } finally {
+    if (!ok) inFlight = false;
   }
 }
 
@@ -137,11 +149,14 @@ export async function run(tool, args, { broadcast = false } = {}) {
   const halted = broadcast && (await chainHalted());
   const live = broadcast && !halted && (await broadcastAllowed());
   // simulations go through simulateAs, which also copes with a tx of ours still waiting in the mempool
-  const r = live ? await act(ROLE, msg, []) : await simulateAs(me, msg);
+  let r;
+  if (live) {
+    try { r = await act(ROLE, msg, []); } finally { inFlight = false; }
+  } else r = await simulateAs(me, msg);
   if (r.status === "simulated_ok") {
     return { tool, args, status: "would_pass", simulated: true,
       reason: halted ? "ME Hub testnet isn't producing blocks right now, so nothing is broadcast; the contract would accept this"
-        : broadcast ? "the sandbox's broadcast budget for today is used up; the contract would accept this" : "the contract would accept this (simulated: the sandbox only broadcasts the control payment)" };
+        : broadcast ? `the sandbox broadcasts at most ${BROADCASTS_PER_DAY} control payments a day, ${Math.round(BROADCAST_GAP_S / 60)} min apart, and this one is past that; the contract would accept this` : "the contract would accept this (simulated: the sandbox only broadcasts the control payment)" };
   }
   const a = r.attrs ?? {};
   const status = r.status === "ok" ? (a.status === "pending" ? "held" : "paid") : r.status;

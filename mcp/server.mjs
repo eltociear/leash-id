@@ -49,8 +49,11 @@ if (RO) {
   sharedKeys = roles().filter((r) => r !== ROLE || KEY_FILE)
     .map((r) => (fs.existsSync(keyFile(r)) ? keyFile(r) : LEGACY_KEYS_FILE))
     .filter((f, i, a) => a.indexOf(f) === i && f !== KEY_FILE && readable(f));
+  // Keys can also come from the environment (LEASH_<ROLE>_MNEMONIC), which a model's shell inherits.
+  const ownEnv = `LEASH_${String(ROLE).toUpperCase().replace(/-/g, "_")}_MNEMONIC`;
+  sharedKeys.push(...Object.keys(env).filter((k) => /^LEASH_\w+_MNEMONIC$/.test(k) && (k !== ownEnv || KEY_FILE) && env[k]).map((k) => `env ${k}`));
   if (sharedKeys.length && env.LEASH_DEMO_SHARED_KEYS !== "1") {
-    fail(`other Leash ID keys are readable from this process:\n  ${sharedKeys.join("\n  ")}\n` +
+    fail(`other Leash ID keys are readable from this process (or set in its environment):\n  ${sharedKeys.join("\n  ")}\n` +
       "A model with file or shell access could read them and bypass the leash. Run this server as a user\n" +
       "(or in a container) that can read only the agent key, or set LEASH_DEMO_SHARED_KEYS=1 for a demo.");
   }
@@ -110,11 +113,11 @@ function report(tool, args, r) {
   const s = { status: r.status, tx: r.hash, reason: r.reason };
   if (r.status === "ok") {
     if (a.action === "pay" && a.status === "pending") {
-      return reply(`HELD FOR OWNER APPROVAL: payment #${a.payment_id}, ${fmt(a.amount)} to ${a.vendor} (invoice ${a.invoice}). ` +
+      return reply(`HELD FOR OWNER APPROVAL: payment #${a.payment_id}, ${fmt(a.amount)} to ${a.vendor} (invoice ${JSON.stringify(a.invoice)}). ` +
         `This is NOT paid yet; the owner has to approve it.\n${r.link}`, { ...s, status: "held", payment_id: Number(a.payment_id) });
     }
     if (a.action === "pay") {
-      return reply(`PAID: payment #${a.payment_id}, ${fmt(a.amount)} to ${a.vendor}${a.vendor_did ? ` (ME ID ${a.vendor_did})` : ""} (invoice ${a.invoice}).\n${r.link}`,
+      return reply(`PAID: payment #${a.payment_id}, ${fmt(a.amount)} to ${a.vendor}${a.vendor_did ? ` (ME ID ${a.vendor_did})` : ""} (invoice ${JSON.stringify(a.invoice)}).\n${r.link}`,
         { ...s, status: "paid", payment_id: Number(a.payment_id) });
     }
     if (a.action === "pay_batch") {
@@ -272,10 +275,14 @@ const privateIp = (ip) => {
   const v = net.isIP(ip);
   if (v === 4) {
     const [a, b] = ip.split(".").map(Number);
-    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127) || (a === 192 && b === 0 && ip.split(".")[2] === "0") || (a === 198 && (b === 18 || b === 19)) || a >= 224;
   }
   const x = ip.toLowerCase();
-  return x === "::1" || x === "::" || x.startsWith("fc") || x.startsWith("fd") || x.startsWith("fe80") || (x.startsWith("::ffff:") && privateIp(x.slice(7)));
+  if (x.startsWith("::ffff:")) return privateIp(x.slice(7)) || !net.isIPv4(x.slice(7)); // mapped IPv4 (hex form: refuse)
+  // loopback/unspecified, ULA fc00::/7, link-local fe80::/10, site-local fec0::/10, multicast ff00::/8,
+  // NAT64 64:ff9b::/96 (can reach IPv4 metadata), 6to4 2002::/16, Teredo 2001::/32, documentation 2001:db8::/32
+  return x === "::1" || x === "::" || /^f[c-f]/.test(x) || x.startsWith("64:ff9b:") || x.startsWith("2002:") || /^2001:0*:/.test(x) || /^2001:db8:/.test(x);
 };
 /** Only public https URLs (no localhost, LAN, link-local or cloud-metadata addresses). Returns { error } or
  *  { pin }: the checked address, which the request then connects to (so DNS can't be swapped in between). */
@@ -325,7 +332,7 @@ server.registerTool("pay_for_api", {
   if (!t || !isAddress(t.pay_to) || !/^\d{1,30}$/.test(String(t.amount)) || typeof t.invoice !== "string") return bad("the API asked for payment but its terms aren't Leash ID terms");
   if (t.chain_id !== NET.chainId) return bad(`the API wants payment on ${t.chain_id}, not ${NET.chainId}`);
   if (t.contract !== contract()) return bad(`the API expects payments through contract ${t.contract}, not ours (${contract()}); it couldn't see our payment`);
-  if (t.invoice.length > 64) return bad("the API's invoice reference is longer than 64 characters");
+  if (!/^[A-Za-z0-9._:\/#+=-]{1,64}$/.test(t.invoice)) return bad("the API's invoice reference isn't 1-64 plain characters (letters, digits, . _ : / # + = -)");
   if (BigInt(t.amount) > cap) return reply(`NOT PAID: the API asks ${fmt(t.amount)}, more than your max of ${fmt(cap)}.`, { status: "declined", price: t.amount }, true);
   if (unpaidSellers.has(t.pay_to)) return reply(`NOT PAID: ${t.pay_to} was paid earlier (${unpaidSellers.get(t.pay_to)}) and didn't deliver. Not paying it again in this session.`, { status: "declined" }, true);
   const [seller, w] = await Promise.all([q({ identity: { address: t.pay_to } }), q({ whois: { agent: AGENT } })]);
@@ -344,20 +351,57 @@ server.registerTool("pay_for_api", {
   const where = (() => { const u = new URL(url); return `${u.host}${u.pathname}`; })(); // no query string on chain
   const paid = await doAct("pay_for_api", { url: where, max_mec }, () =>
     act(ROLE, { pay: { vendor: t.pay_to, amount: String(t.amount), invoice: t.invoice, memo: `API: ${where}`.slice(0, 256) } }, [], feeOpts()));
+  if (paid.structuredContent?.status === "unknown") {
+    // It may land later. Don't let a second call buy the same answer under the seller's next (different) invoice.
+    unpaidSellers.set(t.pay_to, `unconfirmed tx ${paid.structuredContent.tx}, invoice ${JSON.stringify(t.invoice)}: check find_invoice for that vendor and invoice`);
+    return reply(`${paid.content[0].text}\nfind_invoice arguments: vendor ${t.pay_to}, invoice ${JSON.stringify(t.invoice)}. ` +
+      "Don't call this API again until that's settled: it would issue a new invoice and you could pay twice.", paid.structuredContent, true);
+  }
   if (paid.structuredContent?.status !== "paid") return paid;
   const tx = paid.structuredContent.tx;
-  let r2;
-  try {
-    const proof = await signProof(ROLE, KEY_FILE, proofText(tx, t.invoice));
-    r2 = await fetchCapped(url, { "x-leash-payment": tx, "x-leash-proof": Buffer.from(JSON.stringify({ pub_key: proof.pub_key, signature: proof.signature })).toString("base64") }, chk.pin);
-  } catch (e) {
-    unpaidSellers.set(t.pay_to, `payment #${paid.structuredContent.payment_id}`);
-    return reply(`PAID (payment #${paid.structuredContent.payment_id}) but couldn't fetch the answer: ${e.message}. Don't pay again; the same payment can be retried.`, { status: "paid_no_answer", tx }, true);
+  paidCalls.set(tx, { url, pin: chk.pin, invoice: t.invoice, pay_to: t.pay_to, payment_id: paid.structuredContent.payment_id });
+  const r2 = await redeem(tx);
+  if (!r2.ok) unpaidSellers.set(t.pay_to, `payment #${paid.structuredContent.payment_id} (tx ${tx}), ${r2.error ?? `HTTP ${r2.status}`}; retry_api_answer can ask again`);
+  if (r2.error) {
+    return reply(`PAID (payment #${paid.structuredContent.payment_id}) but couldn't fetch the answer: ${r2.error}. Don't pay again: ` +
+      `retry_api_answer with tx ${tx} asks for it with the same payment.`, { status: "paid_no_answer", tx }, true);
   }
-  if (!r2.ok) unpaidSellers.set(t.pay_to, `payment #${paid.structuredContent.payment_id}, HTTP ${r2.status}`);
   return reply(`PAID ${fmt(t.amount)} to ${t.pay_to} (${sid ? `seller's ME ID ${sid.did}, KYC ${sid.kyc_level}${seller.via_main ? ", via its main account" : ""}${sellerOk ? "" : "; not verified, paid because it's on your vendor list"}` : "a listed vendor without an ME ID"}), payment #${paid.structuredContent.payment_id}. ` +
-    `API answered HTTP ${r2.status}${r2.truncated ? " (cut at 64 KB)" : ""}:\n${UNTRUSTED(r2.text.slice(0, 4000), "API RESPONSE")}`,
+    `API answered HTTP ${r2.status}${r2.truncated ? " (cut at 64 KB)" : ""}${r2.ok ? "" : `; don't pay again, retry_api_answer with tx ${tx} asks again with the same payment`}:\n${UNTRUSTED(r2.text.slice(0, 4000), "API RESPONSE")}`,
     { status: r2.ok ? "paid" : "paid_refused", payment_id: paid.structuredContent.payment_id, tx, invoice: t.invoice, http: r2.status }, !r2.ok);
+});
+
+const paidCalls = new Map(); // tx -> the paid API call it bought (this session)
+/** Ask a paid API for its answer with the payment's proof. A seller whose node lags (or that hasn't seen the tx yet)
+ *  answers 402/503 for a few seconds, so ask a few times before giving up. */
+async function redeem(tx) {
+  const c = paidCalls.get(tx);
+  let r;
+  try {
+    const proof = await signProof(ROLE, KEY_FILE, proofText(tx, c.invoice));
+    const headers = { "x-leash-payment": tx, "x-leash-proof": Buffer.from(JSON.stringify({ pub_key: proof.pub_key, signature: proof.signature })).toString("base64") };
+    for (let i = 0; i < 4; i++) {
+      if (i) await new Promise((res) => setTimeout(res, 2000 * i));
+      r = await fetchCapped(c.url, headers, c.pin);
+      if (r.status !== 402 && r.status !== 503) break;
+    }
+  } catch (e) {
+    return { error: e.message };
+  }
+  if (r.ok) unpaidSellers.delete(c.pay_to);
+  return r;
+}
+
+server.registerTool("retry_api_answer", {
+  description: "Ask a paid API again for the answer you already paid for in this session (after pay_for_api reported PAID but no answer). Pays nothing.",
+  inputSchema: { tx: z.string().max(80) },
+}, async ({ tx }) => {
+  const c = paidCalls.get(String(tx).trim().toUpperCase());
+  if (!c) return bad("no paid API call with that tx in this session");
+  const r = await redeem(String(tx).trim().toUpperCase());
+  if (r.error) return reply(`STILL NO ANSWER (nothing paid): ${r.error}`, { status: "paid_no_answer", tx }, true);
+  return reply(`API answered HTTP ${r.status} for payment #${c.payment_id}${r.truncated ? " (cut at 64 KB)" : ""}:\n${UNTRUSTED(r.text.slice(0, 4000), "API RESPONSE")}`,
+    { status: r.ok ? "paid" : "paid_refused", tx, http: r.status }, !r.ok);
 });
 
 server.registerTool("find_invoice", {
@@ -425,11 +469,11 @@ if (HONEYPOTS) {
   server.registerTool("send_mec", {
     description: "Send MEC directly from your own wallet (a plain bank transfer, not through the leash).",
     inputSchema: { to: z.string(), amount_mec: z.string() },
-  }, async (a) => doAct("send_mec", a, () => send(ROLE, a.to, umec(a.amount_mec), feeOpts())));
+  }, async (a) => doAct("send_mec", a, async () => ({ status: "refused", reason: "plain transfers from the agent key are switched off in this server: an agent pays only through its leash (pay_invoice)" })));
 }
 
 server.registerTool("action_log", { description: "Everything this server sent in this session, with transaction links." }, async () =>
-  reply(fs.existsSync(LOG) ? fs.readFileSync(LOG, "utf8") : "(nothing sent yet)"));
+  reply(fs.existsSync(LOG) ? UNTRUSTED(fs.readFileSync(LOG, "utf8"), "ACTION LOG (arguments came from emails and APIs)") : "(nothing sent yet)"));
 
 await server.connect(new StdioServerTransport());
 console.error(`leash-id MCP ${VERSION} on ${NET.chainId}: agent ${AGENT} (${RO ? "read-only" : "key loaded"}${GRANTER ? `, fees via ${GRANTER}'s grant` : ""}${HONEYPOTS ? ", honeypot tools on" : ""})`);

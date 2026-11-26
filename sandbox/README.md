@@ -4,7 +4,10 @@ A page that hands visitors a real agent key and lets them attack it: one-click a
 email that Claude (with the agent key behind its tools) reads and acts on. The Leash ID contract refuses everything
 outside the leash. Everything is answered by simulating against the live contract (same code path, no fee), except
 one fixed control payment to our own vendor address, which is broadcast at most 10 times in any 24 hours (counted
-from the chain, so every server instance agrees; `SANDBOX_BROADCASTS_PER_DAY`). Past that it is simulated too.
+from the chain, so every server instance agrees; `SANDBOX_BROADCASTS_PER_DAY`), at least 2 minutes apart
+(`SANDBOX_BROADCAST_GAP_S`, which also covers the seconds before a payment shows up on chain), one at a time per
+instance. Past that it is simulated too. The hard limit under all of it is the owner's fee grant, which caps what
+the sandbox's fees can ever cost.
 
 Status: the sandbox's leash is live on ME Hub testnet: agent `me15xd643xjukalnklc5jqvqnp36sc0yrz2wxnfan`, owner ME ID
 2611255912050, ≤ 0.02 MEC per payment, ≤ 0.05 MEC per 24 h, our vendor only. The agent key holds **0 MEC**: the owner
