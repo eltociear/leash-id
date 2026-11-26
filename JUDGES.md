@@ -164,7 +164,7 @@ committed.
 ## Check it yourself
 
 ```bash
-git clone https://github.com/eltociear/leash-id && cd leash-id && npm ci   # its advisories are in puppeteer (browser e2e only); npm audit --omit=dev: 0
+git clone https://github.com/eltociear/leash-id && cd leash-id && npm ci   # npm audit: 0 vulnerabilities
 npm run judge                     # all four checks below in one go (~40 s, read-only), one line each
 npm run verify                    # testnet: deployed code == this repo's build, no admin
 npm run test:js                   # 26 JS tests, no chain needed

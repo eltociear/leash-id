@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `npm audit`: 0 vulnerabilities (puppeteer-core 25; the advisories were in its FTP/proxy dependencies, e2e only).
+
 - The hosted sandbox's nav linked to `/docs/…`, which Vercel doesn't serve (404): it now links to the Pages site,
   and every Pages page links to the sandbox ("Red-team it"). Sandbox tx links open the readable tx page.
 - The sandbox's control-payment label says when it's only simulated (chain halted); `/api/state` gives the policy
