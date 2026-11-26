@@ -1,8 +1,8 @@
 {
   "rewrites": [{ "source": "/", "destination": "/sandbox/index.html" }],
   "functions": {
-    "api/agent.mjs": { "maxDuration": 60 },
-    "api/attack.mjs": { "maxDuration": 60 },
-    "api/state.mjs": { "maxDuration": 20 }
+    "api/agent.mjs": { "maxDuration": 60, "includeFiles": "deployment.json" },
+    "api/attack.mjs": { "maxDuration": 60, "includeFiles": "deployment.json" },
+    "api/state.mjs": { "maxDuration": 20, "includeFiles": "deployment.json" }
   }
 }
