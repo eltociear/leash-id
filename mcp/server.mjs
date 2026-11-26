@@ -27,7 +27,7 @@ import {
   NET, ROOT, address, balance, contract, feeGrant, fmt, isAddress, isNotFound, keyFile, q, roles, LEGACY_KEYS_FILE, signProof, toUmec,
 } from "../lib/chain.mjs";
 import { proofText } from "../lib/vendor.mjs";
-import { act, mecAmounts, send } from "../lib/tx.mjs";
+import { act, chainNote, mecAmounts, send } from "../lib/tx.mjs";
 
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
 const env = process.env;
@@ -211,12 +211,13 @@ server.registerTool("verify_agent", {
   if (!isAddress(agent)) return bad(`not an ME Hub address: ${agent}`);
   try {
     const w = await q({ whois: { agent } });
+    const halt = w.can_pay_now ? await chainNote() : null;
     return reply(`${agent} is leashed by ${w.owner} — ${meIdLine(w.owner_me_id)}\n` +
-      `verified=${w.verified}, can_pay_now=${w.can_pay_now}${w.blocked_by ? ` (${w.blocked_by})` : ""}\n` +
+      `verified=${w.verified}, can_pay_now=${w.can_pay_now}${w.blocked_by ? ` (${w.blocked_by})` : ""}${halt ? ` (but ${halt})` : ""}\n` +
       `limits: ≤ ${fmt(w.policy.per_tx_limit)} per payment, ≤ ${fmt(w.policy.daily_limit)} per 24h; expires ${when(w.policy.expires_at)}` +
       (w.owner_bond ? `\nowner's bond: ${fmt(w.owner_bond.amount)} locked in ME Hub fixed deposits until at least ${when(w.owner_bond.earliest_unlock)}` : "") +
       (w.approvals_needed > 1 ? `\n${w.approvals_needed} people (different ME IDs) release a held payment; loosening this leash waits 24 h for any of them to cancel` : ""),
-      { agent, registered: true, owner: w.owner, verified: w.verified, can_pay_now: w.can_pay_now, approvals_needed: w.approvals_needed });
+      { agent, registered: true, owner: w.owner, verified: w.verified, can_pay_now: w.can_pay_now, approvals_needed: w.approvals_needed, chain_halted: Boolean(halt) });
   } catch (e) {
     if (isNotFound(e)) return reply(`${agent} is NOT a Leash ID agent: nobody verified has taken responsibility for it.`, { agent, registered: false });
     return reply(`COULD NOT CHECK ${agent}: ME Hub did not answer (${String(e.message ?? e).slice(0, 160)}). This says nothing about the agent; try again.`, { agent, status: "unavailable" }, true);

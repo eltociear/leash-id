@@ -8,7 +8,7 @@ import {
   KEY_DIR, LEGACY_KEYS_FILE, NET, ROOT, addrOf, address, balance, contract, contractInfo, deployment,
   feeGrant, fmt, isNotFound, keyFile, meIdRest, q, readKey, reader, roles, saveDeployment, signer, toUmec,
 } from "./lib/chain.mjs";
-import { act, executeMsg, grantGasMsg, mecAmounts, revokeGasMsg, sendTx } from "./lib/tx.mjs";
+import { act, chainNote, executeMsg, grantGasMsg, mecAmounts, revokeGasMsg, sendTx } from "./lib/tx.mjs";
 import { depositIdOf, depositTerms, fixedDepositMsg, regionOf } from "./lib/wstaking.mjs";
 
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
@@ -315,7 +315,8 @@ const cmds = {
       const g = await feeGrant(agent, w.owner).catch(() => null);
       const own = fmt(await balance(agent));
       console.log(`gas        ${g ? `paid by the owner's fee grant: ${g.spend_limit ? fmt(g.spend_limit) : "no cap"} left${g.expiration ? `, until ${g.expiration.slice(0, 10)}` : ""}${g.allowed_messages ? ` (${g.allowed_messages.map((m) => m.split(".").pop()).join(", ")} only)` : ""}; the agent's own wallet holds ${own}` : `from the agent's own wallet: ${own}`}`);
-      console.log(`can pay    ${w.can_pay_now ? "yes" : `NO: ${mecAmounts(w.blocked_by)}`}`);
+      const halt = w.can_pay_now ? await chainNote() : null;
+      console.log(`can pay    ${w.can_pay_now ? (halt ? `yes by its leash, but ${halt}` : "yes") : `NO: ${mecAmounts(w.blocked_by)}`}`);
       if (w.pending_change) {
         const c = w.pending_change, k = Object.keys(c.kind)[0];
         console.log(`waiting    ${k === "resume" ? "a resume" : "a looser policy"}, applies from ${when(c.effective_at)} unless a co-approver cancels it`);
