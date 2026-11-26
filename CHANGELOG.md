@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Sends check the chain is moving before broadcasting. When the latest block is over 3 minutes old
+  (`LEASH_MAX_BLOCK_AGE_S`, 0 turns it off), the CLI, the MCP server and the sandbox answer NOT SENT, "ME Hub isn't
+  producing blocks (the latest, #5523300, is 7.8 h old) … safe to retry", in under a second. Before, the tx went into
+  a halted chain's mempool, the caller waited 60 s for UNKNOWN, and the payment could land hours later. Checked
+  against the halted testnet; new test in `test/tx.test.mjs` (27 JS tests).
+
 - **Contract 0.5.3: two signatures can't be gone around by the owner alone** (found by a judge-style review).
   With co-approvers, the owner key could still drop the approval line, raise limits, add a vendor, lower the
   threshold (or add a friendly co-approver at the same one), set up a fresh agent, or withdraw the budget, and

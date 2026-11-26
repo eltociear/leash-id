@@ -63,3 +63,18 @@ test("included: ok with the contract's attributes; out of gas: failed, fee charg
   assert.equal(oog.status, "failed");
   assert.match(oog.reason, /out of gas/);
 });
+
+test("the chain is halted: not sent (nothing broadcast), and the reason says so", async () => {
+  const old = { header: { height: 5523300, time: new Date(Date.now() - 8 * 3600e3).toISOString() } };
+  const f = fake({ broadcast: async () => assert.fail("must not broadcast into a halted chain") });
+  f.client.getBlock = async () => old;
+  const r = await sendNow(f, [], "m", false);
+  assert.equal(r.status, "not_sent");
+  assert.match(r.reason, /isn't producing blocks .*#5523300.*8\.0 h old.*safe to retry/);
+  // a fresh block, or a failing block query, doesn't get in the way
+  f.client.getBlock = async () => ({ header: { height: 9, time: new Date().toISOString() } });
+  f.client.broadcastTxSync = async () => HASH;
+  assert.equal((await sendNow(f, [], "m", false)).status, "unknown");
+  f.client.getBlock = async () => { throw new Error("fetch failed"); };
+  assert.equal((await sendNow(f, [], "m", false)).status, "unknown");
+});

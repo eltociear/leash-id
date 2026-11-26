@@ -102,7 +102,8 @@ committed.
     chain and must show the outcome (paid / refused, with the contract's reason) and the contract the record says.
 - Findings from two adversarial reviews are listed, with their fixes, in [CHANGELOG.md](CHANGELOG.md) (0.2.0, 0.4.0).
 - Sends hash the tx before broadcasting. An unconfirmed send is reported as UNKNOWN with its hash, never as
-  "not sent", so a retry can't double-pay.
+  "not sent", so a retry can't double-pay. While the testnet is halted a send isn't broadcast at all: it comes back
+  NOT SENT with the age of the latest block, in under a second, instead of waiting 60 s and then reporting UNKNOWN.
 
 **Depth of ME Network integration (25)**
 - ME Hub opens three Stargate queries and one custom message to CosmWasm. Leash ID uses every one that carries
@@ -167,7 +168,7 @@ committed.
 git clone https://github.com/eltociear/leash-id && cd leash-id && npm ci   # npm audit: 0 vulnerabilities
 npm run judge                     # all four checks below in one go (~40 s, read-only), one line each
 npm run verify                    # testnet: deployed code == this repo's build, no admin
-npm run test:js                   # 26 JS tests, no chain needed
+npm run test:js                   # 27 JS tests, no chain needed
 node scripts/check-runs.mjs       # the committed run records say what we claim
 npm run check:chain               # ...and every testnet tx they link to says the same on chain (read-only)
 cat runs/testnet-claude-*.jsonl | jq -r 'select(.type=="result").result'  # Claude's own report (testnet)
