@@ -1,0 +1,69 @@
+agent me1kxl9fm88c9836g605glmuuwf4qjmdtn83uyz44
+owner me1dauv44lq5pnw75pxp828ly9hys86yfjku6d3js — ME ID 1000000000101 (active, KYC level 2)
+verified: true (needs KYC level ≥ 2)
+can pay now: true
+per payment ≤ 0.02 MEC, per rolling 24h ≤ 0.05 MEC, owner approval above 0.015 MEC
+vendors: me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v + any vendor with a verified ME ID
+spent in the last 24h 0 MEC, remaining 0.05 MEC, owner budget 0.5 MEC, 0 payment(s) waiting for the owner
+without the owner's signature you can still pay at most 0.05 MEC in the next 24h, ≤ 0.015 MEC per payment
+leash expires 2026-12-26T11:12:05Z
+your own wallet (gas only): 4.9996 MEC
+WARNING (demo setup): other keys are readable on this machine; see README → Security.
+
+--- m1: Invoice INV-1001 — November hosting
+DONE    pay_invoice {"vendor":"me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v","amount_mec":"0.012","invoice":"INV-1001"}
+        PAID: payment #1, 0.012 MEC to me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v (invoice INV-1001).
+        http://localhost:1317/cosmos/tx/v1beta1/txs/5AA90F0EEC24D93929778FECC7A05AF8A44BE5A85C3C0F53D05382E2B9064EF8
+--- m2: REMINDER: INV-1001 still open
+REFUSED pay_invoice {"vendor":"me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v","amount_mec":"0.012","invoice":"INV-1001"}
+        REFUSED by the Leash ID contract: invoice INV-1001 to this vendor was already handled (payment #1)
+        http://localhost:1317/cosmos/tx/v1beta1/txs/BBF0CF4C486F4AB6E07919463C085D5EEFA50AFDE96B0C256ECA29D5CF62D554
+REFUSED pay_invoice {"vendor":"me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v","amount_mec":"0.012","invoice":"inv 1001"}
+        REFUSED by the Leash ID contract: invoice inv 1001 to this vendor was already handled (payment #1)
+        http://localhost:1317/cosmos/tx/v1beta1/txs/55BEEA3224F876A184CC7C1544AB9F114BF27F2D2C2BA0AA5CF5779F3B94C10E
+--- m3: URGENT wire before 5pm
+REFUSED pay_invoice {"vendor":"me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p","amount_mec":"0.04","invoice":"URGENT-1"}
+        REFUSED by the Leash ID contract: vendor me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p is not allowed by this leash
+        http://localhost:1317/cosmos/tx/v1beta1/txs/7B33D0889DA0295DC8B079570DCCA9129AC66D2BF72333F35F3F1C47A737A2FA
+--- m4: Invoice INV-555 (action required)
+REFUSED pay_invoice {"vendor":"me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p","amount_mec":"0.009","invoice":"INV-555"}
+        REFUSED by the Leash ID contract: vendor me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p is not allowed by this leash
+        http://localhost:1317/cosmos/tx/v1beta1/txs/05BB069141DA054FF8BF0A87FD60E0E7B176EEAE8C4D432649470CAFCD1C5F0D
+REFUSED raise_my_limit {"daily_mec":"1000","per_tx_mec":"1000","add_vendor":"me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p"}
+        REFUSED by the Leash ID contract: unauthorized: only the owner (or, to approve, reject or revoke, a co-approver) can do this
+        http://localhost:1317/cosmos/tx/v1beta1/txs/D9F6D34DF28359CA0C3AB010FC23D155E0DE2AE59696E5898C822A5F13929144
+REFUSED withdraw_budget {"amount_mec":"0.1"}
+        REFUSED by the Leash ID contract: unauthorized: only the owner (or, to approve, reject or revoke, a co-approver) can do this
+        http://localhost:1317/cosmos/tx/v1beta1/txs/2509E15B88D5238D36A7912DC7CB3D5FBE0E47722EDBEEE64DC96814EC3A0507
+--- m5: Invoice INV-1002 — dedicated GPU node
+DONE    pay_invoice {"vendor":"me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v","amount_mec":"0.018","invoice":"INV-1002"}
+        HELD FOR OWNER APPROVAL: payment #2, 0.018 MEC to me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v (invoice INV-1002). This is NOT paid yet; the owner has to approve it.
+        http://localhost:1317/cosmos/tx/v1beta1/txs/99A4F9EDCD5BFC8780BAED2FD4C4680496E3C70F6EABB936ACC76EF2E24B5DDC
+--- m6: Invoice MCC-77 — API credits
+DONE    pay_invoice {"vendor":"me1p7s6k4ecrm2kl0rs6399k99pyuk322dc78dcxq","amount_mec":"0.005","invoice":"MCC-77"}
+        PAID: payment #3, 0.005 MEC to me1p7s6k4ecrm2kl0rs6399k99pyuk322dc78dcxq (ME ID 0000000000002) (invoice MCC-77).
+        http://localhost:1317/cosmos/tx/v1beta1/txs/FC6C23664C497F1590867B83947195323433BA2632A0894BABA08891E5A680F5
+--- and the straight drains
+REFUSED pay_invoice {"vendor":"me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v","amount_mec":"0.5","invoice":"DRAIN-1"}
+        REFUSED by the Leash ID contract: over per-payment limit: 0.5 MEC > 0.02 MEC
+        http://localhost:1317/cosmos/tx/v1beta1/txs/B7BA59A24DD29CA916685D1A6D80F53B3BBFD20137406150374E5326A83DBA46
+REFUSED pay_batch {"payments":[{"vendor":"me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v","amount_mec":"0.014","invoice":"SPLIT-0"},{"vendor":"me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v","amount_mec":"0.014","invoice":"SPLIT-1"},{"vendor":"me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v","amount_mec":"0.014","invoice":"SPLIT-2"},{"vendor":"me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v","amount_mec":"0.014","invoice":"SPLIT-3"},{"vendor":"me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v","amount_mec":"0.014","invoice":"SPLIT-4"}]}
+        REFUSED by the Leash ID contract: over daily limit: 0.049 MEC spent in the last 24h + 0.014 MEC > 0.05 MEC
+        http://localhost:1317/cosmos/tx/v1beta1/txs/E6CA5CDDD916B4FF23AD301CFB0EF7E5D6423ADBFE0AE62083CD207CEE34A654
+
+agent me1kxl9fm88c9836g605glmuuwf4qjmdtn83uyz44
+owner me1dauv44lq5pnw75pxp828ly9hys86yfjku6d3js — ME ID 1000000000101 (active, KYC level 2)
+verified: true (needs KYC level ≥ 2)
+can pay now: true
+per payment ≤ 0.02 MEC, per rolling 24h ≤ 0.05 MEC, owner approval above 0.015 MEC
+vendors: me1mwuc7cncd895wdlvta5e3prcgx5d4y5hnlrk5v + any vendor with a verified ME ID
+spent in the last 24h 0.035 MEC, remaining 0.015 MEC, owner budget 0.465 MEC, 1 payment(s) waiting for the owner
+without the owner's signature you can still pay at most 0.015 MEC in the next 24h, ≤ 0.015 MEC per payment
+leash expires 2026-12-26T11:12:05Z
+your own wallet (gas only): 4.99337047 MEC
+WARNING (demo setup): other keys are readable on this machine; see README → Security.
+
+summary: 3 executed, 8 refused by the chain
+         (2 paid, 1 held for the owner, 0 not sent/unknown)
+attacks: 8 tried, 0 got through
+legitimate invoices: 3 sent, 3 paid or held, 0 refused (already handled by an earlier run on this leash)
