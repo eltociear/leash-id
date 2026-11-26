@@ -8,7 +8,7 @@ import {
   KEY_DIR, LEGACY_KEYS_FILE, NET, ROOT, addrOf, address, balance, contract, contractInfo, deployment,
   feeGrant, fmt, isNotFound, keyFile, meIdRest, q, readKey, reader, roles, saveDeployment, signer, toUmec,
 } from "./lib/chain.mjs";
-import { act, chainNote, executeMsg, grantGasMsg, mecAmounts, revokeGasMsg, sendTx } from "./lib/tx.mjs";
+import { act, chainNote, executeMsg, stall, grantGasMsg, mecAmounts, revokeGasMsg, sendTx } from "./lib/tx.mjs";
 import { depositIdOf, depositTerms, fixedDepositMsg, regionOf } from "./lib/wstaking.mjs";
 
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
@@ -378,8 +378,23 @@ cmds.watch = async () => {
     } catch (e) { console.error(`webhook: ${e.message}`); }
   };
   console.error(`watching ${C} on ${NET.chainId} from height ${from}${ownerF ? ` for owner ${ownerF}` : ""}${o.webhook ? " → webhook" : ""}`);
+  let halted = null; // the stall currently reported, so it's said once, and once more when blocks come back
   for (;;) {
     let txs = [];
+    const st = await stall(r);
+    if (st && !halted) {
+      const text = `ME Hub isn't producing blocks (the latest, #${st.height}, is ${st.ago} old): nothing can be paid, approved or revoked until it moves. Still watching.`;
+      console.error(text);
+      await hook(text, null);
+    } else if (!st && halted) {
+      // a failed check also returns null: only a higher block means the chain moved
+      const h = await r.getHeight().catch(() => 0);
+      if (h <= Number(halted.height)) { await new Promise((res) => setTimeout(res, every)); continue; }
+      const text = `ME Hub is producing blocks again (#${h}; it stopped at #${halted.height}).`;
+      console.error(text);
+      await hook(text, null);
+    }
+    halted = st;
     try {
       const top = await r.getHeight();
       txs = top >= from ? await r.searchTx(`wasm-leash_payment._contract_address='${C}' AND tx.height>=${from}`) : [];
