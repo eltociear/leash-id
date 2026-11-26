@@ -11,6 +11,16 @@ const checks = [
   ["Every testnet tx those records link to says the same on chain", "node", ["scripts/check-chain.mjs"]],
 ];
 const t0 = Date.now();
+// Is the testnet moving? A halted chain doesn't fail any check (they read history), but it's worth knowing first.
+const REST = process.env.ME_REST ?? "https://beta-hub-1317.explorer-testnet.me";
+try {
+  const b = (await (await fetch(`${REST}/cosmos/base/tendermint/v1beta1/blocks/latest`, { signal: AbortSignal.timeout(15000) })).json()).block.header;
+  const age = Math.round((Date.now() - Date.parse(b.time)) / 1000);
+  const ago = age < 120 ? `${age} s ago` : age < 7200 ? `${Math.round(age / 60)} min ago` : `${(age / 3600).toFixed(1)} h ago`;
+  console.log(`ME Hub testnet: latest block ${b.height}, ${ago}${age > 120 ? "  (NOT producing blocks right now; the checks below read what is already on chain and still apply)" : ""}\n`);
+} catch (e) {
+  console.log(`ME Hub testnet: couldn't read the latest block (${e.message}); the chain checks below may fail for that reason\n`);
+}
 const results = [];
 for (const [what, cmd, args] of checks) {
   if (process.stdout.isTTY) process.stdout.write(`… ${what}`);
@@ -27,5 +37,5 @@ for (const [what, cmd, args] of checks) {
 const bad = results.filter((r) => !r.ok);
 for (const r of bad) console.log(`\n--- ${r.what}\n${r.out.split("\n").slice(-25).join("\n")}`);
 console.log(`\n${bad.length ? `${bad.length} of ${results.length} checks failed` : `all ${results.length} checks pass`} in ${((Date.now() - t0) / 1000).toFixed(0)} s` +
-  "\nNext: the contract's own 39 tests need Rust 1.81 (npm run test:contract); the tour is JUDGES.md.");
+  "\nNext: the contract's own 41 tests need Rust 1.81 (npm run test:contract); the tour is JUDGES.md.");
 process.exit(bad.length ? 1 : 0);
