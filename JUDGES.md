@@ -152,6 +152,7 @@ committed.
 
 ```bash
 git clone https://github.com/eltociear/leash-id && cd leash-id && npm ci   # its advisories are in puppeteer (browser e2e only); npm audit --omit=dev: 0
+npm run judge                     # all four checks below in one go (~40 s, read-only), one line each
 npm run verify                    # testnet: deployed code == this repo's build, no admin
 npm run test:js                   # 24 JS tests, no chain needed
 node scripts/check-runs.mjs       # the committed run records say what we claim

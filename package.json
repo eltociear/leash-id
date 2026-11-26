@@ -12,7 +12,8 @@
     "devnet": "bash scripts/devnet-runs.sh",
     "bundle:web": "bash scripts/bundle-web.sh",
     "e2e:owner": "node scripts/e2e-owner.mjs",
-    "docs": "node scripts/serve-docs.mjs"
+    "docs": "node scripts/serve-docs.mjs",
+    "judge": "node scripts/judge.mjs"
   },
   "keywords": [
     "me-network",

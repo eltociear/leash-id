@@ -11,7 +11,7 @@ Release 0.7.0 · contract 0.5.2 live on ME Hub testnet (code 46, no admin)
 **Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet) ·
 **Owner console:** https://eltociear.github.io/leash-id/owner.html (Keplr; or [read-only, no wallet](https://eltociear.github.io/leash-id/owner.html#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq)) ·
 **Red-team it:** https://leash-id-sandbox.vercel.app/ (attack a live testnet agent's key; [`sandbox/`](sandbox/README.md), or `node scripts/sandbox-dev.mjs` with no key) ·
-**[Threat model](THREAT_MODEL.md)** · **[Security / deployment](SECURITY.md)** · **[Toward a standard: PQ Agent Mandate](MANDATE.md)** · **Is the deployed code this code?** `npm run verify`
+**[Threat model](THREAT_MODEL.md)** · **[Security / deployment](SECURITY.md)** · **[Toward a standard: PQ Agent Mandate](MANDATE.md)** · **Check everything in one command:** `npm ci && npm run judge` (read-only, ~40 s)
 
 AI agents are starting to pay invoices and buy services. Two things are missing:
 
@@ -250,6 +250,7 @@ client (`runs/devnet-obey-*.txt`) and agent-to-agent commerce (`runs/devnet-comm
 npm ci
 npm test          # 39 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 24 JS tests (amounts, send outcomes, RPC failover, MCP, paywall, SSRF, CLI)
 npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmwasm-check 1.5.8)
+npm run judge     # verify + JS tests + run records + every linked testnet tx, read-only, one line each
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it
 npm run devnet    # local ME Hub node: Claude over MCP, obey-everything, kill switch, commerce → runs/
 node scripts/check-runs.mjs        # asserts what those records must show (CI re-runs all but the Claude run on a fresh node)
