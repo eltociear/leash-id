@@ -50,16 +50,31 @@ test("paywall: 402 terms with a signed invoice, and requests without a proper pr
   }
 });
 
-test("paywall: a shared spent store is asked before the chain, so a tx another replica redeemed is refused", async () => {
-  const payTo = await address("alice");
-  const claimed = new Set(["CD".repeat(32)]);
+test("paywall: a stranger's junk proof can't burn a payment; the payer's real proof redeems it once", async () => {
+  const [payTo, alice] = [await address("mallory"), await address("alice")];
+  const claimed = new Set();
   const store = { claim: async (h) => (claimed.has(h) ? false : (claimed.add(h), true)), release: async (h) => claimed.delete(h) };
   assert.throws(() => paywall({ payTo, priceUmec: "1", spent: {} }, () => {}), /claim/);
-  const srv = await serve(paywall({ payTo, priceUmec: "100000", secret: Buffer.alloc(32, 7), spent: store }, (req, res) => res.end("data")));
+  let invoice;
+  const TX = "CD".repeat(32);
+  const srv = await serve(paywall({
+    payTo, priceUmec: "100000", secret: Buffer.alloc(32, 7), spent: store,
+    readTx: async (h) => (h === TX ? [{ vendor: payTo, status: "paid", kind: "created", invoice, amount: "100000", agent: alice, payment_id: "7" }] : null),
+    checkPayer: async () => ({ ok: true }),
+  }, (req, res, p) => res.end(`data for #${p.payment_id}`)));
   try {
-    const proof = Buffer.from(JSON.stringify({ pub_key: "x", signature: "y" })).toString("base64");
-    const r = await fetch(srv.url, { headers: { "x-leash-payment": "cd".repeat(32), "x-leash-proof": proof } });
-    assert.equal(r.status, 402);
-    assert.match((await r.json()).error, /already used/);
+    invoice = (await (await fetch(srv.url)).json()).leash_id.invoice;
+    const junk = Buffer.from(JSON.stringify({ pub_key: "x", signature: "y" })).toString("base64");
+    const r1 = await fetch(srv.url, { headers: { "x-leash-payment": TX.toLowerCase(), "x-leash-proof": junk } });
+    assert.equal(r1.status, 403);
+    assert.equal(claimed.size, 0, "a failed proof must not claim the payment");
+    const p = await signProof("alice", undefined, proofText(TX, invoice));
+    const real = Buffer.from(JSON.stringify({ pub_key: p.pub_key, signature: p.signature })).toString("base64");
+    const r2 = await fetch(srv.url, { headers: { "x-leash-payment": TX, "x-leash-proof": real } });
+    assert.equal(r2.status, 200);
+    assert.equal(await r2.text(), "data for #7");
+    const r3 = await fetch(srv.url, { headers: { "x-leash-payment": TX, "x-leash-proof": real } });
+    assert.equal(r3.status, 402);
+    assert.match((await r3.json()).error, /already used/);
   } finally { srv.close(); }
 });

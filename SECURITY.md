@@ -8,11 +8,13 @@ An LLM agent with file or shell tools (Claude Code, most agent frameworks) can r
 read. If that includes the owner key, a prompt injection can tell it to read the key and sign `withdraw` or
 `update_policy` as the owner. The contract can't tell the difference.
 
-So the MCP server refuses to start if any other Leash ID key is readable from its process:
+So the MCP server refuses to start if any other Leash ID key is readable from its process, or set in its
+environment (`LEASH_OWNER_MNEMONIC` and the like: the model's shell inherits the same environment):
 
 ```
-leash-id MCP: other Leash ID keys are readable from this process:
+leash-id MCP: other Leash ID keys are readable from this process (or set in its environment):
   /home/ap/.config/leash-id/keys/owner.mnemonic
+  env LEASH_OWNER_MNEMONIC
 ```
 
 Run the agent side as its own OS user, or in a container that only has the agent key:

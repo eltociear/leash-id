@@ -135,6 +135,7 @@ leash watch --owner me1owner… --webhook https://hooks.slack.com/services/…
 | `find_invoice`, `my_payments`, `payment_status` | was this invoice handled? what did I pay? |
 | `verify_agent`, `lookup_me_id` | check another agent or address before trusting it |
 | `pay_for_api` | buy from an HTTP 402 API that sells to Leash ID agents (checks the seller's ME ID, price cap, payer proof) |
+| `retry_api_answer` | ask a paid API again for an answer already paid for (no new payment) |
 | `action_log` | everything this server sent in the session, with links |
 
 The server loads only the agent key and **refuses to start if any other Leash ID key file in its key directory is
@@ -248,7 +249,7 @@ client (`runs/devnet-obey-*.txt`) and agent-to-agent commerce (`runs/devnet-comm
 
 ```bash
 npm ci
-npm test          # 39 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 27 JS tests (amounts, send outcomes incl. a halted chain, RPC failover, MCP, paywall, SSRF, CLI, fixed-deposit encoding)
+npm test          # 39 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 29 JS tests (amounts, send outcomes incl. a halted chain, RPC failover, MCP, paywall, SSRF, CLI, fixed-deposit encoding)
 npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmwasm-check 1.5.8)
 npm run judge     # verify + JS tests + run records + every linked testnet tx, read-only, one line each
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it

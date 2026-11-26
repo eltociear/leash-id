@@ -78,3 +78,10 @@ test("the chain is halted: not sent (nothing broadcast), and the reason says so"
   f.client.getBlock = async () => { throw new Error("fetch failed"); };
   assert.equal((await sendNow(f, [], "m", false)).status, "unknown");
 });
+
+test("CheckTx 'tx already in mempool' (sdk 19): UNKNOWN, those bytes reached a node", async () => {
+  const e = Object.assign(new Error("Broadcasting transaction failed with code 19 (codespace: sdk). Log: tx already in mempool"), { code: 19, codespace: "sdk" });
+  const r = await sendNow(fake({ broadcast: async () => { throw e; } }), [], "m", false);
+  assert.equal(r.status, "unknown");
+  assert.equal(r.hash, HASH);
+});

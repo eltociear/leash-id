@@ -168,7 +168,7 @@ committed.
 git clone https://github.com/eltociear/leash-id && cd leash-id && npm ci   # npm audit: 0 vulnerabilities
 npm run judge                     # all four checks below in one go (~40 s, read-only), one line each
 npm run verify                    # testnet: deployed code == this repo's build, no admin
-npm run test:js                   # 27 JS tests, no chain needed
+npm run test:js                   # 29 JS tests, no chain needed
 node scripts/check-runs.mjs       # the committed run records say what we claim
 npm run check:chain               # ...and every testnet tx they link to says the same on chain (read-only)
 cat runs/testnet-claude-*.jsonl | jq -r 'select(.type=="result").result'  # Claude's own report (testnet)
