@@ -57,8 +57,19 @@ export async function limited(req, cost = 1) {
   if ((await incr(`sbx:day:${day}`, cost, 86400)) > Number(process.env.SANDBOX_PER_DAY ?? 3000)) return "the sandbox hit its daily limit; try again tomorrow";
   return null;
 }
+// Real control payments cost the owner's fee grant, so they're capped per day. The count comes from the chain itself
+// (this agent's SANDBOX-… payments in the last 24 h), which every server instance sees the same way; a per-instance
+// counter alone would multiply the cap by however many instances the host runs.
+export const BROADCASTS_PER_DAY = Number(process.env.SANDBOX_BROADCASTS_PER_DAY ?? 10);
 async function broadcastAllowed() {
-  return (await incr(`sbx:broadcast:${new Date().toISOString().slice(0, 10)}`, 1, 86400)) <= Number(process.env.SANDBOX_BROADCASTS_PER_DAY ?? 50);
+  if ((await incr(`sbx:broadcast:${new Date().toISOString().slice(0, 10)}`, 1, 86400)) > BROADCASTS_PER_DAY) return false;
+  try {
+    const since = Date.now() / 1000 - 86400;
+    const recent = (await q({ payments_by_agent: { agent: await agent(), limit: 30 } })).payments;
+    return recent.filter((p) => /^SANDBOX-/.test(p.invoice) && p.created_at >= since).length < BROADCASTS_PER_DAY;
+  } catch {
+    return false; // can't count: simulate instead of spending
+  }
 }
 
 /** Only same-origin JSON POSTs (no cross-site form posts spending visitors' rate limits). */
