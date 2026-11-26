@@ -153,7 +153,7 @@ export async function state() {
   // is the chain moving? (testnets halt now and then; the page says so instead of looking broken)
   const block = await reader().then((c) => c.getBlock()).then((b) => ({ height: b.header.height, time: b.header.time })).catch(() => null);
   return {
-    chain_id: NET.chainId, contract: contract(), agent: me, attacker: ATTACKER, keyless, block,
+    chain_id: NET.chainId, contract: contract(), agent: me, attacker: ATTACKER, keyless, block, claude: Boolean(process.env.ANTHROPIC_API_KEY),
     owner: w.owner, owner_me_id: w.owner_me_id, verified: w.verified, can_pay_now: w.can_pay_now, blocked_by: w.blocked_by,
     policy: { ...w.policy, per_tx: fmt(w.policy.per_tx_limit), daily: fmt(w.policy.daily_limit), approve_above: w.policy.approve_above ? fmt(w.policy.approve_above) : null },
     spent_24h: fmt(w.spent_24h), remaining_24h: fmt(w.remaining_24h), budget: fmt(w.owner_balance), bond: w.owner_bond ? fmt(w.owner_bond.amount) : null,

@@ -105,6 +105,10 @@ async function loadState() {
     <dt>Limits</dt><dd>≤ ${esc(p.per_tx)} per payment · ≤ ${esc(p.daily)} in any 24 h${p.approve_above ? ` · owner approves above ${esc(p.approve_above)}` : ""}</dd>
     <dt>Right now</dt><dd>${esc(s.spent_24h)} spent in 24 h · owner budget ${esc(s.budget)} · ${s.can_pay_now ? "can pay" : `can't pay: ${esc(s.blocked_by)}`}</dd>
   </dl>` + (s.keyless ? `<p class="note">Key-less run: this server has no agent key, so every action, the control payment included, is the chain's own simulation as this live agent. The answers are the contract's; nothing is broadcast.</p>` : "");
+  if (!s.claude && !$("ai-go").disabled) {
+    $("ai-go").disabled = true;
+    $("trace").innerHTML = `<p class="note">This server has no Anthropic API key, so there is no Claude to read your email here. Run the sandbox yourself with your own key (<code>ANTHROPIC_API_KEY=… node scripts/sandbox-dev.mjs</code>); everything above works without one.</p>`;
+  }
   if ($("attacks").dataset.done) return; // render the attack list once; results stay on screen
   $("attacks").dataset.done = "1";
   $("attacks").innerHTML = s.presets.map((a) => `<div class="attack"><div>${esc(a.label)}</div>
