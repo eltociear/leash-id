@@ -13,7 +13,9 @@ process.env.LEASH_DEPLOYMENT ??= "deployment.devnet.json"; // before lib/chain.m
 const { readKey, deployment } = await import("../lib/chain.mjs");
 const C = deployment().contract;
 const base = "http://localhost:18766";
-const url = `${base}/owner.html?rpc=${base}/rpc&rest=${base}&contract=${C}&chain=mechain_2401-1&explorer=http://localhost:1317/cosmos/tx/v1beta1/txs/`;
+// tx links open the readable receipt page (docs/tx.html), pointed at the same local node
+const txPage = `${base}/tx.html?rest=${base}&contract=${C}&chain=mechain_2401-1#`;
+const url = `${base}/owner.html?rpc=${base}/rpc&rest=${base}&contract=${C}&chain=mechain_2401-1&explorer=${encodeURIComponent(txPage)}`;
 const chrome = process.env.CHROME ?? "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary";
 const b = await puppeteer.launch({ executablePath: chrome, headless: "new", args: process.env.CI ? ["--no-sandbox"] : [] });
 const p = await b.newPage();
@@ -51,6 +53,18 @@ await press("#dep");
 l = await step(2); expect(/✓ deposit 0.01 MEC/.test(l), "deposit", l);
 await press("[data-approve]");
 l = await step(3); expect(/✓ approve #/.test(l), "approve the held payment", l);
+{
+  // the log's tx link opens docs/tx.html: the approval, read back from the chain
+  const href = await p.$eval("#log > div a", (a) => a.href);
+  const t = await b.newPage();
+  t.on("pageerror", (e) => errs.push(`tx.html: ${e.message}`));
+  await t.goto(href, { waitUntil: "networkidle0" });
+  await t.waitForFunction(() => !document.body.innerText.includes("Reading ME Hub"), { timeout: 30000 });
+  const txt = await t.$eval("#out", (e) => e.innerText);
+  expect(href.startsWith(txPage) && /Executed/.test(txt) && /approve a held payment/.test(txt) && /What the contract recorded/.test(txt) && /status paid/.test(txt),
+    "the approval's tx link opens a readable receipt (tx.html): executed, the payment recorded as paid", txt.slice(0, 300));
+  await t.close();
+}
 await press("[data-revoke]");
 l = await step(4); expect(/✓ revoke/.test(l), "revoke", l);
 await press("[data-resume]");
