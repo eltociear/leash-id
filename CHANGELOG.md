@@ -8,6 +8,12 @@
   are unchanged. It stops waiting for inclusion at 30 s (functions are cut at 60 s) and says why a send didn't happen.
 - **Every page shows the latest block and its age**, and says plainly when the chain isn't producing blocks.
 - JUDGES opens with a five-line summary.
+- **`leash lock <MEC>` makes a real bond**: it sends ME Hub's own `MsgDoFixedDeposit` (x/wstaking; cosmjs has no
+  type for it, so `lib/wstaking.mjs` encodes it from me-hub's tx.proto), reads the new deposit's id from the
+  `fixed_deposit` event, then `set_bond`s it next to any deposits already shown. It checks the owner's KYC region
+  offers the term first (on testnet only `me_earth`, 1 day, 0.01 MEC minimum). Checked by simulation on testnet;
+  encoding pinned byte for byte in `test/wstaking.test.mjs`.
+- README.ja listed 35 contract tests; there are 39.
 
 ## 0.7.0 (contract 0.5.2, redeployed on testnet: code 46, `me1dsl645w…vwsrnp`, no admin)
 

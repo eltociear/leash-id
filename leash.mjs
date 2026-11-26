@@ -9,6 +9,7 @@ import {
   feeGrant, fmt, isNotFound, keyFile, meIdRest, q, readKey, reader, roles, saveDeployment, signer, toUmec,
 } from "./lib/chain.mjs";
 import { act, executeMsg, grantGasMsg, mecAmounts, revokeGasMsg, sendTx } from "./lib/tx.mjs";
+import { depositIdOf, depositTerms, fixedDepositMsg, regionOf } from "./lib/wstaking.mjs";
 
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
 
@@ -75,6 +76,7 @@ const HELP = {
   "gas-grant": ["gas-grant <agent> --limit <MEC> [--days 30] [--as owner]", "pay an agent's fees from your wallet (contract calls only, capped), so the agent key can hold no MEC at all"],
   "gas-revoke": ["gas-revoke <agent> [--as owner]", "stop paying an agent's fees"],
   "link-sub": ["link-sub <sub-account> <main>", "record an EVM-form sub-account of an ME ID (anyone can; the contract checks x/did)"],
+  lock: ["lock <MEC> [--days N] [--as owner]", "lock MEC in an ME Hub fixed deposit and show it as your bond (with any you already show)"],
   bond: ["bond <deposit-id>[,<id>…] [--as owner]", "show ME Hub fixed deposits as your bond (empty list clears it)"],
   identity: ["identity <role|address>", "ME ID (direct or via its main account) and bond, as the contract sees them"],
   watch: ["watch [--owner o] [--webhook URL] [--from height] [--interval 6] [--once]", "follow payments as they happen; held ones ask for your approval (Slack-compatible webhook)"],
@@ -409,6 +411,27 @@ cmds["gas-revoke"] = async () => {
 };
 cmds["link-sub"] = async () => send(as("owner"), { register_sub_account: { sub: await addrOf(need(args[0], "sub-account")), main: await addrOf(need(args[1], "main account")) } });
 cmds.bond = async () => send(as("owner"), { set_bond: { deposit_ids: (args[0] ?? "").split(",").filter(Boolean).map((x) => intArg(x, "deposit id")) } });
+// A bond in two txs: x/wstaking makes the deposit (its id is only known once it's made), then set_bond points at it.
+cmds.lock = async () => {
+  const umec = toUmec(need(args[0], "amount"));
+  const { addr } = await signer(as("owner"), o["key-file"]);
+  const id = await meIdRest(addr);
+  if (!id) { console.error(`${addr} has no ME ID: x/wstaking takes fixed deposits only from ME ID holders`); return 1; }
+  const region = await regionOf(id.did);
+  const terms = await depositTerms(region);
+  const days = o.days !== undefined ? intArg(o.days, "--days") : terms[0]?.term;
+  if (!terms.some((t) => t.term === days)) {
+    console.error(`ME Hub offers ${terms.length ? `only ${terms.map((t) => `${t.term}-day`).join(", ")} deposits` : "no fixed deposits"} in your ME ID's region (${region ?? "unknown"})`);
+    return 1;
+  }
+  const r = await sendTx(as("owner"), [fixedDepositMsg(addr, umec, days)], { file: o["key-file"], granter: null });
+  if (r.status !== "ok") return outcome(r);
+  const dep = depositIdOf(r.events);
+  console.log(`ok   fixed deposit #${dep}: ${fmt(umec)} for ${days} day(s), region ${region}  ${r.link}`);
+  if (dep === undefined) { console.error("couldn't read the new deposit's id from the tx; show it with: leash bond <id>"); return 1; }
+  const shown = (await q({ identity: { address: addr } })).bond?.deposits.map((d) => d.id) ?? [];
+  return send(as("owner"), { set_bond: { deposit_ids: [...shown, dep] } });
+};
 const bondLine = (b) => (b ? `${fmt(b.amount)} locked in ${b.deposits.length} ME Hub fixed deposit(s), first unlocks ${when(b.earliest_unlock)}` : "none");
 cmds.identity = async () => {
   const r = await q({ identity: { address: await addrOf(need(args[0], "role or address")) } });

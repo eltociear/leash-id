@@ -70,7 +70,7 @@ unused, so nothing ties an account to it.
 - **ME Hub's custom `multi_send` message** (`wasm_me_msg.go`) settles batched payouts in one bank message.
 - **EVM sub-accounts count.** A merchant paid at the EVM-form address bound to its ME ID is recognised through
   x/did's own `sub_account` binding (`register_sub_account`, re-checked on every use).
-- **Bonds.** An owner can show ME Hub fixed deposits as a bond: MEC they can't move before a date, read live.
+- **Bonds.** An owner can show ME Hub fixed deposits as a bond: MEC they can't move before a date, read live. `leash lock 0.05` makes the x/wstaking deposit and shows it in one step.
 - **Receipts carry identities.** Every payment stores the owner's ME ID and the vendor's ME ID (if any) as of
   the moment it was paid, and emits a `wasm-leash_payment` event an indexer or accounting system can consume.
 
@@ -248,7 +248,7 @@ client (`runs/devnet-obey-*.txt`) and agent-to-agent commerce (`runs/devnet-comm
 
 ```bash
 npm ci
-npm test          # 39 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 24 JS tests (amounts, send outcomes, RPC failover, MCP, paywall, SSRF, CLI)
+npm test          # 39 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 26 JS tests (amounts, send outcomes, RPC failover, MCP, paywall, SSRF, CLI, fixed-deposit encoding)
 npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmwasm-check 1.5.8)
 npm run judge     # verify + JS tests + run records + every linked testnet tx, read-only, one line each
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it
