@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `leash watch` says when the chain stops ("ME Hub isn't producing blocks … nothing can be paid, approved or revoked
+  until it moves") and when it's back, once each, to the console and the webhook. Before, a halt looked like a
+  quiet day.
+
 - **Fixes from an independent review of the off-chain code** (no high-severity findings; all of these are fixed):
   - Paywall: a tx is claimed only after the payer's proof checks out. Before, anyone who saw the payment on chain could
     send its hash first with a junk proof and burn it, so the real buyer paid and got "already used".
