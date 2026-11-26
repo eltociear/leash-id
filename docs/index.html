@@ -262,8 +262,13 @@ async function chainClock() {
     const ago = age < 90 ? `${Math.round(age)} s ago` : age < 5400 ? `${Math.round(age / 60)} min ago` : `${Math.round(age / 3600)} h ago`;
     let el = document.getElementById("clock");
     if (!el) { el = document.createElement("span"); el.id = "clock"; $("net").appendChild(el); }
+    // a halt at a governance-scheduled upgrade height is planned: name it, so it doesn't read as an outage
+    const plan = age > 120 ? await fetch(`${CFG.rest}/cosmos/upgrade/v1beta1/current_plan`, { signal: AbortSignal.timeout(10000) }).then((r) => r.json()).then((x) => x.plan).catch(() => null) : null;
+    const planned = plan && Math.abs(Number(plan.height) - Number(h.height)) <= 1
+      ? ` · <b style="color:var(--bad)">halted for a scheduled upgrade</b> (me-hub <span class="mono">${esc(plan.name)}</span>, voted by governance, at this block): it resumes when the validators switch to the new release; until then everything here is the last state and new transactions wait`
+      : null;
     el.innerHTML = ` · block ${Number(h.height).toLocaleString("en-US")}, ${ago}` + (age > 120
-      ? ` · <b style="color:var(--bad)">the chain isn't producing blocks right now</b>: everything you read here is its last state, and new transactions wait until it moves again`
+      ? (planned ?? ` · <b style="color:var(--bad)">the chain isn't producing blocks right now</b>: everything you read here is its last state, and new transactions wait until it moves again`)
       : "");
   } catch { /* the page's own reads report connection problems */ }
 }
