@@ -6,7 +6,9 @@
   (`LEASH_MAX_BLOCK_AGE_S`, 0 turns it off), the CLI, the MCP server and the sandbox answer NOT SENT, "ME Hub isn't
   producing blocks (the latest, #5523300, is 7.8 h old) … safe to retry", in under a second. Before, the tx went into
   a halted chain's mempool, the caller waited 60 s for UNKNOWN, and the payment could land hours later. Checked
-  against the halted testnet; new test in `test/tx.test.mjs` (27 JS tests).
+  against the halted testnet; new test in `test/tx.test.mjs` (27 JS tests). `leash whois` and the MCP `verify_agent` say the same when the
+  contract would let an agent pay but the chain can't carry it ("can pay: yes by its leash, but ME Hub isn't producing
+  blocks …"; `chain_halted: true` in the structured result), so another agent doesn't read "yes" as "it will land".
 
 - `npm audit`: 0 vulnerabilities (puppeteer-core 25; the advisories were in its FTP/proxy dependencies, e2e only).
 

@@ -8,7 +8,7 @@ import {
   KEY_DIR, LEGACY_KEYS_FILE, NET, ROOT, addrOf, address, balance, contract, contractInfo, deployment,
   feeGrant, fmt, isNotFound, keyFile, meIdRest, q, readKey, reader, roles, saveDeployment, signer, toUmec,
 } from "./lib/chain.mjs";
-import { act, executeMsg, grantGasMsg, mecAmounts, revokeGasMsg, sendTx } from "./lib/tx.mjs";
+import { act, chainNote, executeMsg, grantGasMsg, mecAmounts, revokeGasMsg, sendTx } from "./lib/tx.mjs";
 import { depositIdOf, depositTerms, fixedDepositMsg, regionOf } from "./lib/wstaking.mjs";
 
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
@@ -306,7 +306,8 @@ const cmds = {
       const g = await feeGrant(agent, w.owner).catch(() => null);
       const own = fmt(await balance(agent));
       console.log(`gas        ${g ? `paid by the owner's fee grant: ${g.spend_limit ? fmt(g.spend_limit) : "no cap"} left${g.expiration ? `, until ${g.expiration.slice(0, 10)}` : ""}${g.allowed_messages ? ` (${g.allowed_messages.map((m) => m.split(".").pop()).join(", ")} only)` : ""}; the agent's own wallet holds ${own}` : `from the agent's own wallet: ${own}`}`);
-      console.log(`can pay    ${w.can_pay_now ? "yes" : `NO: ${w.blocked_by}`}`);
+      const halt = w.can_pay_now ? await chainNote() : null;
+      console.log(`can pay    ${w.can_pay_now ? (halt ? `yes by its leash, but ${halt}` : "yes") : `NO: ${w.blocked_by}`}`);
       console.log(`limits     ≤ ${fmt(p.per_tx_limit)} per payment, ≤ ${fmt(p.daily_limit)} per 24h, approval above ${p.approve_above ? fmt(p.approve_above) : "never"}`);
       console.log(`24h spend  ${fmt(w.spent_24h)} (remaining ${fmt(w.remaining_24h)}); owner budget ${fmt(w.owner_balance)}; ${w.pending_count} held, ${w.approvals_needed} signature(s) release one`);
       // the most it can move before anyone signs: what's left of the 24h limit, out of the owner's free budget
