@@ -4,7 +4,9 @@
 
 - The testnet halt at 5,523,300 is the scheduled me-hub `v2.0.18.rc1` upgrade (gov proposal 11). Its diff touches
   x/regiongov (and wstaking validator resets) only: nothing Leash ID calls. CI's devnet job now builds that exact
-  release (`a5b287db`), so every devnet run is on the binary testnet will run.
+  release (`a5b287db`), so every devnet run is on the binary testnet will run. The pages, the sandbox, the CLI and
+  the MCP server read the chain's upgrade plan and, when a halt is at its height, say it's a scheduled upgrade (and
+  to which release) instead of a bare "isn't producing blocks".
 
 - `leash watch` says when the chain stops ("ME Hub isn't producing blocks … nothing can be paid, approved or revoked
   until it moves") and when it's back, once each, to the console and the webhook. Before, a halt looked like a

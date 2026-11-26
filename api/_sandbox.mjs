@@ -169,6 +169,11 @@ export async function state() {
   const recent = (await q({ payments_by_agent: { agent: me, limit: 8 } })).payments;
   // is the chain moving? (testnets halt now and then; the page says so instead of looking broken)
   const block = await reader().then((c) => c.getBlock()).then((b) => ({ height: b.header.height, time: b.header.time })).catch(() => null);
+  // a halt at a governance-scheduled upgrade height is planned: name the release
+  if (block && Date.now() - Date.parse(block.time) > 120_000) {
+    const plan = await fetch(`${NET.rest}/cosmos/upgrade/v1beta1/current_plan`, { signal: AbortSignal.timeout(8000) }).then((r) => r.json()).then((x) => x.plan).catch(() => null);
+    if (plan && Math.abs(Number(plan.height) - Number(block.height)) <= 1) block.upgrade = plan.name;
+  }
   return {
     chain_id: NET.chainId, contract: contract(), agent: me, attacker: ATTACKER, keyless, block, claude: Boolean(process.env.ANTHROPIC_API_KEY),
     owner: w.owner, owner_me_id: w.owner_me_id, verified: w.verified, can_pay_now: w.can_pay_now, blocked_by: w.blocked_by,
