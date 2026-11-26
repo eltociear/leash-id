@@ -94,7 +94,9 @@ const tally = (r, control) => {
 async function loadState() {
   const s = await fetch("/api/state").then((r) => r.json()).catch((e) => ({ error: e.message }));
   if (s.error) { $("leash").innerHTML = `<span class="err">${esc(s.error)}</span>`; return; }
-  $("net").textContent = `${s.chain_id} · contract ${short(s.contract)}`;
+  const age = s.block ? Math.max(0, (Date.now() - Date.parse(s.block.time)) / 1000) : null;
+  $("net").innerHTML = esc(`${s.chain_id} · contract ${short(s.contract)}`) + (s.block ? esc(` · block ${Number(s.block.height).toLocaleString("en-US")}, ${age < 90 ? `${Math.round(age)} s` : `${Math.round(age / 60)} min`} ago`) : "") +
+    (age > 120 ? ` · <b style="color:var(--bad)">ME Hub testnet isn't producing blocks right now</b>: the contract still answers every attack (simulated), but the control payment can't be confirmed until it moves again` : "");
   const p = s.policy;
   $("leash").innerHTML = `<dl>
     <dt>${s.keyless ? "Agent (no key here: simulated as it)" : "Agent key (yours now)"}</dt><dd class="mono">${esc(s.agent)}</dd>

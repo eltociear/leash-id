@@ -5,7 +5,7 @@
 // To keep it cheap and always available, only the fixed control payment is ever broadcast (with a daily cap);
 // everything else, including what Claude decides to do, is simulated against the live contract: the chain's
 // own answer, with no fee and no state change.
-import { NET, address, contract, fmt, isAddress, q, toUmec } from "../lib/chain.mjs";
+import { NET, address, contract, fmt, isAddress, q, reader, toUmec } from "../lib/chain.mjs";
 import { act, simulateAs } from "../lib/tx.mjs";
 
 export const ROLE = "agent";
@@ -57,6 +57,16 @@ export async function limited(req, cost = 1) {
   if ((await incr(`sbx:day:${day}`, cost, 86400)) > Number(process.env.SANDBOX_PER_DAY ?? 3000)) return "the sandbox hit its daily limit; try again tomorrow";
   return null;
 }
+/** True when the latest block is over 2 minutes old: a broadcast would only sit in the mempool. */
+async function chainHalted() {
+  try {
+    const b = await (await reader()).getBlock();
+    return Date.now() - Date.parse(b.header.time) > 120_000;
+  } catch {
+    return false;
+  }
+}
+
 // Real control payments cost the owner's fee grant, so they're capped per day. The count comes from the chain itself
 // (this agent's SANDBOX-… payments in the last 24 h), which every server instance sees the same way; a per-instance
 // counter alone would multiply the cap by however many instances the host runs.
@@ -122,11 +132,14 @@ export async function run(tool, args, { broadcast = false } = {}) {
     if (r.status === "simulated_ok") return { tool, args, status: "would_pass", simulated: true, reason: "the contract would accept this (key-less run: simulated as the live sandbox agent, nothing broadcast)" };
     return { tool, args, status: r.status, reason: r.status === "not_sent" ? `couldn't simulate right now: ${r.reason}` : r.reason, simulated: true };
   }
-  const live = broadcast && (await broadcastAllowed());
-  const r = await act(ROLE, msg, [], { dryRun: !live });
+  const halted = broadcast && (await chainHalted());
+  const live = broadcast && !halted && (await broadcastAllowed());
+  // simulations go through simulateAs, which also copes with a tx of ours still waiting in the mempool
+  const r = live ? await act(ROLE, msg, []) : await simulateAs(me, msg);
   if (r.status === "simulated_ok") {
     return { tool, args, status: "would_pass", simulated: true,
-      reason: broadcast ? "the sandbox's broadcast budget for today is used up; the contract would accept this" : "the contract would accept this (simulated: the sandbox only broadcasts the control payment)" };
+      reason: halted ? "ME Hub testnet isn't producing blocks right now, so nothing is broadcast; the contract would accept this"
+        : broadcast ? "the sandbox's broadcast budget for today is used up; the contract would accept this" : "the contract would accept this (simulated: the sandbox only broadcasts the control payment)" };
   }
   const a = r.attrs ?? {};
   const status = r.status === "ok" ? (a.status === "pending" ? "held" : "paid") : r.status;
@@ -137,8 +150,10 @@ export async function state() {
   const me = await agent();
   const w = await q({ whois: { agent: me } });
   const recent = (await q({ payments_by_agent: { agent: me, limit: 8 } })).payments;
+  // is the chain moving? (testnets halt now and then; the page says so instead of looking broken)
+  const block = await reader().then((c) => c.getBlock()).then((b) => ({ height: b.header.height, time: b.header.time })).catch(() => null);
   return {
-    chain_id: NET.chainId, contract: contract(), agent: me, attacker: ATTACKER, keyless,
+    chain_id: NET.chainId, contract: contract(), agent: me, attacker: ATTACKER, keyless, block,
     owner: w.owner, owner_me_id: w.owner_me_id, verified: w.verified, can_pay_now: w.can_pay_now, blocked_by: w.blocked_by,
     policy: { ...w.policy, per_tx: fmt(w.policy.per_tx_limit), daily: fmt(w.policy.daily_limit), approve_above: w.policy.approve_above ? fmt(w.policy.approve_above) : null },
     spent_24h: fmt(w.spent_24h), remaining_24h: fmt(w.remaining_24h), budget: fmt(w.owner_balance), bond: w.owner_bond ? fmt(w.owner_bond.amount) : null,
