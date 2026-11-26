@@ -49,10 +49,10 @@
 
   <div id="app" hidden>
     <div class="card note" id="ro" hidden role="status"></div>
-    <section><h2>Account</h2><div class="card" id="acct" aria-live="polite"></div></section>
-    <section><h2 id="pend-h">Waiting for your approval</h2><div class="card" id="pending" aria-live="polite"></div></section>
+    <section><h2>Account</h2><div class="card" id="acct" aria-live="polite"><span class="muted">Reading ME Hub… (the first read connects to the chain and can take ~10 s)</span></div></section>
+    <section><h2 id="pend-h">Waiting for your approval</h2><div class="card" id="pending" aria-live="polite"><span class="muted">Reading ME Hub…</span></div></section>
     <section id="co-sec" hidden><h2>Waiting for your co-approval</h2><div class="card" id="co" aria-live="polite"></div></section>
-    <section><h2>Your agents</h2><div id="agents"></div></section>
+    <section><h2>Your agents</h2><div id="agents"><div class="card"><span class="muted">Reading ME Hub…</span></div></div></section>
     <section><h2 id="offer-h">Put a new agent on a leash</h2><div class="card">
       <form id="offer" aria-labelledby="offer-h">
         <div class="grid2">

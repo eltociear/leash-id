@@ -72,3 +72,4 @@
   nav.top b { margin-right: 6px; }
   nav.top a { color: var(--muted); text-decoration: none; }
   nav.top a:hover, nav.top a[aria-current="page"] { color: var(--accent); text-decoration: underline; }
+.muted { color: var(--muted); }
