@@ -7,7 +7,7 @@ use std::rc::Rc;
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
     coins, from_json, to_json_vec, Addr, BankMsg, Binary, ContractResult, CosmosMsg, Empty, Env,
-    OwnedDeps, Querier, QuerierResult, QueryRequest, Response, SystemError, SystemResult,
+    Order, OwnedDeps, Querier, Storage, QuerierResult, QueryRequest, Response, SystemError, SystemResult,
     Timestamp, Uint128,
 };
 
@@ -168,7 +168,19 @@ impl T {
         }
     }
     fn exec(&mut self, who: &Addr, msg: ExecuteMsg, funds: &[cosmwasm_std::Coin]) -> R {
+        // A failed tx changes nothing on chain; MockStorage keeps partial writes, so put the snapshot back.
+        // (Without this a batch whose second item is refused left its first item recorded.)
+        let before: Vec<(Vec<u8>, Vec<u8>)> = self.deps.storage.range(None, None, Order::Ascending).collect();
         let r = execute(self.deps.as_mut(), self.env.clone(), mock_info(who.as_str(), funds), msg);
+        if r.is_err() {
+            let keys: Vec<Vec<u8>> = self.deps.storage.range_keys(None, None, Order::Ascending).collect();
+            for k in keys {
+                self.deps.storage.remove(&k);
+            }
+            for (k, v) in before {
+                self.deps.storage.set(&k, &v);
+            }
+        }
         // wasmd refuses the whole tx if any attribute key or value is empty (found live on ME Hub).
         if let Ok(res) = &r {
             let attrs = res.attributes.iter().chain(res.events.iter().flat_map(|e| e.attributes.iter()));
@@ -365,6 +377,25 @@ fn daily_limit_is_a_rolling_24_hours() {
 }
 
 #[test]
+fn a_full_limit_spent_late_in_the_hour_stays_spent_for_24_hours() {
+    let mut t = setup();
+    let v = t.vendor.clone();
+    // 10:59:59 — the last second of an hourly bucket
+    t.env.block.time = Timestamp::from_seconds(101 * DAY + 10 * HOUR + HOUR - 1);
+    t.pay(&v, 150, "1").unwrap();
+    t.pay(&v, 150, "2").unwrap();
+    // 10:00 the next day is 23h00m01s later: an hourly window of 24 buckets would free it here
+    t.later(23 * HOUR + 1);
+    assert!(matches!(t.pay(&v, 1, "3").unwrap_err(), ContractError::OverDaily { .. }));
+    // 24 hours to the second: still spent
+    t.later(HOUR - 1);
+    assert!(matches!(t.pay(&v, 1, "3").unwrap_err(), ContractError::OverDaily { .. }));
+    // 11:00 the next day (24h00m01s): free again
+    t.later(1);
+    t.pay(&v, 150, "3").unwrap();
+}
+
+#[test]
 fn duplicate_invoice_is_refused_whatever_the_spelling() {
     let mut t = setup();
     let v = t.vendor.clone();
@@ -424,12 +455,12 @@ fn approval_flow_reserves_funds_and_reject_frees_the_invoice() {
     assert_eq!(sent(&res), vec![(v.to_string(), 180)]);
     assert!(matches!(t.owner_does(ExecuteMsg::Approve { id: 1 }).unwrap_err(), ContractError::NotPending { id: 1 }));
     // reject returns the reservation and frees the invoice number for a corrected invoice
-    t.later(DAY);
+    t.later(DAY + HOUR); // past the 24h window (hourly buckets: a spend counts 24-25h)
     t.pay(&v, 160, "BIG-2").unwrap();
     t.owner_does(ExecuteMsg::Reject { id: 2 }).unwrap();
     let w = t.whois();
     assert_eq!((w.owner_balance, w.pending_count), (Uint128::new(820), 0));
-    t.later(DAY);
+    t.later(DAY + HOUR);
     t.pay(&v, 155, "big-2").unwrap();
     assert_eq!(t.payment(3).status, PayStatus::Pending);
 }
@@ -443,7 +474,7 @@ fn approval_rechecks_owner_vendor_and_age() {
     t.set_policy(p);
     t.pay(&v, 180, "BIG-1").unwrap();
     t.pay(&v, 100, "SMALL").unwrap(); // under approve_above: paid, not pending
-    t.later(DAY);
+    t.later(DAY + HOUR); // past the 24h window (hourly buckets: a spend counts 24-25h)
     t.pay(&shop, 170, "SHOP-1").unwrap();
     // a suspended owner can reject but never approve
     t.set_did(&o, "DID_STATUS_INACTIVE", "KYC_LEVEL_TWO");
@@ -832,7 +863,8 @@ fn accounting_invariants_hold_under_random_operations() {
                     Ok(Response::new())
                 }
                 _ => {
-                    t.later(rng.pick(30) * HOUR);
+                    // whole hours and odd seconds, so payments land anywhere inside an hourly bucket
+                    t.later(rng.pick(30) * HOUR + rng.pick(3600));
                     continue;
                 }
             };
@@ -887,6 +919,20 @@ fn accounting_invariants_hold_under_random_operations() {
             assert!(*n <= 1 + released.get(k).copied().unwrap_or(0), "seed {seed}: invoice {k:?} handled {n} times");
         }
         assert!(all.iter().any(|p| p.vendor == shop_evm && p.status == PayStatus::Paid), "seed {seed}: never paid the sub-account");
+        // whatever 24 hours you pick, an agent never moved (or put on hold) more than its daily limit in them
+        for ag in &agents {
+            let w: WhoisResponse = t.q(QueryMsg::Whois { agent: ag.to_string() });
+            let pol = w.policy;
+            let mine: Vec<&Payment> = all.iter().filter(|p| p.agent == *ag && p.status != PayStatus::Rejected).collect();
+            for start in &mine {
+                let in_window: u128 = mine
+                    .iter()
+                    .filter(|p| p.created_at >= start.created_at && p.created_at < start.created_at + DAY)
+                    .map(|p| p.amount.u128())
+                    .sum();
+                assert!(in_window <= pol.daily_limit.u128(), "seed {seed}: {ag} moved {in_window} within 24h of {}", start.created_at);
+            }
+        }
     }
     // the sequences must actually exercise every path, not just bounce off refusals
     for (op, name) in [(0, "deposit"), (1, "withdraw"), (2, "pay"), (5, "batch"), (6, "approve"), (7, "reject"), (8, "revoke"), (9, "resume"), (10, "release")] {
@@ -924,7 +970,7 @@ fn held_payments_can_need_two_signatures() {
     assert_eq!(t.payment(1).approved_by, vec![o.clone(), cfo.clone()]);
 
     // a signature stops counting if the signer's ME ID is suspended before the payment is released
-    t.later(DAY);
+    t.later(DAY + HOUR); // past the 24h window (hourly buckets: a spend counts 24-25h)
     t.pay(&v, 170, "BIG-2").unwrap();
     t.exec(&cfo, ExecuteMsg::Approve { id: 2 }, &[]).unwrap();
     t.set_did(&cfo, "DID_STATUS_INACTIVE", "KYC_LEVEL_TWO");
@@ -940,7 +986,7 @@ fn held_payments_can_need_two_signatures() {
     let mut p = t.policy();
     p.vendors.push(cfo.to_string());
     t.set_policy(p.clone());
-    t.later(DAY);
+    t.later(DAY + HOUR);
     t.pay(&cfo, 170, "TO-CFO").unwrap();
     t.owner_does(ExecuteMsg::Approve { id: 3 }).unwrap();
     assert!(matches!(t.exec(&cfo, ExecuteMsg::Approve { id: 3 }, &[]).unwrap_err(), ContractError::SelfDealing { .. }));
@@ -1056,7 +1102,7 @@ fn two_signatures_must_come_from_two_me_ids() {
     let mut p = t.policy();
     p.vendors.push(cfo_evm.to_string());
     t.set_policy(p);
-    t.later(DAY);
+    t.later(DAY + HOUR); // past the 24h window (hourly buckets: a spend counts 24-25h)
     t.pay(&cfo_evm, 170, "TO-CFO").unwrap();
     let held: PaymentsResponse = t.q(QueryMsg::Pending { owner: o.to_string(), start_after: None, limit: None });
     let to_cfo = held.payments.iter().find(|p| p.vendor == cfo_evm).unwrap().id;
@@ -1109,7 +1155,7 @@ fn rejecting_a_held_payment_at_a_sub_account_frees_its_invoice() {
     t.pay(&shop_evm, 180, "HELD-1").unwrap();
     assert_eq!(t.payment(1).invoice_party.as_ref(), Some(&shop));
     t.owner_does(ExecuteMsg::Reject { id: 1 }).unwrap();
-    t.later(DAY);
+    t.later(DAY + HOUR); // past the 24h window (hourly buckets: a spend counts 24-25h)
     t.pay(&shop, 180, "HELD-1").unwrap();
 }
 

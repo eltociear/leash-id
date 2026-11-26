@@ -30,7 +30,10 @@ pub const MAX_PENDING: u32 = 50;
 pub const PENDING_TTL: u64 = 7 * 86400;
 const MAX_LEASH: u64 = 366 * 86400;
 const HOUR: u64 = 3600;
-const WINDOW_HOURS: u64 = 24;
+/// Spend is kept in hourly buckets. A bucket counts for 25 hours, so a payment made at 10:59 stops counting at
+/// 11:00 the next day (24h01m later), never earlier: whatever 24 hours you pick, at most `daily_limit` left in them.
+/// (With 24 buckets a full limit at 10:59 freed at 10:00, and twice the limit could go out in 23h01m.)
+const WINDOW_HOURS: u64 = 25;
 const MAX_INVOICE: usize = 64;
 const MAX_MEMO: usize = 256;
 const MAX_BONDS: usize = 5;
@@ -202,7 +205,7 @@ fn hour(env: &Env) -> u64 {
     env.block.time.seconds() / HOUR
 }
 
-/// Spend in the rolling 24 hours that end now.
+/// Spend that still counts against the daily limit: everything from the last 24 hours (and up to one more hour).
 fn spent_24h(rec: &AgentRec, env: &Env) -> Uint128 {
     let now = hour(env);
     rec.spend

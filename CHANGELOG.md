@@ -1,7 +1,14 @@
 # Changelog
 
-## Unreleased
+## Unreleased (contract 0.5.2)
 
+- **The daily limit now holds over any 24 hours, to the second.** Spend is kept in hourly buckets, and a bucket
+  used to count for 24 hours. So a full limit spent at 10:59 stopped counting at 10:00 the next day, and twice the
+  limit could go out in 23h01m. A bucket now counts for 25 hours: a spend stops counting 24–25 hours later, never
+  sooner. Found by a fresh-eyes review. Test `a_full_limit_spent_late_in_the_hour_stays_spent_for_24_hours`.
+- The random-operation test now moves the clock by odd seconds, not whole hours, and checks the limit over every
+  24-hour window of every agent's payments. Its harness also undoes a failed call the way the chain does. Mock
+  storage had kept the first item of a refused batch, and the new check is what caught that.
 - **Owner console, read-only**: open any owner's console without a wallet (`owner.html#view=<owner>`), e.g. our
   testnet owner. Same live queries; every control that signs is disabled. Checked in the e2e run.
 - The sandbox page escapes an unexpected status and links only http(s) tx URLs (an injection review of all three
