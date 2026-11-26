@@ -248,7 +248,7 @@ client (`runs/devnet-obey-*.txt`) and agent-to-agent commerce (`runs/devnet-comm
 
 ```bash
 npm ci
-npm test          # 39 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 26 JS tests (amounts, send outcomes, RPC failover, MCP, paywall, SSRF, CLI, fixed-deposit encoding)
+npm test          # 39 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 27 JS tests (amounts, send outcomes incl. a halted chain, RPC failover, MCP, paywall, SSRF, CLI, fixed-deposit encoding)
 npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmwasm-check 1.5.8)
 npm run judge     # verify + JS tests + run records + every linked testnet tx, read-only, one line each
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it
