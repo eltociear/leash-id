@@ -470,6 +470,22 @@ $("offer").onsubmit = (e) => {
 };
 
 $("net").textContent = CFG.chainName === CFG.chainId ? CFG.chainId : `${CFG.chainName} · ${CFG.chainId}`;
+// Is the chain moving? Testnets halt now and then; say so instead of letting payments look broken.
+async function chainClock() {
+  try {
+    const j = await fetch(`${CFG.rest}/cosmos/base/tendermint/v1beta1/blocks/latest`, { signal: AbortSignal.timeout(10000) }).then((r) => r.json());
+    const h = j.block.header, age = Math.max(0, (Date.now() - Date.parse(h.time)) / 1000);
+    const ago = age < 90 ? `${Math.round(age)} s ago` : age < 5400 ? `${Math.round(age / 60)} min ago` : `${Math.round(age / 3600)} h ago`;
+    let el = document.getElementById("clock");
+    if (!el) { el = document.createElement("span"); el.id = "clock"; $("net").appendChild(el); }
+    el.innerHTML = ` · block ${Number(h.height).toLocaleString("en-US")}, ${ago}` + (age > 120
+      ? ` · <b style="color:var(--bad)">the chain isn't producing blocks right now</b>: everything you read here is its last state, and new transactions wait until it moves again`
+      : "");
+  } catch { /* the page's own reads report connection problems */ }
+}
+chainClock();
+setInterval(chainClock, 30000);
+
 $("foot").innerHTML = `Contract <span class="mono">${esc(CFG.contract)}</span>. Source: <a href="https://github.com/eltociear/leash-id">github.com/eltociear/leash-id</a>. This page is static; the signing library is bundled (<code>vendor/cosmjs.js</code>), nothing is loaded from third parties.`;
 fromHash();
 </script>

@@ -9,6 +9,8 @@ import { NET, address, contract, fmt, isAddress, q, toUmec } from "../lib/chain.
 import { act, simulateAs } from "../lib/tx.mjs";
 
 export const ROLE = "agent";
+// Functions are cut off at 60 s: stop waiting for inclusion well before, and answer "unknown" with the tx hash.
+process.env.LEASH_TX_TIMEOUT_MS ??= "30000";
 export const ATTACKER = process.env.SANDBOX_ATTACKER ?? "me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p"; // no ME ID
 // With no agent key on this machine, the sandbox runs key-less on our live testnet sandbox agent: every action,
 // the control payment included, is the chain's own simulation as that agent (its public key is on chain).
