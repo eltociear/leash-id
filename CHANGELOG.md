@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **The red-team sandbox is hosted**: https://leash-id-sandbox.vercel.app/ (the testnet sandbox agent's key, fees on
+  the owner's grant). Vercel's loader can't `require()` an ES module, which `@cosmjs/encoding` does with
+  `@scure/base` 2.x, so the functions are bundled with esbuild at deploy (`scripts/bundle-api.mjs`); local runs and CI
+  are unchanged. It stops waiting for inclusion at 30 s (functions are cut at 60 s) and says why a send didn't happen.
+- **Every page shows the latest block and its age**, and says plainly when the chain isn't producing blocks.
+- JUDGES opens with a five-line summary.
+
 ## 0.7.0 (contract 0.5.2, redeployed on testnet: code 46, `me1dsl645w…vwsrnp`, no admin)
 
 - **The daily limit now holds over any 24 hours, to the second.** Spend is kept in hourly buckets, and a bucket

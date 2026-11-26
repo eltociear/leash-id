@@ -6,6 +6,21 @@ in the next block. Sellers can require that a verified human answers for an agen
 
 Everything below can be checked without trusting us: each claim links to code, a recorded run, or a chain query.
 
+**The short version**
+
+- **The problem.** An AI agent with a wallet key can spend everything in it, and nobody can tell which human
+  answers for it.
+- **What only ME Network makes possible.** The contract asks x/did for the owner's ME ID on every payment
+  (whitelisted Stargate query), so the leash belongs to a KYC-verified person, and suspending that ME ID stops all
+  their agents in the next block. Vendors are checked the same way, EVM sub-accounts included.
+- **Live now.** Contract 0.5.2 on ME Hub testnet, no admin, with every flow recorded against our real ME ID
+  (KYC level 2): 40+ transactions, each re-checked against the chain by CI.
+- **Attacked, and held.** Claude Code working a poisoned inbox, a client that obeys every instruction (8 attacks,
+  0 through), and a public page where anyone can attack a real agent key.
+- **Look first:** the [verifier](https://eltociear.github.io/leash-id/), the
+  [owner console, read-only](https://eltociear.github.io/leash-id/owner.html#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq),
+  the [red-team page](https://leash-id-sandbox.vercel.app/), the [video](https://www.youtube.com/watch?v=vySdFuWiGho).
+
 ## Try it (no install)
 
 | What | Where |
@@ -146,6 +161,8 @@ cat runs/testnet-claude-*.jsonl | jq -r 'select(.type=="result").result'  # Clau
 
 ## Known limits, stated plainly
 
+- ME Hub testnet halts now and then (it stopped at block 5,523,300, 07:09 UTC on 2026-11-26). Every page shows
+  the latest block and its age and says so when the chain isn't moving: reads still work, new transactions wait.
 - Suspending an ME ID needs the global DAO or the KYC issuer, so the kill switch is shown on a node we run, not on
   testnet (`scripts/testnet-killswitch.sh` waits for it on testnet and records the refusals when it happens). Every
   other flow is recorded on testnet too, and CI re-runs the obey-everything, kill-switch and commerce runs on a
