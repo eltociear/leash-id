@@ -1,0 +1,170 @@
+Leash ID kill-switch run on a LOCAL ME Hub node (mechain_2401-1, me-hub built from source)
+contract me14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sc0nehr
+
+## 1. owner holds a live ME ID; the agent pays an allow-listed vendor
+$ devnet/med.sh did owner
+{"info":{"did":"1000000000101","address":"me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3","pubkey":"{\"@type\":\"/cosmos.crypto.secp256k1.PubKey\",\"key\":\"AigG9XL+CrbUBHnixmwHCshoP5yomNcJ8CyF+1iyIkXa\"}","status":"DID_STATUS_ACTIVE","regionId":"","kycLevel":"KYC_LEVEL_TWO","sub_account":""}}
+$ node leash.mjs pay vendor 0.01 KS-1795712047-a --as agent
+ok   pay (paid) payment #1  http://localhost:1317/cosmos/tx/v1beta1/txs/90AC510F525642EB30B539AADCF0C23B0D4DD6A24AB24525889B4E73B4CAC6D9
+     payment_id=1 agent=me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 owner_did=1000000000101 vendor=me177jpt07haff62rz9axwnwhyat29dgcpwumn2cj amount=1000000 invoice=KS-1795712047-a status=paid
+$ node leash.mjs pay vendor 0.018 KS-1795712048-p --as agent
+ok   pay (pending) payment #2  http://localhost:1317/cosmos/tx/v1beta1/txs/33990D5187211C42AB723F04B33D09C885EB865E884AA0B224A70FC4457187EB
+     payment_id=2 agent=me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 owner_did=1000000000101 vendor=me177jpt07haff62rz9axwnwhyat29dgcpwumn2cj amount=1800000 invoice=KS-1795712048-p status=pending
+
+## 2. the global DAO suspends the owner's ME ID (x/did MsgUpdateDidStatus)
+$ devnet/med.sh status 1000000000101 inactive
+tx D0DFF3B3E6F14A4A8D56C4854A6862D2B01F359AEDDD437FFC0D46FC1023CCE1 code=0 
+$ devnet/med.sh did owner
+{"info":{"did":"1000000000101","address":"me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3","pubkey":"{\"@type\":\"/cosmos.crypto.secp256k1.PubKey\",\"key\":\"AigG9XL+CrbUBHnixmwHCshoP5yomNcJ8CyF+1iyIkXa\"}","status":"DID_STATUS_INACTIVE","regionId":"","kycLevel":"KYC_LEVEL_TWO","sub_account":""}}
+
+## 3. next block: the same agent, same vendor, same limits
+$ node leash.mjs whois agent
+agent      me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n "ap-clerk"
+owner      me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3
+ME ID      1000000000101 INACTIVE KYC 2 (needs KYC ≥ 2) → verified false
+bond       none
+gas        from the agent's own wallet: 4.99866418 MEC
+can pay    NO: ME ID 1000000000101 is not active
+limits     ≤ 0.02 MEC per payment, ≤ 0.05 MEC per 24h, approval above 0.015 MEC
+24h spend  0.028 MEC (remaining 0.022 MEC); owner budget 0.472 MEC; 1 held, 1 signature(s) release one
+unsigned   at most 0 MEC more before the owner signs anything (payments of ≤ 0.015 MEC each)
+vendors    me177jpt07haff62rz9axwnwhyat29dgcpwumn2cj + any verified ME ID holder
+expires    2026-12-26 16:54 UTC
+$ node leash.mjs check vendor 0.01 KS-1795712052-b
+would be refused: ME ID 1000000000101 is not active
+$ node -e import('./lib/tx.mjs').then(async ({act}) => { const {address} = await import('./lib/chain.mjs'); const r = await act('agent', {pay:{vendor: await address('vendor'), amount:'1000000', invoice:'KS-1795712052-b', memo:null}}); console.log(r.status.toUpperCase() + ': ' + r.reason + '  ' + r.link); })
+REFUSED: ME ID 1000000000101 is not active  http://localhost:1317/cosmos/tx/v1beta1/txs/E516AF717584980BA01B68681ADF1A5D5D72DB2837219757E678EB6DE549F075
+# the suspended owner tries to push the held payment out
+$ node -e import('./lib/tx.mjs').then(async ({act}) => { const r = await act('owner', {approve:{id:2}}); console.log(r.status.toUpperCase() + ': ' + r.reason + '  ' + r.link); })
+REFUSED: ME ID 1000000000101 is not active  http://localhost:1317/cosmos/tx/v1beta1/txs/7508D8542917BA6A623F6D9A854CD0B2426138527EA8AF7A118B5C2EF0533034
+
+## 4. ME ID re-activated: the payment goes through again, and the owner can approve #2
+$ devnet/med.sh status 1000000000101 active
+tx D88349AA1E02B0DDE98ABD782B0CCD1A6DB8D48C5F7864D29927ABEF4851BE49 code=0 
+$ node leash.mjs pay vendor 0.01 KS-1795712052-b --as agent
+ok   pay (paid) payment #3  http://localhost:1317/cosmos/tx/v1beta1/txs/8E8FDDBC64F5037D41E7C03FDFDB4EFBD872F2FFDFB363DB72597650D269D87E
+     payment_id=3 agent=me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 owner_did=1000000000101 vendor=me177jpt07haff62rz9axwnwhyat29dgcpwumn2cj amount=1000000 invoice=KS-1795712052-b status=paid
+$ node leash.mjs approve 2
+ok   approve payment #2  http://localhost:1317/cosmos/tx/v1beta1/txs/6F11CCB12ABC9B88667971CF03CC71C29C8E4A64FD492DB61A9FA0D02FE2CAB4
+     payment_id=2 owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 signer=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 vendor=me177jpt07haff62rz9axwnwhyat29dgcpwumn2cj amount=1800000 approvals=1 needed=1
+
+## 5. KYC level gate: an owner with only real-person verification (KYC_LEVEL_ONE)
+$ devnet/med.sh did lowkyc
+{"info":{"did":"1000000000102","address":"me132wvuyguusyad34rcmjvzft06s7edjlsvwsv4w","pubkey":"{\"@type\":\"/cosmos.crypto.secp256k1.PubKey\",\"key\":\"A2fFUMecT+fOjbkVUDP4T/SV2X4Gs+OgQ02OE+ALYIS7\"}","status":"DID_STATUS_ACTIVE","regionId":"","kycLevel":"KYC_LEVEL_ONE","sub_account":""}}
+$ node -e import('./lib/tx.mjs').then(async ({act}) => { const r = await act('lowkyc', {deposit:{}}, [{denom:'umec', amount:'1000000'}]); console.log(r.status.toUpperCase() + ': ' + r.reason + '  ' + r.link); })
+REFUSED: ME ID 1000000000102 has KYC level 1, need 2  http://localhost:1317/cosmos/tx/v1beta1/txs/5D2100F6BE6F818E9D10522EE8D5371C22F9B2C7BE5133E7DA48D40CDF9F9077
+
+## 6. a batch settled through ME Hub's custom multi_send message (to Acme + DID 0000000000002, a verified ME ID holder not on the list)
+$ node leash.mjs batch vendor:0.004:KS-1795712062-c me1p7s6k4ecrm2kl0rs6399k99pyuk322dc78dcxq:0.003:KS-1795712062-d --as agent
+ok   pay_batch  http://localhost:1317/cosmos/tx/v1beta1/txs/F38F0C40F1056F619F90D80ECFBA1C0CF0DDB371A849A52DF50D7DFE6209207D
+     agent=me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 payment_ids=4,5 total=700000
+$ node leash.mjs whois agent
+agent      me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n "ap-clerk"
+owner      me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3
+ME ID      1000000000101 active KYC 2 (needs KYC ≥ 2) → verified true
+bond       none
+gas        from the agent's own wallet: 4.99698124 MEC
+can pay    yes
+limits     ≤ 0.02 MEC per payment, ≤ 0.05 MEC per 24h, approval above 0.015 MEC
+24h spend  0.045 MEC (remaining 0.005 MEC); owner budget 0.455 MEC; 0 held, 1 signature(s) release one
+unsigned   at most 0.005 MEC more before the owner signs anything (payments of ≤ 0.015 MEC each)
+vendors    me177jpt07haff62rz9axwnwhyat29dgcpwumn2cj + any verified ME ID holder
+expires    2026-12-26 16:54 UTC
+
+## 7. an EVM-form sub-account: a shop (ME ID 1000000000103) takes payment at the EVM address bound to its ME ID
+$ node leash.mjs identity me1dwjrugnegaskdu3hkj333fxuxm2yzl8am3cdza
+address  me1dwjrugnegaskdu3hkj333fxuxm2yzl8am3cdza
+ME ID    none
+bond     none
+$ node leash.mjs pay me1dwjrugnegaskdu3hkj333fxuxm2yzl8am3cdza 0.002 KS-1795712064-e --as agent
+REFUSED by the contract: vendor me1dwjrugnegaskdu3hkj333fxuxm2yzl8am3cdza is not allowed by this leash  http://localhost:1317/cosmos/tx/v1beta1/txs/991FBF99929252F8265471B262A084FBE492F7907001E6F6944272F5EC4FBD12
+$ node leash.mjs link-sub me1dwjrugnegaskdu3hkj333fxuxm2yzl8am3cdza shop --as vendor
+ok   register_sub_account  http://localhost:1317/cosmos/tx/v1beta1/txs/9F991643D275DE5F0874CD9F9FAC5920CA0F03F55A7078BA9FF4921DB359A7AD
+     sub=me1dwjrugnegaskdu3hkj333fxuxm2yzl8am3cdza main=me163yyu8mvx05d0s9jhqjygs5cv0dyaxz3lw64at did=1000000000103
+$ node leash.mjs identity me1dwjrugnegaskdu3hkj333fxuxm2yzl8am3cdza
+address  me1dwjrugnegaskdu3hkj333fxuxm2yzl8am3cdza
+ME ID    1000000000103 active KYC 2 (via its main account me163yyu8mvx05d0s9jhqjygs5cv0dyaxz3lw64at)
+bond     none
+$ node leash.mjs pay me1dwjrugnegaskdu3hkj333fxuxm2yzl8am3cdza 0.002 KS-1795712068-e --as agent
+ok   pay (paid) payment #6  http://localhost:1317/cosmos/tx/v1beta1/txs/64A8332ECE4F3E9F92F5C049050E9605F9F8F9D0D97E5C5268450D52F66042D3
+     payment_id=6 agent=me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 owner_did=1000000000101 vendor=me1dwjrugnegaskdu3hkj333fxuxm2yzl8am3cdza amount=200000 invoice=KS-1795712068-e status=paid vendor_did=1000000000103
+
+## 8. an agent key that holds no MEC at all: the owner's fee grant pays its contract calls, and nothing else
+$ node leash.mjs gas-grant me1gp3vw0pu6v06g4jq7cz8484j7zpysr5kt8mjnp --limit 0.01 --days 30
+ok   done  http://localhost:1317/cosmos/tx/v1beta1/txs/8CAC91F888186762F6C263256C5581E9246DCB9D6B87AE508D5353101480E44E
+$ node leash.mjs offer me1gp3vw0pu6v06g4jq7cz8484j7zpysr5kt8mjnp --per-tx 0.02 --daily 0.05 --vendors vendor --label zero-balance
+ok   offer_leash  http://localhost:1317/cosmos/tx/v1beta1/txs/8CFABA2686B8AB0DDE09E83FF96A7B21F6894FDAF090743F07808D513501D4C4
+     owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 owner_did=1000000000101 agent=me1gp3vw0pu6v06g4jq7cz8484j7zpysr5kt8mjnp
+$ node leash.mjs accept me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 --as agent0 --fee-granter owner
+ok   accept_leash  http://localhost:1317/cosmos/tx/v1beta1/txs/F46AB1748DA33A885C6FEC3E2ADA97BA0EEB811BE3E1A7FCF0306389778F2055
+     owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 owner_did=1000000000101 agent=me1gp3vw0pu6v06g4jq7cz8484j7zpysr5kt8mjnp
+$ node leash.mjs pay vendor 0.002 KS-1795712075-h --as agent0 --fee-granter owner
+ok   pay (paid) payment #7  http://localhost:1317/cosmos/tx/v1beta1/txs/6589D048D906D67DA925A96D232604FAB87407CC7BD50C6C66740D3FF196D969
+     payment_id=7 agent=me1gp3vw0pu6v06g4jq7cz8484j7zpysr5kt8mjnp owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 owner_did=1000000000101 vendor=me177jpt07haff62rz9axwnwhyat29dgcpwumn2cj amount=200000 invoice=KS-1795712075-h status=paid
+$ node leash.mjs whois me1gp3vw0pu6v06g4jq7cz8484j7zpysr5kt8mjnp
+agent      me1gp3vw0pu6v06g4jq7cz8484j7zpysr5kt8mjnp "zero-balance"
+owner      me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3
+ME ID      1000000000101 active KYC 2 (needs KYC ≥ 2) → verified true
+bond       none
+gas        paid by the owner's fee grant: 0.00912414 MEC left, until 2026-12-26 (MsgExecuteContract only); the agent's own wallet holds 0 MEC
+can pay    yes
+limits     ≤ 0.02 MEC per payment, ≤ 0.05 MEC per 24h, approval above never
+24h spend  0.002 MEC (remaining 0.048 MEC); owner budget 0.451 MEC; 0 held, 1 signature(s) release one
+unsigned   at most 0.048 MEC more before the owner signs anything (payments of ≤ 0.02 MEC each)
+vendors    me177jpt07haff62rz9axwnwhyat29dgcpwumn2cj
+expires    2026-12-26 16:54 UTC
+# the same key tries a plain transfer: the grant doesn't cover it, and the key owns nothing
+$ node -e import('./lib/tx.mjs').then(async ({send}) => { const {address} = await import('./lib/chain.mjs'); const r = await send('agent0', await address('rogue'), 1000, { granter: 'me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3' }); console.log(r.status.toUpperCase() + ': ' + r.reason); })
+NOT_SENT: the sending key doesn't hold enough MEC for this (the amount, or the fee if no grant covers it)
+
+## 9. two signatures: the owner adds a co-approver (ME ID 1000000000104); a held payment needs both
+$ node leash.mjs policy agent --daily 0.2
+ok   update_policy  http://localhost:1317/cosmos/tx/v1beta1/txs/7C7CC1249A5D666DBAB6D85EAE6B44BCCBC66016B196E2224FD23E3A37CF4CFA
+     owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 agent=me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n per_tx_limit=2000000 daily_limit=20000000 expires_at=1798304044
+$ node leash.mjs approvers cfo --threshold 2
+ok   set_approvers  http://localhost:1317/cosmos/tx/v1beta1/txs/9A46BE188DF982CD27F3C5E25AEAA713F1CFFBAB514AFCCBB9E6412C8F08399C
+     owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 approvers=1 threshold=2
+$ node leash.mjs pay vendor 0.018 KS-1795712081-g --as agent
+ok   pay (pending) payment #8  http://localhost:1317/cosmos/tx/v1beta1/txs/FBFAF668C7C3ACC64DDA503CC971D48C66AFB79362BBA0F52AC9ED3A934F1746
+     payment_id=8 agent=me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 owner_did=1000000000101 vendor=me177jpt07haff62rz9axwnwhyat29dgcpwumn2cj amount=1800000 invoice=KS-1795712081-g status=pending
+$ node leash.mjs approve 8
+ok   approve payment #8  http://localhost:1317/cosmos/tx/v1beta1/txs/44D9F219D58E1D5B46085932A5CAD10006DE09B33DF45A74CF9FB9E7D25A960E
+     payment_id=8 owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 signer=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 vendor=me177jpt07haff62rz9axwnwhyat29dgcpwumn2cj amount=1800000 approvals=1 needed=2
+$ node leash.mjs approve 8 --as agent
+REFUSED by the contract: unauthorized: only the owner (or, to approve, reject or revoke, a co-approver) can do this  http://localhost:1317/cosmos/tx/v1beta1/txs/0C3AAECCD5AA3CC45EF1102AF5F81871B9B00EDA81C53E7BA53088CFEFCE17C0
+$ node leash.mjs approve 8 --as cfo
+ok   approve payment #8  http://localhost:1317/cosmos/tx/v1beta1/txs/180B6ABBEC4EA8F4640DE4CA06E281BB4147D78705400DFB8CC8160EDE649423
+     payment_id=8 owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 signer=me1jyz33c08jyezhu4vtw8c89guv7y792mc58ypr5 vendor=me177jpt07haff62rz9axwnwhyat29dgcpwumn2cj amount=1800000 approvals=2 needed=2
+# with two signatures required, the owner alone can't loosen the leash: dropping the approval line waits 24 h
+$ node leash.mjs policy agent --approve-above none
+ok   update_policy WAITS 24 h: you need co-signatures, so a change that loosens control is held for review  http://localhost:1317/cosmos/tx/v1beta1/txs/A1BE02B99BDCFE8DA3B7B53E1A8FC03D1F49D40C837D92A88FBDEDD7E525D216
+     any co-approver can cancel it until 2026-11-27 16:54 UTC; after that anyone applies it: leash apply-change policy:me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n
+$ node leash.mjs whois agent
+agent      me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n "ap-clerk"
+owner      me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3
+ME ID      1000000000101 active KYC 2 (needs KYC ≥ 2) → verified true
+bond       none
+gas        from the agent's own wallet: 4.99480679 MEC
+can pay    yes
+waiting    a looser policy, applies from 2026-11-27 16:54 UTC unless a co-approver cancels it
+limits     ≤ 0.02 MEC per payment, ≤ 0.2 MEC per 24h, approval above 0.015 MEC
+24h spend  0.065 MEC (remaining 0.135 MEC); owner budget 0.433 MEC; 0 held, 2 signature(s) release one
+unsigned   at most 0.135 MEC more before the owner signs anything (payments of ≤ 0.015 MEC each)
+vendors    me177jpt07haff62rz9axwnwhyat29dgcpwumn2cj + any verified ME ID holder
+expires    2026-12-26 16:54 UTC
+$ node leash.mjs changes
+policy:me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n per payment 0.02 MEC, per 24h 0.2 MEC, approval above never, vendors 1 + any verified, until 2026-12-26 16:54 UTC
+                     applies from 2026-11-27 16:54 UTC
+$ node leash.mjs cancel-change policy:me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n --owner me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 --as cfo
+ok   cancel_change  http://localhost:1317/cosmos/tx/v1beta1/txs/0B6310326FFA295C40269A8CD0F281F1055A1EFE70702CD48DC02B7E4C8B70EE
+     owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 key=policy:me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n by=me1jyz33c08jyezhu4vtw8c89guv7y792mc58ypr5
+$ node leash.mjs changes
+(nothing waiting)
+$ node leash.mjs withdraw 0.01
+ok   withdraw WAITS 24 h: you need co-signatures, so a change that loosens control is held for review  http://localhost:1317/cosmos/tx/v1beta1/txs/4DD1F9B9C37A368AD64D92A713B2F0AE795A2E1374162C8B05554A3907390E66
+     any co-approver can cancel it until 2026-11-27 16:54 UTC; after that anyone applies it: leash apply-change withdraw
+$ node leash.mjs revoke agent --as cfo
+ok   revoke_agent  http://localhost:1317/cosmos/tx/v1beta1/txs/C834CA8626DF05E96F884FF9E86F100BDD6A019FE70C8CE51ADD961C7A975BAB
+     owner=me1urcl8xrup6yydch4xk6jkzfjjdcerpdwtpfxx3 by=me1jyz33c08jyezhu4vtw8c89guv7y792mc58ypr5 agent=me12vxecsskwjnntjyapjnzmkv58phuelxcxelv7n rejected_pending=0
+
+done -> runs/devnet-killswitch-2026-11-26T16-54-07Z.txt
