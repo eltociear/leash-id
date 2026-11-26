@@ -201,5 +201,17 @@ if (tpFile) {
   check(Object.values(st).reduce((n, s) => n + txs(s), 0) >= 20, "testnet pay: at least 20 transactions anyone can look up");
 }
 
+// ---- testnet: a real bond in x/wstaking (optional: only if a record exists)
+const tbFile = latest(/^testnet-bond-.*\.txt$/);
+if (tbFile) {
+  const st = Object.fromEntries(fs.readFileSync(path.join(dir, tbFile), "utf8").split(/^## /m).slice(1).map((x) => [x[0], x]));
+  check(/"region":"me_earth"/.test(st[1] ?? "") && /"term":"1"/.test(st[1] ?? ""), "testnet bond 1: the owner's KYC region and the fixed-deposit term ME Hub offers there");
+  check(/^bond\s+none/m.test(st[2] ?? ""), "testnet bond 2: no bond before");
+  check(/REFUSED by the contract: fixed deposit #\d+: .*txs\//.test(st[3] ?? ""), "testnet bond 3: someone else's deposit can't be shown as ours (refused on chain)");
+  check(/ok\s+fixed deposit #\d+: 0\.02 MEC for 1 day/.test(st[4] ?? "") && /ok\s+set_bond/.test(st[4] ?? ""), "testnet bond 4: MsgDoFixedDeposit, then set_bond");
+  check(/"principal":\{"denom":"umec","amount":"2000000"\}/.test(st[5] ?? "") && /^bond\s+0\.02 MEC locked in 1 ME Hub fixed deposit/m.test(st[5] ?? ""),
+    "testnet bond 5: x/wstaking holds it and the contract reads it live (identity and whois)");
+}
+
 console.log(ok ? "\nrun records: all good" : "\nrun records: FAILED");
 process.exit(ok ? 0 : 1);
