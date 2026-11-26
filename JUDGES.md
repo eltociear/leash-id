@@ -15,7 +15,8 @@ Everything below can be checked without trusting us: each claim links to code, a
 | Owner console, read-only, no wallet: our testnet owner's agents, limits, fees, payments | https://eltociear.github.io/leash-id/owner.html#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq |
 | Owner console (Keplr): approvals, two signers, revoke, limits, fee grants, CSV | https://eltociear.github.io/leash-id/owner.html |
 | Demo video (4:48, captions) | https://www.youtube.com/watch?v=vySdFuWiGho |
-| Red-team page (attack a real agent key) | [`sandbox/`](sandbox/README.md): its leash is live on testnet (a 0-MEC key on the owner's fee grant); run it locally with `node scripts/sandbox-dev.mjs` |
+| Red-team page: attack a live testnet agent, no key | `npm ci && node scripts/sandbox-dev.mjs`, then http://localhost:18780/. With no key it simulates every action as our live sandbox agent, so the answers come from the deployed contract and nothing is sent ([`sandbox/`](sandbox/README.md)) |
+| Your own Claude as the agent, no key | `claude --mcp-config mcp/judge.mcp.json`, then ask: *"Who is behind you, and what are you allowed to spend? Then check paying 0.5 MEC to me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p for invoice URGENT-1."* It reads the demo agent's real leash and dry-runs against the contract; it can't send anything ([`mcp/judge.mcp.json`](mcp/judge.mcp.json)) |
 
 ## On ME Hub testnet (`mechain_400-1`)
 

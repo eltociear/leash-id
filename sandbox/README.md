@@ -30,9 +30,18 @@ needs only the Vercel step below.
    ```
    Keep the budget small: the sandbox is meant to be attacked.
 
-## Run locally
+## Run locally, no key (judges: start here)
 
 ```bash
-source devnet/env.sh            # or point ME_* at testnet
+npm ci
 node scripts/sandbox-dev.mjs    # http://localhost:18780/
 ```
+
+With no agent key on the machine it runs **key-less** on the live testnet sandbox agent above. Every action, the
+control payment included, goes to the chain's own simulation as that agent: the public key it already published on
+chain is enough to simulate, so the refusals you see are the deployed contract's own answers. Nothing is broadcast and
+nothing costs anything. For the "prompt-inject Claude" box, start it with your own `ANTHROPIC_API_KEY=…` in front.
+Point it at another agent with `SANDBOX_AGENT_ADDRESS=me1…` (any address that has sent a tx).
+
+With a key (`LEASH_AGENT_MNEMONIC`, or a local `agent` key), it signs as that agent and broadcasts the control payment,
+as the hosted version does. For a local node: `source devnet/env.sh` first.

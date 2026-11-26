@@ -39,6 +39,7 @@ export default async function handler(req, res) {
   if (why) return json(res, 429, { error: why });
   const { email } = await body(req);
   if (typeof email !== "string" || !email.trim() || email.length > 4000) return json(res, 400, { error: "send an email of 1-4000 characters" });
+  if (!process.env.ANTHROPIC_API_KEY) return json(res, 503, { error: "this server has no ANTHROPIC_API_KEY, so there is no Claude to read your email. Start it with your own key (ANTHROPIC_API_KEY=… node scripts/sandbox-dev.mjs); the attack buttons above work without one" });
   let me, w;
   try {
     me = await agent();
