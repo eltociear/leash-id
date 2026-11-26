@@ -16,7 +16,7 @@ use crate::did::DID_QUERY_PATH;
 use crate::me::FIXED_DEPOSIT_QUERY_PATH;
 use crate::error::ContractError;
 use crate::msg::*;
-use crate::state::{ContractVersion, PayStatus, Payment, VERSION};
+use crate::state::{Approvers, ContractVersion, PayStatus, Payment, VERSION};
 
 type Dids = Rc<RefCell<HashMap<String, (String, &'static str, &'static str)>>>;
 /// main account -> its EVM-form sub-account, as x/did would list it
@@ -880,8 +880,11 @@ fn accounting_invariants_hold_under_random_operations() {
                     };
                     if op == 13 {
                         t.exec(&agent, ExecuteMsg::ApplyChange { owner: owner.to_string(), key }, &[])
-                    } else {
+                    } else if rng.pick(2) == 0 {
                         t.exec(&cfo2, ExecuteMsg::CancelChange { owner: owner.to_string(), key }, &[])
+                    } else {
+                        // the co-approver agrees instead: with the owner's proposal that's 2 of 2, applied at once
+                        t.exec(&cfo2, ExecuteMsg::ApproveChange { owner: owner.to_string(), key }, &[])
                     }
                 }
                 11 => {
@@ -1329,4 +1332,99 @@ fn approving_a_held_payment_re_checks_the_payee_and_the_leash() {
     t.pay(&v, 180, "BIG-1").unwrap();
     t.later(3 * DAY); // inside the 7-day hold, past the leash's end
     assert_eq!(t.owner_does(ExecuteMsg::Approve { id: 1 }).unwrap_err(), ContractError::Expired {});
+}
+
+#[test]
+fn an_agent_cannot_pay_its_own_owner_at_any_address() {
+    // otherwise an agent key held by whoever holds the owner key would empty the budget into the owner's wallet,
+    // around the review that co-signing puts on `withdraw`
+    let mut t = setup();
+    let (o, a) = (t.owner.clone(), t.agent.clone());
+    let mut p = t.policy();
+    p.vendors.push(o.to_string());
+    assert!(matches!(t.owner_does(ExecuteMsg::UpdatePolicy { agent: a.to_string(), policy: p }).unwrap_err(), ContractError::SelfDealing { .. }));
+    let mut p = t.policy();
+    p.any_verified_vendor = true; // the owner holds a verified ME ID, so this alone would have let it through
+    t.set_policy(p);
+    assert!(matches!(t.pay(&o, 10, "TO-OWNER").unwrap_err(), ContractError::SelfDealing { .. }));
+    // nor at an EVM sub-account of the owner's ME ID
+    let o_evm = t.deps.api.addr_make("owner-evm");
+    t.subs.borrow_mut().insert(o.to_string(), o_evm.to_string());
+    let s = t.stranger.clone();
+    t.exec(&s, ExecuteMsg::RegisterSubAccount { sub: o_evm.to_string(), main: o.to_string() }, &[]).unwrap();
+    assert!(matches!(t.pay(&o_evm, 10, "TO-OWNER-EVM").unwrap_err(), ContractError::SelfDealing { .. }));
+}
+
+#[test]
+fn reviewed_changes_end_with_the_leash_and_with_a_tightening() {
+    let mut t = setup();
+    let (o, a, s) = (t.owner.clone(), t.agent.clone(), t.stranger.clone());
+    let cfo = t.deps.api.addr_make("cfo");
+    t.dids.borrow_mut().insert(cfo.to_string(), ("1000000000007".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
+    t.owner_does(ExecuteMsg::SetApprovers { approvers: vec![cfo.to_string()], threshold: 2 }).unwrap();
+    let key = format!("policy:{a}");
+    let apply = ExecuteMsg::ApplyChange { owner: o.to_string(), key: key.clone() };
+    let loose = |t: &T| {
+        let mut p = t.policy();
+        p.approve_above = None;
+        p.per_tx_limit = Uint128::new(200);
+        p
+    };
+    // queued, then the agent leaves and the same key is leashed again: the old change must not apply to the new leash
+    let p = loose(&t);
+    t.owner_does(ExecuteMsg::UpdatePolicy { agent: a.to_string(), policy: p }).unwrap();
+    t.exec(&a, ExecuteMsg::LeaveLeash {}, &[]).unwrap();
+    let p = t.policy();
+    t.leash(&o, &a, p).unwrap();
+    t.later(CHANGE_DELAY);
+    assert!(t.exec(&s, apply.clone(), &[]).is_err());
+    assert_eq!(t.whois().policy.approve_above, Some(Uint128::new(150)));
+    // queued, then the owner tightens at once (drops a vendor): the queued loosening is dropped with it
+    let p = loose(&t);
+    t.owner_does(ExecuteMsg::UpdatePolicy { agent: a.to_string(), policy: p }).unwrap();
+    let mut p = t.policy();
+    p.daily_limit = Uint128::new(250);
+    p.expires_at = t.whois().policy.expires_at;
+    t.owner_does(ExecuteMsg::UpdatePolicy { agent: a.to_string(), policy: p }).unwrap();
+    t.later(CHANGE_DELAY);
+    assert!(t.exec(&s, apply.clone(), &[]).is_err());
+    // a change nobody applies within 7 days of its review lapses
+    let p = loose(&t);
+    t.owner_does(ExecuteMsg::UpdatePolicy { agent: a.to_string(), policy: p }).unwrap();
+    t.later(CHANGE_DELAY + 7 * DAY + 1);
+    assert!(t.exec(&s, apply, &[]).is_err());
+    // a co-approver can revoke a new leash during its first 24 h, before it pays anything
+    let a2 = t.deps.api.addr_make("agent-new");
+    let p = t.policy();
+    t.leash(&o, &a2, p).unwrap();
+    let r = t.exec(&cfo, ExecuteMsg::RevokeAgent { agent: a2.to_string() }, &[]).unwrap();
+    assert!(r.attributes.iter().any(|x| x.key == "by" && x.value == cfo.as_str()));
+    t.later(CHANGE_DELAY);
+    let pay2 = ExecuteMsg::Pay { vendor: t.vendor.to_string(), amount: Uint128::new(10), invoice: "NEW-1".into(), memo: None };
+    assert_eq!(t.exec(&a2, pay2, &[]).unwrap_err(), ContractError::Revoked {});
+}
+
+#[test]
+fn enough_signers_can_agree_to_a_change_so_one_co_approver_cannot_hold_it_forever() {
+    let mut t = setup();
+    let (o, s) = (t.owner.clone(), t.stranger.clone());
+    let (cfo, aud) = (t.deps.api.addr_make("cfo"), t.deps.api.addr_make("auditor"));
+    t.dids.borrow_mut().insert(cfo.to_string(), ("1000000000007".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
+    t.dids.borrow_mut().insert(aud.to_string(), ("1000000000008".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
+    // 2 of 3: owner, CFO, auditor
+    t.owner_does(ExecuteMsg::SetApprovers { approvers: vec![cfo.to_string(), aud.to_string()], threshold: 2 }).unwrap();
+    // the CFO's key is lost or hostile: the owner and the auditor drop it, with no 24 h wait and no CFO veto
+    t.owner_does(ExecuteMsg::SetApprovers { approvers: vec![aud.to_string()], threshold: 2 }).unwrap();
+    let ok = ExecuteMsg::ApproveChange { owner: o.to_string(), key: "approvers".into() };
+    assert_eq!(t.exec(&s, ok.clone(), &[]).unwrap_err(), ContractError::Unauthorized {});
+    let r = t.exec(&aud, ok, &[]).unwrap();
+    assert!(r.attributes.iter().any(|x| x.key == "action" && x.value == "apply_change"));
+    let ap: Approvers = t.q(QueryMsg::Approvers { owner: o.to_string() });
+    assert_eq!(ap.list, vec![aud.clone()]);
+    // with one signature short it only records the agreement
+    t.owner_does(ExecuteMsg::Withdraw { amount: Uint128::new(100) }).unwrap();
+    let owner_alone = t.owner_does(ExecuteMsg::ApproveChange { owner: o.to_string(), key: "withdraw".into() }).unwrap();
+    assert!(sent(&owner_alone).is_empty());
+    let r = t.exec(&aud, ExecuteMsg::ApproveChange { owner: o.to_string(), key: "withdraw".into() }, &[]).unwrap();
+    assert_eq!(sent(&r), vec![(o.to_string(), 100)]);
 }

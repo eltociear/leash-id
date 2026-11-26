@@ -76,6 +76,7 @@ const HELP = {
   changes: ["changes [owner]", "loosening changes waiting out the 24 h review (only when 2+ signatures are needed)"],
   "apply-change": ["apply-change <key> [--owner <owner>]", "apply a waiting change once its 24 h are over (anyone may)"],
   "cancel-change": ["cancel-change <key> [--owner <owner>] [--as <co-approver>]", "drop a waiting change (the owner or any co-approver)"],
+  "approve-change": ["approve-change <key> [--owner <owner>] [--as <co-approver>]", "agree to a waiting change; with as many people as release a held payment, it applies at once"],
   "gas-grant": ["gas-grant <agent> --limit <MEC> [--days 30] [--as owner]", "pay an agent's fees from your wallet (contract calls only, capped), so the agent key can hold no MEC at all"],
   "gas-revoke": ["gas-revoke <agent> [--as owner]", "stop paying an agent's fees"],
   "link-sub": ["link-sub <sub-account> <main>", "record an EVM-form sub-account of an ME ID (anyone can; the contract checks x/did)"],
@@ -419,6 +420,7 @@ ${"".padEnd(20)} applies from ${when(c.effective_at)}`);
 };
 const changeOwner = async () => addrOf(o.owner ?? "owner");
 cmds["apply-change"] = async () => send(as("owner"), { apply_change: { owner: await changeOwner(), key: need(args[0], "key") } });
+cmds["approve-change"] = async () => send(as("owner"), { approve_change: { owner: await changeOwner(), key: need(args[0], "key") } });
 cmds["cancel-change"] = async () => send(as("owner"), { cancel_change: { owner: await changeOwner(), key: need(args[0], "key") } });
 cmds.approvers = async () => {
   if (!args.length && !o.threshold) { print(await q({ approvers: { owner: await addrOf(o.owner ?? "owner") } })); return 0; }

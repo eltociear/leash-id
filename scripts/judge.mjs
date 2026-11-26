@@ -37,5 +37,5 @@ for (const [what, cmd, args] of checks) {
 const bad = results.filter((r) => !r.ok);
 for (const r of bad) console.log(`\n--- ${r.what}\n${r.out.split("\n").slice(-25).join("\n")}`);
 console.log(`\n${bad.length ? `${bad.length} of ${results.length} checks failed` : `all ${results.length} checks pass`} in ${((Date.now() - t0) / 1000).toFixed(0)} s` +
-  "\nNext: the contract's own 41 tests need Rust 1.81 (npm run test:contract); the tour is JUDGES.md.");
+  "\nNext: the contract's own 44 tests need Rust 1.81 (npm run test:contract); the tour is JUDGES.md.");
 process.exit(bad.length ? 1 : 0);

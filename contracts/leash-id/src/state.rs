@@ -140,6 +140,9 @@ pub struct Change {
     pub kind: ChangeKind,
     pub proposed_at: u64,
     pub effective_at: u64,
+    /// Co-signers who agreed to it (`approve_change`); with enough of them it applies before the 24 h are up.
+    #[serde(default)]
+    pub approved_by: Vec<Addr>,
 }
 
 /// (owner, key) -> a loosening change waiting out the review delay.

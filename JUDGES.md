@@ -88,7 +88,7 @@ committed.
 ## By judging criterion
 
 **Technical implementation (30)**
-- Contract: [`contracts/leash-id/src`](contracts/leash-id/src). 41 unit tests, including a random-operation test of
+- Contract: [`contracts/leash-id/src`](contracts/leash-id/src). 44 unit tests, including a random-operation test of
   the accounting invariants (40 seeds × 250 operations: contract balance = sum of owner balances, reserved = sum
   of held payments, no invoice paid twice, never more than the daily limit in any 24 hours; partial two-person
   approvals and sub-hour clock steps mixed in).

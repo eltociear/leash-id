@@ -184,7 +184,7 @@ is in `examples/paid-api`.
 | `register_sub_account {sub, main}` | anyone | record an EVM sub-account x/did binds to `main`'s ME ID |
 | `set_bond {deposit_ids}` | owner (ME ID) | show ME Hub fixed deposits as a bond |
 | `set_approvers {approvers, threshold}` | owner (ME ID) | N-of-M approval for held payments (owner + up to 5 co-approvers); any signer can reject, and revoke the owner's agents |
-| `apply_change {owner, key}` / `cancel_change {owner, key}` | anyone after 24 h / owner or any co-approver | with 2+ signatures, a change that loosens control waits 24 h (see below) |
+| `apply_change {owner, key}` / `cancel_change {owner, key}` / `approve_change {owner, key}` | anyone after 24 h (within 7 days) / owner or any co-approver / owner or co-approver | with 2+ signatures, a change that loosens control waits 24 h; enough signers agreeing apply it at once (see below) |
 
 | Query | |
 |---|---|
@@ -204,8 +204,11 @@ Policy: `per_tx_limit`, `daily_limit` (any 24 hours: hourly buckets, each counte
 loosens control waits 24 hours and any one co-approver can cancel it: a higher limit, a higher or no approval
 line, a new vendor, a later expiry, resuming a revoked agent, fewer or other co-approvers (or one more at the same threshold), a withdrawal (with the
 owner key alone, that is where a thief would send the budget), and a new agent's leash (it pays nothing for its
-first 24 h). Tightening is immediate, and any co-approver can revoke the owner's agents at once.
-`an_owner_alone_cannot_loosen_a_co_signed_leash`.
+first 24 h). Tightening is immediate, and any co-approver can revoke the owner's agents at once. An agent
+can't pay its own owner, at any address of the owner's ME ID: the budget goes back only through `withdraw`.
+If as many people as release a held payment agree (`approve_change`), a change applies at once, so one lost or
+hostile co-approver can't hold a 2-of-3 owner hostage. `an_owner_alone_cannot_loosen_a_co_signed_leash`,
+`an_agent_cannot_pay_its_own_owner_at_any_address`, `enough_signers_can_agree_to_a_change_so_one_co_approver_cannot_hold_it_forever`.
 
 ## On ME Hub testnet, with a real ME ID
 
@@ -257,7 +260,7 @@ client (`runs/devnet-obey-*.txt`) and agent-to-agent commerce (`runs/devnet-comm
 
 ```bash
 npm ci
-npm test          # 41 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 26 JS tests (amounts, send outcomes, RPC failover, MCP, paywall, SSRF, CLI, fixed-deposit encoding)
+npm test          # 44 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 26 JS tests (amounts, send outcomes, RPC failover, MCP, paywall, SSRF, CLI, fixed-deposit encoding)
 npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmwasm-check 1.5.8)
 npm run judge     # verify + JS tests + run records + every linked testnet tx, read-only, one line each
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it

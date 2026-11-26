@@ -13,6 +13,12 @@
   On a real node (kill-switch run, now step 9; the 0-MEC fee-grant agent moved to step 8 so its new leash isn't
   under review): the owner alone drops the approval line and withdraws, both wait 24 h; the CFO cancels the
   first and revokes the agent. `check-runs` asserts each.
+- A second review of 0.5.3 before deploying (no admin, so it had to be right first) found, and 0.5.3 now fixes:
+  an agent could pay its own owner, which routed the budget around the withdraw review (now refused at any
+  address of the owner's ME ID); a queued change survived the agent leaving and applied to its next leash;
+  a queued loosening undid a later tightening; one co-approver could cancel every change forever (now enough
+  signers agreeing, `approve_change`, apply it at once); changes now lapse 7 days after their review. Three new
+  tests; the random-operation test also agrees to changes.
 - Approving a held payment re-checks that the vendor is still a payee (not since leashed as an agent) and that the
   leash hasn't expired. Test `approving_a_held_payment_re_checks_the_payee_and_the_leash`.
 - CLI `changes`, `apply-change`, `cancel-change`; a delayed change says when it applies; `whois` shows a waiting

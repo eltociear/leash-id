@@ -38,6 +38,8 @@ const MAX_INVOICE: usize = 64;
 const MAX_MEMO: usize = 256;
 const MAX_BONDS: usize = 5;
 const MAX_APPROVERS: usize = 5;
+/// A reviewed change must be applied within this long after its delay ends, or proposed again.
+const APPLY_WINDOW: u64 = 7 * 86400;
 /// How long a change that loosens control waits while the owner needs two or more signatures.
 pub const CHANGE_DELAY: u64 = 86400;
 
@@ -129,6 +131,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> R
         ExecuteMsg::SetApprovers { approvers, threshold } => set_approvers(deps, env, info, approvers, threshold),
         ExecuteMsg::ApplyChange { owner, key } => apply_change(deps, env, owner, key),
         ExecuteMsg::CancelChange { owner, key } => cancel_change(deps, info, owner, key),
+        ExecuteMsg::ApproveChange { owner, key } => approve_change(deps, env, info, owner, key),
     }
 }
 
@@ -318,7 +321,7 @@ fn pay_out(deps: DepsMut, owner: &Addr, amount: Uint128) -> Res {
 
 // ---------------- leash management ----------------
 
-fn build_policy(deps: Deps, env: &Env, agent: &Addr, p: PolicyMsg) -> Result<Policy, ContractError> {
+fn build_policy(deps: Deps, env: &Env, owner: &Addr, agent: &Addr, p: PolicyMsg) -> Result<Policy, ContractError> {
     if p.label.trim().is_empty() || p.label.chars().count() > 64 {
         return Err(invalid("label must be 1..64 characters"));
     }
@@ -345,7 +348,7 @@ fn build_policy(deps: Deps, env: &Env, agent: &Addr, p: PolicyMsg) -> Result<Pol
     let mut vendors = Vec::with_capacity(p.vendors.len());
     for v in p.vendors {
         let a = deps.api.addr_validate(&v)?;
-        vendor_sane(deps, env, agent, &a)?;
+        vendor_sane(deps, env, owner, agent, &a)?;
         if !vendors.contains(&a) {
             vendors.push(a);
         }
@@ -363,11 +366,14 @@ fn build_policy(deps: Deps, env: &Env, agent: &Addr, p: PolicyMsg) -> Result<Pol
 
 /// Money must leave the leash: not to the agent itself, the contract, or another leashed agent.
 /// The same holds for a registered EVM sub-account: it is the same key as its main account.
-fn vendor_sane(deps: Deps, env: &Env, agent: &Addr, vendor: &Addr) -> Result<(), ContractError> {
+fn vendor_sane(deps: Deps, env: &Env, owner: &Addr, agent: &Addr, vendor: &Addr) -> Result<(), ContractError> {
     let main = SUB_ACCOUNTS.may_load(deps.storage, vendor)?;
     for who in std::iter::once(vendor).chain(main.as_ref()) {
         let why = if who == agent {
             "an agent cannot pay itself"
+        } else if who == owner {
+            // the budget goes back to the owner only by `withdraw`, which co-signing can hold for review
+            "an agent cannot pay its own owner"
         } else if *who == env.contract.address {
             "the contract cannot be a vendor"
         } else if AGENTS.has(deps.storage, who) {
@@ -376,6 +382,12 @@ fn vendor_sane(deps: Deps, env: &Env, agent: &Addr, vendor: &Addr) -> Result<(),
             continue;
         };
         return Err(ContractError::SelfDealing { why: why.into() });
+    }
+    // nor at any other address of the owner's ME ID (e.g. an EVM sub-account x/did binds to it)
+    if let (Some(v), Some(o)) = (me_id_of(deps, vendor.as_str()), me_id_of(deps, owner.as_str())) {
+        if v.did == o.did {
+            return Err(ContractError::SelfDealing { why: "an agent cannot pay its own owner".into() });
+        }
     }
     Ok(())
 }
@@ -439,7 +451,7 @@ fn offer(deps: DepsMut, env: Env, info: MessageInfo, agent: String, p: PolicyMsg
             return Err(invalid("already your agent; use update_policy"));
         }
     }
-    let policy = build_policy(deps.as_ref(), &env, &agent, p)?;
+    let policy = build_policy(deps.as_ref(), &env, &info.sender, &agent, p)?;
     OFFERS.save(
         deps.storage,
         (&agent, &info.sender),
@@ -515,6 +527,8 @@ fn accept(deps: DepsMut, env: Env, info: MessageInfo, owner: String) -> Res {
     )?;
     OFFERS.remove(deps.storage, (&agent, &owner));
     OWNER_AGENTS.save(deps.storage, (&owner, &agent), &())?;
+    // a new leash starts clean: nothing queued against an earlier leash of this key carries over
+    drop_changes_of(deps.storage, &owner, &agent);
     OWNERS.update(deps.storage, &owner, |a| -> StdResult<_> {
         Ok(a.unwrap_or_default())
     })?;
@@ -540,12 +554,14 @@ fn owned(deps: Deps, info: &MessageInfo, agent: &str) -> Result<(Addr, AgentRec)
 
 fn update_policy(deps: DepsMut, env: Env, info: MessageInfo, agent: String, p: PolicyMsg) -> Res {
     let (agent, mut rec) = owned(deps.as_ref(), &info, &agent)?;
-    let new = build_policy(deps.as_ref(), &env, &agent, p)?;
+    let new = build_policy(deps.as_ref(), &env, &rec.owner, &agent, p)?;
     if guarded(deps.storage, &rec.owner)? && loosens(&rec.policy, &new) {
         return delay(deps.storage, &env, &rec.owner, &format!("policy:{agent}"), ChangeKind::Policy(new), "update_policy");
     }
-    // Only the policy changes: a revoked agent stays revoked, and the 24h spend window is kept.
+    // Only the policy changes: a revoked agent stays revoked, and the 24h spend window is kept. A looser
+    // policy queued earlier is dropped: applying it later would quietly undo this (e.g. re-add a vendor just removed).
     rec.policy = new;
+    CHANGES.remove(deps.storage, (&rec.owner, &format!("policy:{agent}")));
     AGENTS.save(deps.storage, &agent, &rec)?;
     Ok(Response::new()
         .add_attribute("action", "update_policy")
@@ -603,12 +619,12 @@ fn revoke(deps: DepsMut, env: Env, info: MessageInfo, agent: String) -> Res {
     rec.revoked = true;
     AGENTS.save(deps.storage, &agent, &rec)?;
     // A revoke also drops whatever loosening of this leash was waiting.
-    CHANGES.remove(deps.storage, (&rec.owner, &format!("policy:{agent}")));
-    CHANGES.remove(deps.storage, (&rec.owner, &format!("resume:{agent}")));
+    drop_changes_of(deps.storage, &rec.owner, &agent);
     let events = reject_pending_of(deps.storage, &env, &rec.owner, &agent)?;
     Ok(Response::new()
         .add_attribute("action", "revoke_agent")
-        .add_attribute("owner", info.sender)
+        .add_attribute("owner", &rec.owner)
+        .add_attribute("by", info.sender)
         .add_attribute("agent", agent)
         .add_attribute("rejected_pending", events.len().to_string())
         .add_events(events))
@@ -636,6 +652,7 @@ fn leave(deps: DepsMut, env: Env, info: MessageInfo) -> Res {
     let events = reject_pending_of(deps.storage, &env, &rec.owner, &agent)?;
     AGENTS.remove(deps.storage, &agent);
     OWNER_AGENTS.remove(deps.storage, (&rec.owner, &agent));
+    drop_changes_of(deps.storage, &rec.owner, &agent);
     Ok(Response::new()
         .add_attribute("action", "leave_leash")
         .add_attribute("owner", rec.owner)
@@ -808,7 +825,7 @@ fn evaluate(
             id,
         });
     }
-    vendor_sane(deps, env, agent, vendor)?;
+    vendor_sane(deps, env, &rec.owner, agent, vendor)?;
     let vendor_id = me_id_of(deps, vendor.as_str());
     if !vendor_allowed(cfg, &rec.policy, vendor, vendor_id.as_ref()) {
         return Err(ContractError::VendorNotAllowed {
@@ -1140,7 +1157,8 @@ fn loosens(old: &Policy, new: &Policy) -> bool {
 fn delay(storage: &mut dyn Storage, env: &Env, owner: &Addr, key: &str, kind: ChangeKind, action: &str) -> Res {
     let now = env.block.time.seconds();
     let at = now + CHANGE_DELAY;
-    CHANGES.save(storage, (owner, key), &Change { kind, proposed_at: now, effective_at: at })?;
+    // a new proposal under the same key replaces the old one, and its 24 h start again
+    CHANGES.save(storage, (owner, key), &Change { kind, proposed_at: now, effective_at: at, approved_by: vec![] })?;
     Ok(Response::new()
         .add_attribute("action", action)
         .add_attribute("owner", owner)
@@ -1148,15 +1166,71 @@ fn delay(storage: &mut dyn Storage, env: &Env, owner: &Addr, key: &str, kind: Ch
         .add_attribute("effective_at", at.to_string()))
 }
 
-/// Anyone may apply a change once its delay is over; it is checked again as if it were made now.
+fn drop_changes_of(storage: &mut dyn Storage, owner: &Addr, agent: &Addr) {
+    CHANGES.remove(storage, (owner, &format!("policy:{agent}")));
+    CHANGES.remove(storage, (owner, &format!("resume:{agent}")));
+}
+
+fn load_change(storage: &dyn Storage, env: &Env, owner: &Addr, key: &str) -> Result<Change, ContractError> {
+    let c = CHANGES
+        .may_load(storage, (owner, key))?
+        .ok_or_else(|| invalid(&format!("no change {key} waiting for {owner}")))?;
+    if env.block.time.seconds() > c.effective_at + APPLY_WINDOW {
+        return Err(invalid(&format!("change {key} wasn't applied within 7 days of its review; propose it again")));
+    }
+    Ok(c)
+}
+
+/// Anyone may apply a change once its delay is over (and within 7 days after); it is checked again as if made now.
 fn apply_change(deps: DepsMut, env: Env, owner: String, key: String) -> Res {
     let owner = deps.api.addr_validate(&owner)?;
-    let c = CHANGES
-        .may_load(deps.storage, (&owner, &key))?
-        .ok_or_else(|| invalid(&format!("no change {key} waiting for {owner}")))?;
+    let c = load_change(deps.storage, &env, &owner, &key)?;
     if env.block.time.seconds() < c.effective_at {
         return Err(invalid(&format!("change {key} can be applied from {} (unix s)", c.effective_at)));
     }
+    do_apply(deps, env, owner, key, c)
+}
+
+/// The signers agree to a waiting change: once as many people (ME IDs) as release a held payment have agreed,
+/// the owner's proposal counting as theirs, it applies at once. So one co-approver alone can't hold the owner
+/// hostage when others agree, and nobody has to wait the 24 h for a change everyone wants.
+fn approve_change(deps: DepsMut, env: Env, info: MessageInfo, owner: String, key: String) -> Res {
+    let cfg = CONFIG.load(deps.storage)?;
+    let owner = deps.api.addr_validate(&owner)?;
+    let signers = approvers_of(deps.storage, &owner)?;
+    if info.sender != owner && !signers.list.contains(&info.sender) {
+        return Err(ContractError::Unauthorized {});
+    }
+    let mut c = load_change(deps.storage, &env, &owner, &key)?;
+    verified(deps.as_ref(), &cfg, &info.sender)?;
+    if !c.approved_by.contains(&info.sender) {
+        c.approved_by.push(info.sender.clone());
+    }
+    // one per live ME ID, among the current signers (the owner always counts as having proposed it)
+    let mut dids: Vec<String> = vec![];
+    for a in std::iter::once(&owner).chain(c.approved_by.iter()) {
+        if *a != owner && !signers.list.contains(a) {
+            continue;
+        }
+        if let Ok(m) = verified(deps.as_ref(), &cfg, a) {
+            if !dids.contains(&m.did) {
+                dids.push(m.did);
+            }
+        }
+    }
+    if dids.len() < signers.threshold as usize {
+        CHANGES.save(deps.storage, (&owner, &key), &c)?;
+        return Ok(Response::new()
+            .add_attribute("action", "approve_change")
+            .add_attribute("owner", &owner)
+            .add_attribute("key", &key)
+            .add_attribute("approvals", dids.len().to_string())
+            .add_attribute("needed", signers.threshold.to_string()));
+    }
+    Ok(do_apply(deps, env, owner, key, c)?.add_attribute("approvals", dids.len().to_string()))
+}
+
+fn do_apply(deps: DepsMut, env: Env, owner: Addr, key: String, c: Change) -> Res {
     CHANGES.remove(deps.storage, (&owner, &key));
     if let ChangeKind::Withdraw { amount } = c.kind {
         // the budget is re-checked now: what's reserved for held payments since then stays put
@@ -1184,7 +1258,7 @@ fn apply_change(deps: DepsMut, env: Env, owner: String, key: String) -> Res {
                 return Err(ContractError::Expired {});
             }
             for v in &pol.vendors {
-                vendor_sane(deps.as_ref(), &env, &agent, v)?;
+                vendor_sane(deps.as_ref(), &env, &owner, &agent, v)?;
             }
             rec.policy = pol;
             AGENTS.save(deps.storage, &agent, &rec)?;
@@ -1302,7 +1376,7 @@ fn settle(deps: DepsMut, env: Env, info: MessageInfo, id: u64, approve: bool) ->
     if env.block.time.seconds() >= rec.policy.expires_at {
         return Err(ContractError::Expired {});
     }
-    vendor_sane(deps.as_ref(), &env, &p.agent, &p.vendor)?;
+    vendor_sane(deps.as_ref(), &env, &p.owner, &p.agent, &p.vendor)?;
     let vid = me_id_of(deps.as_ref(), p.vendor.as_str());
     if !vendor_allowed(&cfg, &rec.policy, &p.vendor, vid.as_ref()) {
         return Err(ContractError::VendorNotAllowed {

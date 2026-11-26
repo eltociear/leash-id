@@ -84,6 +84,9 @@ pub enum ExecuteMsg {
     ApplyChange { owner: String, key: String },
     /// The owner, or any one co-approver, drops a waiting change.
     CancelChange { owner: String, key: String },
+    /// The owner or a co-approver agrees to a waiting change; with as many agreeing ME IDs as release a held
+    /// payment, it applies at once.
+    ApproveChange { owner: String, key: String },
 }
 
 #[cw_serde]
