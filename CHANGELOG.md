@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (contract 0.5.2)
+## 0.7.0 (contract 0.5.2, redeployed on testnet: code 46, `me1dsl645w…vwsrnp`, no admin)
 
 - **The daily limit now holds over any 24 hours, to the second.** Spend is kept in hourly buckets, and a bucket
   used to count for 24 hours. So a full limit spent at 10:59 stopped counting at 10:00 the next day, and twice the
@@ -9,6 +9,18 @@
 - The random-operation test now moves the clock by odd seconds, not whole hours, and checks the limit over every
   24-hour window of every agent's payments. Its harness also undoes a failed call the way the chain does. Mock
   storage had kept the first item of a refused batch, and the new check is what caught that.
+- **The red-team sandbox runs with no key.** With no agent key on the machine, `node scripts/sandbox-dev.mjs`
+  simulates every action as the live testnet sandbox agent (`simulateAs` in `lib/tx.mjs` uses the public key the
+  account already published on chain), so anyone can attack it and get the deployed contract's own answers, with
+  nothing broadcast. On the new contract: control payment would pass, all 8 attacks refused.
+- **Readable transactions**: `docs/tx.html#<hash>` shows what a tx asked the contract and what it answered (the
+  refusal reason in MEC, the payment it recorded, the ME IDs, the money it sent). JUDGES/README and the owner
+  console link there instead of raw REST JSON; the raw answer is linked at the bottom.
+- JUDGES: try the key-less MCP config with your own Claude (`claude --mcp-config mcp/judge.mcp.json`); `npm run
+  verify` is described exactly (chain == committed wasm, which CI rebuilds and compares).
+- README: the vendor KYC floor is the contract's `min_kyc_level`, not per leash (the old wording said "≥ N").
+- CI checks that the owner console and the tx page point at the deployed contract too.
+- The 0.5.1 testnet records are kept in `runs/superseded-v0.5.1/`.
 - **Owner console, read-only**: open any owner's console without a wallet (`owner.html#view=<owner>`), e.g. our
   testnet owner. Same live queries; every control that signs is disabled. Checked in the e2e run.
 - The sandbox page escapes an unexpected status and links only http(s) tx URLs (an injection review of all three

@@ -74,12 +74,12 @@ http.createServer(paywall({ payTo: "me1你的地址…", priceUmec: "100000", mi
 ## 在 ME Hub 测试网上，使用真实的 ME ID
 
 我们的所有者持有测试网 ME ID（`2611255912050`，KYC 等级 2，由测试网 KYC 签发方签发）。`scripts/testnet-pay.sh`
-用它记录完整的支付流程（[`runs/testnet-payments-2026-11-25T16-54-25Z.txt`](runs/testnet-payments-2026-11-25T16-54-25Z.txt)），每一步都是可查询的交易：KYC 等级 1 的真实 ME ID 无法为代理注资（链上拒绝）；
+用它记录完整的支付流程（[`runs/testnet-payments-2026-11-26T06-16-31Z.txt`](runs/testnet-payments-2026-11-26T06-16-31Z.txt)），每一步都是可查询的交易：KYC 等级 1 的真实 ME ID 无法为代理注资（链上拒绝）；
 限额内支付成功；重复发票、超额、无 ME ID 的收款方、KYC 等级 1 的收款方均被拒绝；向绑定到他人 KYC 2 ME ID 的 EVM
 子账户付款，收据记录该 ME ID；超过阈值的付款由所有者批准；`multi_send` 批量支付；撤销后被拒、恢复后可付；从未持有
 MEC 的代理密钥依靠所有者的手续费授权（x/feegrant）付款，且无法转出任何其他资金。
 
-测试网上还记录了：Claude Code 作为代理（`runs/testnet-claude-*.jsonl`）；“服从一切”的客户端（[`runs/testnet-obey-2026-11-25T17-02-39-964Z.txt`](runs/testnet-obey-2026-11-25T17-02-39-964Z.txt)），
+测试网上还记录了：Claude Code 作为代理（`runs/testnet-claude-*.jsonl`）；“服从一切”的客户端（[`runs/testnet-obey-2026-11-26T06-20-59-836Z.txt`](runs/testnet-obey-2026-11-26T06-20-59-836Z.txt)），
 8 次攻击全部在链上被拒，拆分付款被 24 小时限额拦下（低于审批阈值时，24 小时限额是上限而不是阻止：之前一次限额为 0.2 MEC
 的运行中，同样的拆分付款付给了所有者自己的收款方，见 THREAT_MODEL T6）；以及代理之间的交易
 （`runs/testnet-commerce-*.txt`）。

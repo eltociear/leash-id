@@ -1,0 +1,60 @@
+Leash ID on ME Hub TESTNET (mechain_400-1), contract me1dsl645wcgyf5cckkrrcmxsa255r5xve80nm95v8azmc3hnk5uwrqvwsrnp (code 46, no admin)
+a real x/did record: ME ID 1788228745701, main account me1q6r9892hl6dn88zhed8rt5d2rrysa84fltnx5p, EVM sub-account me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc
+
+## 1. x/did, straight from REST: the main account holds the ME ID and lists the sub-account
+$ curl https://beta-hub-1317.explorer-testnet.me/metaearth/did/did?address=me1q6r9892hl6dn88zhed8rt5d2rrysa84fltnx5p
+{"did":"1788228745701","address":"me1q6r9892hl6dn88zhed8rt5d2rrysa84fltnx5p","status":"DID_STATUS_ACTIVE","kycLevel":"KYC_LEVEL_TWO","sub_account":"me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc"}
+$ curl https://beta-hub-1317.explorer-testnet.me/metaearth/did/did?address=me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc
+{"code":2,"message":"codespace did code 111: DID not found","details":[]}
+{"code":2,"message":"codespace did code 111: DID not found","details":[]}
+{"code":2,"message":"codespace did code 111: DID not found","details":[]}
+{"code":2,"message":"codespace did code 111: DID not found","details":[]}
+{"code":2,"message":"codespace did code 111: DID not found","details":[]}
+{"code":2,"message":"codespace did code 111: DID not found","details":[]}
+
+## 2. the contract, before anyone records the link: the EVM address has no ME ID of its own
+$ node leash.mjs identity me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc
+address  me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc
+ME ID    none
+bond     none
+
+## 3. a false link (another ME ID's main account) is refused on chain
+$ node leash.mjs link-sub me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc me1npamyg2lnnv2f9czqne93j6u2v7u4v89yemxxc --as owner
+REFUSED by the contract: me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc is not the sub-account of me1npamyg2lnnv2f9czqne93j6u2v7u4v89yemxxc's ME ID  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/E3469C6EAEF2043D93CB135D3E5839F31AD17F9D3D5B1A4D3B4F3CE1F5DBE657
+
+## 4. the true link: anyone may record it; the contract checks x/did itself
+$ node leash.mjs link-sub me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc me1q6r9892hl6dn88zhed8rt5d2rrysa84fltnx5p --as owner
+ok   register_sub_account  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/EC2AAB226921167BF9CF235907DF68563DDC6324A2180D98946A4A83B5318C39
+     sub=me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc main=me1q6r9892hl6dn88zhed8rt5d2rrysa84fltnx5p did=1788228745701
+
+## 5. the contract now resolves the EVM address to its ME ID, read live from x/did
+$ node leash.mjs identity me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc
+address  me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc
+ME ID    1788228745701 active KYC 2 (via its main account me1q6r9892hl6dn88zhed8rt5d2rrysa84fltnx5p)
+bond     none
+$ node leash.mjs meid me1q6r9892hl6dn88zhed8rt5d2rrysa84fltnx5p
+{
+  address: 'me1q6r9892hl6dn88zhed8rt5d2rrysa84fltnx5p',
+  rest: {
+    did: '1788228745701',
+    address: 'me1q6r9892hl6dn88zhed8rt5d2rrysa84fltnx5p',
+    pubkey: '{"@type":"/cosmos.crypto.secp256k1.PubKey","key":"Au3L4ID/s/rzeEvD2pQ9CL5SX16L3Qjl28cBDE4kLMTt"}',
+    status: 'DID_STATUS_ACTIVE',
+    regionId: 'chn',
+    kycLevel: 'KYC_LEVEL_TWO',
+    sub_account: 'me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc'
+  },
+  contract: {
+    did: '1788228745701',
+    address: 'me1q6r9892hl6dn88zhed8rt5d2rrysa84fltnx5p',
+    active: true,
+    kyc_level: 2,
+    sub_account: 'me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc'
+  }
+}
+
+## 6. the contract's own checks, read-only: whois on an address nobody leashed
+$ node leash.mjs whois me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc
+me1ya7xmdc765w9nwaqw3fvmr2tn73xh2d5f3vyrc is not a Leash ID agent
+
+done -> runs/testnet-identity-2026-11-26T06-15-49Z.txt

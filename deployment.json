@@ -1,14 +1,20 @@
 {
   "chainId": "mechain_400-1",
-  "codeId": 44,
-  "contract": "me1rmqthdyqs03faugttrt6kkm2u73pwfr86aqe6s6jvlwq4wqdp6vq4066gc",
-  "version": "0.5.1",
+  "codeId": 46,
+  "contract": "me1dsl645wcgyf5cckkrrcmxsa255r5xve80nm95v8azmc3hnk5uwrqvwsrnp",
   "admin": null,
-  "storeTx": "3381030D70CDAF5CA78FF33308C8A30BC500EA42055FF3868F0B25136165D81F",
-  "instantiateTx": "640D425C36E7B609141D94835D00A6B7FDF1292969781B0A8ECA2258316BB480",
-  "wasmSha256": "9c87e407c666371717bf40ba57eea437c04096c6b6332be4daa569979d95eb48",
-  "deployedAt": "2026-11-25T16:46:26.646Z",
+  "version": "0.5.2",
+  "storeTx": "D1560CC90EDC47A7ACC967D3DBCA6929FC5CCE24EB571E860F5D1580BBAA954E",
+  "instantiateTx": "C494CA4C146E346A3B4739EB4391198E842A9DC2A7CC0B4CA756667E983564A2",
+  "wasmSha256": "0ccea71e4c8c62ba6e622e6d72b286ed854deb2366ad0ed61a3f3c363d0016fa",
+  "deployedAt": "2026-11-26T06:15:06.171Z",
   "superseded": [
+    {
+      "codeId": 44,
+      "contract": "me1rmqthdyqs03faugttrt6kkm2u73pwfr86aqe6s6jvlwq4wqdp6vq4066gc",
+      "version": "0.5.1",
+      "why": "v0.5.1: the daily limit kept spend in 24 hourly buckets, so a full limit spent late in an hour stopped counting 23h01m later and twice the limit could go out within 24 hours (superseded by 0.5.2, which counts a bucket for 25 hours)"
+    },
     {
       "codeId": 43,
       "contract": "me1aqk3ej23q6ufv2ukgwl85t55etmdvgc0342ek3823g7mnzytxgeq3hjq79",

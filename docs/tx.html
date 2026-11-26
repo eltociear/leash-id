@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leash ID — transaction</title>
+<meta name="description" content="One ME Hub transaction, read live from the chain: what was asked of the Leash ID contract and what it answered.">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:,">
+<style>
+  pre.call { font: 12px ui-monospace, Menlo, monospace; background: #f1efe8; border-radius: 6px; padding: 10px 12px; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .reason { font-size: 17px; margin: 6px 0 0; }
+  #out .card + .card { margin-top: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <nav class="top" aria-label="Leash ID">
+    <b>Leash ID</b>
+    <a href="./about.html">About</a>
+    <a href="./">Check an agent</a>
+    <a href="./owner.html">Owner console</a>
+    <a href="https://github.com/eltociear/leash-id/blob/main/JUDGES.md">For judges</a>
+    <a href="https://github.com/eltociear/leash-id">GitHub</a>
+  </nav>
+  <header>
+    <h1>What happened in this transaction?</h1>
+    <p>One ME Hub transaction, read live from the chain: who sent it, what they asked the Leash ID contract to do, and what the contract answered. Nothing here comes from us.</p>
+    <div class="net" id="net"></div>
+  </header>
+
+  <form id="f" role="search">
+    <label class="sr" for="hash">Transaction hash</label>
+    <input id="hash" placeholder="transaction hash (64 hex characters)" autocomplete="off" spellcheck="false">
+    <button>Look up</button>
+  </form>
+
+  <div id="out" aria-live="polite"></div>
+
+  <footer>
+    Read from ME Hub's REST endpoint (<code>/cosmos/tx/v1beta1/txs/&lt;hash&gt;</code>); the raw answer is linked under each result.
+    Source: <a href="https://github.com/eltociear/leash-id">github.com/eltociear/leash-id</a>
+  </footer>
+</main>
+<script type="module">
+const CFG = {
+  chainId: "mechain_400-1",
+  rest: "https://beta-hub-1317.explorer-testnet.me",
+  // every Leash ID contract we deployed on testnet (deployment.json), newest first
+  contracts: [
+    ["me1dsl645wcgyf5cckkrrcmxsa255r5xve80nm95v8azmc3hnk5uwrqvwsrnp", "0.5.2", 46, true],
+    ["me1rmqthdyqs03faugttrt6kkm2u73pwfr86aqe6s6jvlwq4wqdp6vq4066gc", "0.5.1", 44],
+    ["me1aqk3ej23q6ufv2ukgwl85t55etmdvgc0342ek3823g7mnzytxgeq3hjq79", "0.5.0", 43],
+    ["me1pggva37n3yr92stjc4vquvsl4dulgm7z34ja24e23t5nck3ezjpqhr958v", "0.4.0", 36],
+    ["me12ffftreetcpm7z698k4d3jm6ewvljrza0aj7lrc5zrdkkrqkr69sp668r9", "0.3.0", 35],
+    ["me1f2wumnwd4f0jjj9nzun9esvmjmcntv6dur9y7ewet965dt3n6paq4t3cej", "0.2.0", 34],
+    ["me13xlavey3hpkj823z7y3gcq9d23ut7829yjjygz3whr2y2kzlprhssfqa2h", "0.1.0", 32],
+  ],
+};
+// A local copy can point at a local node (?rest=…); the published page can't be re-pointed.
+if (["localhost", "127.0.0.1"].includes(location.hostname)) {
+  const u = new URLSearchParams(location.search);
+  CFG.rest = u.get("rest") ?? CFG.rest;
+  CFG.chainId = u.get("chain") ?? CFG.chainId;
+  if (u.get("contract")) CFG.contracts = [[u.get("contract"), "local", 0, true]];
+}
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const isAddr = (a) => /^me1[02-9ac-hj-np-z]{38,58}$/.test(a);
+const ONE = 100000000n;
+const mec = (u) => { const v = BigInt(u); const f = (v % ONE).toString().padStart(8, "0").replace(/0+$/, ""); return `${(v / ONE).toLocaleString("en-US")}${f ? "." + f : ""} MEC`; };
+const umecs = (s) => String(s).replace(/\b(\d+)umec\b/g, (_, n) => mec(n));
+// the contract's refusal reasons carry umec amounts; show MEC
+const mecReason = (r) => String(r).replace(/^((?:over per-payment|over daily) limit|insufficient owner budget): (.*)$/,
+  (_, k, rest) => `${k}: ${rest.replace(/\b\d+\b(?! ?h\b)/g, (n) => mec(n))}`);
+const contractOf = (a) => CFG.contracts.find((c) => c[0] === a);
+const who = (a) => {
+  if (!isAddr(a)) return `<span class="mono">${esc(a)}</span>`;
+  const c = contractOf(a);
+  if (c) return `<span class="mono">${esc(a)}</span> <span class="note">(Leash ID contract ${esc(c[1])}${c[3] ? ", the current one" : ", superseded"})</span>`;
+  return `<a class="mono" href="./#${esc(a)}">${esc(a)}</a>`;
+};
+
+async function rest(path) {
+  let r, err;
+  for (let i = 0; i < 3; i++) {
+    if (i) await new Promise((ok) => setTimeout(ok, 700 * i));
+    try {
+      r = await fetch(`${CFG.rest}${path}`, { signal: AbortSignal.timeout(15000) });
+      if (r.status < 500) break;
+    } catch (e) { r = null; err = e; }
+  }
+  if (!r) throw new Error(err?.name === "TimeoutError" ? "ME Hub took too long to answer" : "couldn't reach ME Hub");
+  let j;
+  try { j = await r.json(); } catch { throw new Error(`ME Hub answered with HTTP ${r.status}`); }
+  if (!r.ok) throw new Error(String(j.message ?? `HTTP ${r.status}`).slice(0, 200));
+  return j;
+}
+
+// "failed to execute message; message index: 0: over per-payment limit: 5 > 2: execute wasm contract failed"
+const contractReason = (raw) => {
+  const m = String(raw).match(/message index: \d+: (.*?): execute wasm contract failed/s);
+  return m ? m[1] : null;
+};
+const attrs = (ev) => Object.fromEntries((ev.attributes ?? []).map((a) => [a.key, a.value]));
+
+const ACTIONS = {
+  pay: "pay an invoice", pay_batch: "pay several invoices in one batch", approve: "approve a held payment", reject: "reject a held payment",
+  register_agent: "offer a leash to an agent", accept_leash: "accept a leash", update_policy: "change an agent's leash", revoke_agent: "revoke an agent",
+  resume_agent: "resume an agent", deposit: "fund the owner's budget", withdraw: "withdraw from the owner's budget", register_sub_account: "record an EVM sub-account's ME ID",
+  set_approvers: "set co-approvers", release_invoice: "free an invoice number", set_bond: "point at a fixed-deposit bond", leave_leash: "leave a leash",
+};
+
+function payments(events) {
+  return events.filter((e) => e.type === "wasm-leash_payment").map(attrs).map((p) => `<dl>
+    <dt>Payment</dt><dd><b>#${esc(p.payment_id)}</b> · ${esc(p.kind)} · status <b>${esc(p.status)}</b></dd>
+    <dt>Amount</dt><dd>${/^\d+$/.test(p.amount ?? "") ? mec(p.amount) : esc(p.amount)} · invoice <b>${esc(p.invoice)}</b></dd>
+    <dt>Agent</dt><dd>${who(p.agent)}</dd>
+    <dt>Owner</dt><dd>${who(p.owner)} · ME ID <b>${esc(p.owner_did)}</b></dd>
+    <dt>Vendor</dt><dd>${who(p.vendor)}${p.vendor_did ? ` · ME ID <b>${esc(p.vendor_did)}</b>` : " · no ME ID (an allow-listed vendor)"}</dd>
+  </dl>`).join("");
+}
+
+async function show(hash) {
+  hash = hash.trim().toUpperCase();
+  if (!/^[0-9A-F]{64}$/.test(hash)) { $("out").innerHTML = `<div class="card"><span class="err">That isn't a transaction hash (64 hex characters).</span></div>`; return; }
+  $("hash").value = hash;
+  if (location.hash.slice(1) !== hash) history.replaceState(null, "", `#${hash}`);
+  $("out").innerHTML = `<div class="card">Reading ME Hub…</div>`;
+  let j;
+  try { j = await rest(`/cosmos/tx/v1beta1/txs/${hash}`); }
+  catch (e) { $("out").innerHTML = `<div class="card"><span class="err">${esc(e.message)}</span></div>`; return; }
+  const t = j.tx_response, body = j.tx?.body ?? {}, fee = j.tx?.auth_info?.fee ?? {};
+  const msgs = body.messages ?? [];
+  const leash = msgs.filter((m) => contractOf(m.contract));
+  const reason = t.code ? contractReason(t.raw_log) : null;
+  const [cls, title, line] = t.code === 0
+    ? ["ok", "Executed", leash.length ? "The Leash ID contract accepted this." : "Included in a block and executed."]
+    : reason && leash.length ? ["bad", "Refused by the Leash ID contract", `<p class="reason">“${esc(mecReason(reason))}”</p>`
+      + `<p class="note">The transaction was included in block ${esc(t.height)} and failed, so nothing moved; the sender paid only the fee. Leash ID's demo scripts broadcast refusals on purpose, so each one is on chain for anyone to look up.</p>`]
+    : ["bad", "Failed", `<p class="reason">${esc(String(t.raw_log).slice(0, 400))}</p>`];
+  const out = [];
+  out.push(`<div class="card"><div class="verdict"><span class="badge ${cls}">${title}</span><div>${line.startsWith("<") ? line : `<p>${line}</p>`}</div></div>
+    <dl>
+      <dt>Block</dt><dd>${esc(t.height)} · ${esc(String(t.timestamp).replace("T", " ").replace("Z", " UTC"))}</dd>
+      <dt>Fee</dt><dd>${esc(umecs((fee.amount ?? []).map((c) => `${c.amount}${c.denom}`).join(", ") || "none"))}${fee.granter ? ` · paid by ${who(fee.granter)} through a fee grant` : ""} · gas ${esc(t.gas_used)} of ${esc(t.gas_wanted)}</dd>
+      <dt>Memo</dt><dd>${esc(body.memo || "—")}</dd>
+    </dl></div>`);
+  msgs.forEach((m, i) => {
+    const type = String(m["@type"] ?? "");
+    let what = esc(type), detail = "";
+    if (type.endsWith("MsgExecuteContract")) {
+      const name = Object.keys(m.msg ?? {})[0];
+      const c = contractOf(m.contract);
+      what = c ? `asked Leash ID to <b>${esc(ACTIONS[name] ?? name)}</b>` : `called contract ${who(m.contract)}`;
+      const args = (m.msg ?? {})[name] ?? {};
+      const amounts = [args, ...(args.payments ?? [])].filter((a) => /^\d+$/.test(a?.amount ?? "")).map((a) => mec(a.amount));
+      detail = `<dt>Contract</dt><dd>${who(m.contract)}</dd>${amounts.length ? `<dt>Amount</dt><dd>${esc(amounts.join(" + "))}</dd>` : ""}<dt>Call</dt><dd><pre class="call">${esc(JSON.stringify(m.msg, null, 2))}</pre></dd>`;
+    } else if (type.endsWith("MsgSend")) {
+      what = `sent ${esc(umecs((m.amount ?? []).map((c) => `${c.amount}${c.denom}`).join(", ")))} to ${who(m.to_address)}`;
+    } else if (type.endsWith("MsgGrantAllowance") || type.endsWith("MsgRevokeAllowance")) {
+      what = `${type.endsWith("MsgGrantAllowance") ? "granted" : "ended"} a fee allowance for ${who(m.grantee)}`;
+    }
+    out.push(`<div class="card"><h2>Message ${i + 1}: ${who(m.sender ?? m.from_address ?? m.granter ?? "")} ${what}</h2><dl>${detail}</dl></div>`);
+  });
+  const pays = payments(t.events ?? []);
+  if (pays) out.push(`<div class="card"><h2>What the contract recorded</h2>${pays}</div>`);
+  const sent = (t.events ?? []).filter((e) => e.type === "transfer").map(attrs)
+    .filter((a) => contractOf(a.sender)).map((a) => `<li>${esc(umecs(a.amount))} to ${who(a.recipient)}</li>`);
+  if (sent.length) out.push(`<div class="card"><h2>Money the contract sent</h2><ul>${sent.join("")}</ul></div>`);
+  out.push(`<p class="note">Raw answer: <a href="${esc(CFG.rest)}/cosmos/tx/v1beta1/txs/${esc(hash)}" rel="noopener">${esc(CFG.rest)}/cosmos/tx/v1beta1/txs/${esc(hash.slice(0, 12))}…</a></p>`);
+  $("out").innerHTML = out.join("");
+}
+
+$("net").textContent = `${CFG.chainId} · ${CFG.rest.replace(/^https?:\/\//, "")}`;
+$("f").onsubmit = (e) => { e.preventDefault(); show($("hash").value); };
+const fromHash = () => { const h = (location.hash.slice(1) || new URLSearchParams(location.search).get("hash") || "").trim(); if (h) show(h); };
+addEventListener("hashchange", fromHash);
+fromHash();
+</script>
+</body>
+</html>

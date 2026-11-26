@@ -53,10 +53,13 @@ jobs:
           path: artifacts/leash_id.wasm
       - name: Built wasm == committed artifacts/leash_id.wasm
         run: diff /tmp/committed.txt artifacts/checksums.txt && echo "reproducible ✔"
-      - name: The verifier page points at the deployed contract
+      - name: The pages point at the deployed contract
         run: |
           want=$(node -p 'require("./deployment.json").contract')
-          grep -q "contract: \"$want\"" docs/index.html || { echo "docs/index.html does not use $want"; exit 1; }
+          for f in docs/index.html docs/owner.html; do
+            grep -q "contract: \"$want\"" $f || { echo "$f does not use $want"; exit 1; }
+          done
+          grep -q "\[\"$want\", \"[^\"]*\", [0-9]*, true\]" docs/tx.html || { echo "docs/tx.html does not mark $want as current"; exit 1; }
 
   # The whole system on a real ME Hub node built from openmetaearth/me-hub, on every push: the canonical wasm,
   # the obey-everything attack run, the ME ID kill switch, the sub-account link, then the owner console in a
