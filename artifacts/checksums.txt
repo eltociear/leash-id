@@ -1,1 +1,1 @@
-ace551c1890fc567e534eff6f3900574fcf2935ef5df47a172b6e3ff2543099b  artifacts/leash_id.wasm
+19b7dfce8056ec485bd53ba8938c12574a3b891b52675867a68a6feb9b197907  artifacts/leash_id.wasm
