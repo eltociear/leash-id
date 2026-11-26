@@ -100,7 +100,11 @@ committed.
     asserts each outcome, and the owner console is driven in Chrome.
   - `testnet`: `verify`, and `check:chain`: every testnet tx the committed records link to is fetched from the
     chain and must show the outcome (paid / refused, with the contract's reason) and the contract the record says.
-- Findings from two adversarial reviews are listed, with their fixes, in [CHANGELOG.md](CHANGELOG.md) (0.2.0, 0.4.0).
+- Seven independent reviews so far, each finding listed with its fix and a test in [CHANGELOG.md](CHANGELOG.md):
+  adversarial reviews of the contract (0.2.0, 0.4.0, 0.6.0, 0.6.1), a fresh-eyes accounting review (0.7.0, the
+  daily window), an injection review of the pages (0.7.0) and a review of the off-chain code: MCP server, paywall,
+  CLI, sandbox (Unreleased). Nothing found has been left unfixed without being written down in
+  [THREAT_MODEL.md](THREAT_MODEL.md).
 - Sends hash the tx before broadcasting. An unconfirmed send is reported as UNKNOWN with its hash, never as
   "not sent", so a retry can't double-pay. While the testnet is halted a send isn't broadcast at all: it comes back
   NOT SENT with the age of the latest block, in under a second, instead of waiting 60 s and then reporting UNKNOWN.
@@ -160,7 +164,8 @@ committed.
 - A verifier with no wallet, an owner console (Keplr; tested end to end with a mnemonic signer), and a CLI with
   per-command help and exit codes (3 = "outcome unknown, look it up").
 - READMEs in [Japanese](README.ja.md) and [Chinese](README.zh-CN.md).
-- MCP results Claude can act on: `PAID`, `HELD FOR OWNER APPROVAL`, `REFUSED`, `UNKNOWN`.
+- MCP results Claude can act on: `PAID`, `HELD FOR OWNER APPROVAL`, `REFUSED`, `UNKNOWN` (may have gone through:
+  look it up) and `NOT SENT` (safe to retry), each with the reason and the tx link.
 
 ## Check it yourself
 
@@ -177,7 +182,8 @@ cat runs/testnet-claude-*.jsonl | jq -r 'select(.type=="result").result'  # Clau
 ## Known limits, stated plainly
 
 - ME Hub testnet halts now and then (it stopped at block 5,523,300, 07:09 UTC on 2026-11-26). Every page shows
-  the latest block and its age and says so when the chain isn't moving: reads still work, new transactions wait.
+  the latest block and its age and says so when the chain isn't moving: reads still work, and the CLI, MCP server and sandbox don't broadcast into it
+  (NOT SENT, safe to retry) so nothing lands hours later by surprise.
 - Suspending an ME ID needs the global DAO or the KYC issuer, so the kill switch is shown on a node we run, not on
   testnet (`scripts/testnet-killswitch.sh` waits for it on testnet and records the refusals when it happens). Every
   other flow is recorded on testnet too, and CI re-runs the obey-everything, kill-switch and commerce runs on a
