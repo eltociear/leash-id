@@ -72,13 +72,17 @@ if (ksFile) {
   check(/REFUSED by the contract: vendor .* is not allowed/.test(s7) && /ok\s+register_sub_account/.test(s7) && /via its main account/.test(s7) && /ok\s+pay \(paid\)/.test(s7),
     "7: an EVM sub-account is refused until linked through x/did, then paid");
   const s8 = steps[8] ?? "";
-  const appr = [...s8.matchAll(/ok\s+approve payment #\d+[^\n]*\n\s+([^\n]*)/g)].map((m) => m[1]);
-  check(/ok\s+set_approvers/.test(s8) && appr.length === 2 && /approvals=1 /.test(appr[0]) && !/status=paid/.test(appr[0]) && /approvals=2 /.test(appr[1]),
-    "8: with two signatures required, the owner's alone doesn't pay; the co-approver's completes it");
-  check(/REFUSED by the contract: unauthorized/.test(s8), "8: the agent can't sign its own held payment");
+  check(/ok\s+accept_leash/.test(s8) && /ok\s+pay \(paid\)/.test(s8) && /the agent's own wallet holds 0 MEC/.test(s8) && /MsgExecuteContract only/.test(s8) && /NOT_SENT: the sending key doesn't hold enough MEC/.test(s8),
+    "8: a key holding 0 MEC accepts its leash and pays on the owner's fee grant; it can't move anything else");
   const s9 = steps[9] ?? "";
-  check(/ok\s+accept_leash/.test(s9) && /ok\s+pay \(paid\)/.test(s9) && /the agent's own wallet holds 0 MEC/.test(s9) && /MsgExecuteContract only/.test(s9) && /NOT_SENT: the sending key doesn't hold enough MEC/.test(s9),
-    "9: a key holding 0 MEC accepts its leash and pays on the owner's fee grant; it can't move anything else");
+  const appr = [...s9.matchAll(/ok\s+approve payment #\d+[^\n]*\n\s+([^\n]*)/g)].map((m) => m[1]);
+  check(/ok\s+set_approvers/.test(s9) && appr.length === 2 && /approvals=1 /.test(appr[0]) && !/status=paid/.test(appr[0]) && /approvals=2 /.test(appr[1]),
+    "9: with two signatures required, the owner's alone doesn't pay; the co-approver's completes it");
+  check(/REFUSED by the contract: unauthorized/.test(s9), "9: the agent can't sign its own held payment");
+  const late = s9.slice(s9.indexOf("--approve-above none"));
+  check(/ok\s+update_policy WAITS 24 h/.test(late) && /approval above 0\.015 MEC/.test(late) && /^policy:me1\S+\s+per payment/m.test(late)
+      && /ok\s+cancel_change/.test(late) && /\(nothing waiting\)/.test(late) && /ok\s+withdraw WAITS 24 h/.test(late) && /ok\s+revoke_agent/.test(late),
+    "9: the owner alone can't drop the approval line or withdraw (both wait 24 h); the co-approver cancels the one and revokes the agent");
 }
 
 // ---- agent-to-agent commerce (on the local node, and on testnet if that record exists)

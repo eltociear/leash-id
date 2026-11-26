@@ -9,6 +9,9 @@
   `cancel_change` it; a new agent's leash pays nothing for 24 h; any co-approver can revoke the owner's agents at
   once. Tightening stays immediate. Threat T28, test `an_owner_alone_cannot_loosen_a_co_signed_leash`; the
   random-operation test now applies and cancels waiting changes too.
+  On a real node (kill-switch run, now step 9; the 0-MEC fee-grant agent moved to step 8 so its new leash isn't
+  under review): the owner alone drops the approval line and withdraws, both wait 24 h; the CFO cancels the
+  first and revokes the agent. `check-runs` asserts each.
 - Approving a held payment re-checks that the vendor is still a payee (not since leashed as an agent) and that the
   leash hasn't expired. Test `approving_a_held_payment_re_checks_the_payee_and_the_leash`.
 - CLI `changes`, `apply-change`, `cancel-change`; a delayed change says when it applies; `whois` shows a waiting

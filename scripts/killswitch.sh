@@ -60,16 +60,7 @@ run node leash.mjs link-sub "$M" shop --as vendor   # anyone may record it; the 
 run node leash.mjs identity "$M"
 run node leash.mjs pay "$M" 0.002 "$(inv e)" --as agent     # now paid, with vendor_did 1000000000103 on the receipt
 
-step "8. two signatures: the owner adds a co-approver (ME ID 1000000000104); a held payment needs both"
-run node leash.mjs policy agent --daily 0.2                    # only the 24h limit changes; everything else stays
-run node leash.mjs approvers cfo --threshold 2
-run node leash.mjs pay vendor 0.018 "$(inv g)" --as agent     # held
-HID=$(grep -oE 'pay \(pending\) payment #[0-9]+' "$OUT" | tail -1 | grep -oE '[0-9]+$')
-run node leash.mjs approve "$HID"                             # the owner's signature: 1 of 2, nothing paid yet
-run node leash.mjs approve "$HID" --as agent                  # the agent can't sign
-run node leash.mjs approve "$HID" --as cfo                    # the co-approver's signature: 2 of 2, paid
-
-step "9. an agent key that holds no MEC at all: the owner's fee grant pays its contract calls, and nothing else"
+step "8. an agent key that holds no MEC at all: the owner's fee grant pays its contract calls, and nothing else"
 A0=$(node -e "import('./lib/chain.mjs').then(async c => console.log(await c.address('agent0')))")
 O=$(node -e "import('./lib/chain.mjs').then(async c => console.log(await c.address('owner')))")
 run node leash.mjs gas-grant "$A0" --limit 0.01 --days 30          # x/feegrant: MsgExecuteContract only, capped
@@ -79,6 +70,24 @@ run node leash.mjs pay vendor 0.002 "$(inv h)" --as agent0 --fee-granter owner
 run node leash.mjs whois "$A0"
 log "# the same key tries a plain transfer: the grant doesn't cover it, and the key owns nothing"
 run node -e "import('./lib/tx.mjs').then(async ({send}) => { const {address} = await import('./lib/chain.mjs'); const r = await send('agent0', await address('rogue'), 1000, { granter: '$O' }); console.log(r.status.toUpperCase() + ': ' + r.reason); })"
+
+step "9. two signatures: the owner adds a co-approver (ME ID 1000000000104); a held payment needs both"
+run node leash.mjs policy agent --daily 0.2                    # only the 24h limit changes; everything else stays
+run node leash.mjs approvers cfo --threshold 2
+run node leash.mjs pay vendor 0.018 "$(inv g)" --as agent     # held
+HID=$(grep -oE 'pay \(pending\) payment #[0-9]+' "$OUT" | tail -1 | grep -oE '[0-9]+$')
+run node leash.mjs approve "$HID"                             # the owner's signature: 1 of 2, nothing paid yet
+run node leash.mjs approve "$HID" --as agent                  # the agent can't sign
+run node leash.mjs approve "$HID" --as cfo                    # the co-approver's signature: 2 of 2, paid
+log "# with two signatures required, the owner alone can't loosen the leash: dropping the approval line waits 24 h"
+run node leash.mjs policy agent --approve-above none
+run node leash.mjs whois agent                                 # still approval above 0.015 MEC; the change is waiting
+run node leash.mjs changes
+CO=$(node -e "import('./lib/chain.mjs').then(async c => console.log(await c.address('owner')))")
+run node leash.mjs cancel-change "policy:$(node -e "import('./lib/chain.mjs').then(async c => console.log(await c.address('agent')))")" --owner "$CO" --as cfo   # the co-approver says no
+run node leash.mjs changes
+run node leash.mjs withdraw 0.01                              # a withdrawal waits too: with the owner key alone, that's where a thief sends the budget
+run node leash.mjs revoke agent --as cfo                       # and any co-approver can stop the agent at once
 
 log ""
 log "done -> $OUT"

@@ -54,7 +54,7 @@ Whatever the agent key itself holds, it can move: the contract only guards the e
 should hold nothing. With `leash gas-grant <agent> --limit 0.01`, the owner pays the agent's fees through an
 x/feegrant allowance that covers **contract calls only** (`MsgExecuteContract`), capped and with an expiry. The
 agent key can then hold 0 MEC: it can still accept its leash and pay through it, and it has nothing else to send
-(recorded on a real node: `runs/devnet-killswitch-*.txt`, step 9). The MCP server finds and uses the owner's grant
+(recorded on a real node: `runs/devnet-killswitch-*.txt`, step 8). The MCP server finds and uses the owner's grant
 on its own. The cap bounds what a stolen key can burn in fees, and `leash gas-revoke` ends it.
 
 Without a grant, keep the agent's own balance small. Every send is simulated first, so refusals cost nothing.

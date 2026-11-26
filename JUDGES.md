@@ -131,7 +131,7 @@ committed.
   - revoke and resume
   - CSV export
   - Slack alerts (`leash watch`)
-  - an agent key that holds 0 MEC: the owner pays its fees through x/feegrant, contract calls only (step 9)
+  - an agent key that holds 0 MEC: the owner pays its fees through x/feegrant, contract calls only (kill-switch run, step 8)
 - For the seller: `leash-id/vendor` takes payment from AI agents only when a verified human answers for them.
 - Who it's for, and how it gets used:
   - Accounts-payable teams letting an agent clear routine invoices (SaaS bills, cloud credits, contractor
