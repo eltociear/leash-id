@@ -238,7 +238,7 @@ ME ID を停止できるのは ME Hub のグローバル DAO（`MsgUpdateDidStat
 
 ```bash
 npm ci
-npm test          # コントラクトのテスト 39 件（ランダム操作による帳尻テスト、ゴミ入力でのパーサー検査を含む）+ JS のテスト 26 件（金額、送信結果、RPC の切り替え、MCP、ペイウォール、SSRF、CLI、定期預金のエンコード）
+npm test          # コントラクトのテスト 41 件（ランダム操作による帳尻テスト、ゴミ入力でのパーサー検査を含む）+ JS のテスト 26 件（金額、送信結果、RPC の切り替え、MCP、ペイウォール、SSRF、CLI、定期預金のエンコード）
 npm run build     # 再現可能な wasm（Rust 1.81 + wasm32、binaryen、cosmwasm-check 1.5.8 が必要）
 npm run verify    # デプロイ済みのコード == artifacts/leash_id.wasm であり、admin がコードを差し替えられないこと
 npm run devnet    # ローカル ME Hub ノード: MCP 経由の Claude、obey-everything、キルスイッチ、取引 → runs/

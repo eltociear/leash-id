@@ -293,6 +293,18 @@ function readPolicy(prefix, label) {
   };
 }
 
+// Loosening changes waiting out the 24 h review. An older contract without the query has none.
+const changesOf = (owner) => q({ changes: { owner } }).catch(() => []);
+function changeRow(owner, [key, c], co = false) {
+  const k = Object.keys(c.kind)[0], v = c.kind[k];
+  const what = k === "policy" ? `looser leash for <span class="mono">${esc(key.slice(7, 17))}…</span>: ≤ ${mec(v.per_tx_limit)} per payment, ≤ ${mec(v.daily_limit)} per 24 h, approval ${v.approve_above ? `above ${mec(v.approve_above)}` : "never"}, ${v.vendors.length} vendor(s)${v.any_verified_vendor ? " + any verified" : ""}, until ${when(v.expires_at)}`
+    : k === "approvers" ? `${v.threshold} signature(s), co-approvers: ${v.list.length ? v.list.map((a) => `<span class="mono">${esc(a.slice(0, 10))}…</span>`).join(", ") : "none"}`
+    : k === "withdraw" ? `withdraw ${mec(v.amount)} to the owner's wallet` : `resume <span class="mono">${esc(key.slice(7, 17))}…</span>`;
+  const due = Date.now() / 1000 >= c.effective_at, id = `${esc(owner)}|${esc(key)}`;
+  return `<div class="row" style="margin:4px 0">${co ? `<span class="mono">${esc(owner.slice(0, 10))}…</span>: ` : ""}${what} · ${due ? "review over" : `applies from ${when(c.effective_at)}`}
+    ${due ? `<button class="ghost small" data-apply="${id}">Apply</button>` : ""}<button class="danger ghost small" data-cancel="${id}">Cancel</button></div>`;
+}
+
 // The page says when it is re-reading the chain (tests wait for it; nothing else depends on it).
 let refreshing = 0;
 async function refresh() {
@@ -300,8 +312,8 @@ async function refresh() {
   try { await render(); lockdown(); } finally { if (--refreshing === 0) delete document.body.dataset.busy; }
 }
 async function render() {
-  const [o, cfg, ident, appr, coOwners] = await Promise.all([q({ owner: { owner: me } }), q({ config: {} }), q({ identity: { address: me } }),
-    q({ approvers: { owner: me } }), q({ approver_of: { approver: me } })]);
+  const [o, cfg, ident, appr, coOwners, mine] = await Promise.all([q({ owner: { owner: me } }), q({ config: {} }), q({ identity: { address: me } }),
+    q({ approvers: { owner: me } }), q({ approver_of: { approver: me } }), changesOf(me)]);
   const id = o.me_id;
   const ok = id && id.active && id.kyc_level >= cfg.min_kyc_level;
   $("acct").innerHTML = `
@@ -314,7 +326,9 @@ async function render() {
         <form class="row" id="bondf" style="margin-top:6px"><label class="sr" for="bond-ids">Fixed deposit ids</label><input id="bond-ids" placeholder="ME Hub fixed deposit ids, e.g. 12, 15" value="${ident.bond ? ident.bond.deposits.map((d) => d.id).join(", ") : ""}"><button class="ghost small" id="bond-go">Show as bond</button></form></dd>
       <dt>Signatures</dt><dd>${appr.threshold} of ${appr.list.length + 1} (you${appr.list.length ? ` + ${appr.list.map((a) => `<span class="mono">${esc(a.slice(0, 10))}…</span>`).join(", ")}` : ""}) release a held payment; any one can reject
         <form class="row" id="apprf" style="margin-top:6px"><label class="sr" for="appr-list">Co-approvers</label><input id="appr-list" placeholder="co-approver me1…, me1…" value="${appr.list.map(esc).join(", ")}">
-        <label class="sr" for="appr-n">Signatures needed</label><input id="appr-n" inputmode="numeric" style="max-width:90px" value="${appr.threshold}"><button class="ghost small" id="appr-go">Save</button></form></dd>
+        <label class="sr" for="appr-n">Signatures needed</label><input id="appr-n" inputmode="numeric" style="max-width:90px" value="${appr.threshold}"><button class="ghost small" id="appr-go">Save</button></form>
+        ${appr.threshold >= 2 ? `<p class="muted" style="margin:6px 0 0">With 2+ signatures, anything that loosens control (higher limits, a higher or no approval line, new vendors, a later expiry, a resume, fewer co-approvers, a withdrawal, a new agent) waits 24 h, and any co-approver can cancel it. Tightening is immediate.</p>` : ""}</dd>
+      ${mine.length ? `<dt>Under review</dt><dd id="review">${mine.map((c) => changeRow(me, c)).join("")}</dd>` : ""}
     </dl>
     <form class="row" id="fund" style="margin-top:14px">
       <label class="sr" for="amt">Amount in MEC</label><input id="amt" inputmode="decimal" placeholder="amount (MEC)">
@@ -369,6 +383,15 @@ async function render() {
       <td><div class="row" style="flex-wrap:nowrap"><button class="small" data-approve="${p.id}" ${(p.approved_by ?? []).includes(me) ? "disabled" : ""}>Approve</button><button class="small danger ghost" data-reject="${p.id}">Reject</button></div></td></tr>`).join("")}
     </tbody></table></div>` : "Nothing waits on your signature.";
   $("co").onclick = $("pending").onclick;
+  // changes other owners made alone, which this account can still cancel
+  const coChanges = (await Promise.all(coOwners.map(async (owner) => (await changesOf(owner)).map((c) => changeRow(owner, c, true))))).flat();
+  if (coChanges.length) $("co").insertAdjacentHTML("beforeend", `<h3 style="margin-top:14px">Changes waiting for review</h3>${coChanges.join("")}`);
+  for (const el of [$("review"), $("co")]) if (el) el.addEventListener("click", (e) => {
+    const c = e.target.dataset.cancel, a = e.target.dataset.apply;
+    if (!c && !a) return;
+    const [owner, key] = (c ?? a).split("|");
+    send(c ? `cancel ${key}` : `apply ${key}`, c ? { cancel_change: { owner, key } } : { apply_change: { owner, key } }, [], e.target);
+  });
 
   const box = $("agents");
   if (!o.agents.length) { box.innerHTML = `<div class="card">No agents yet. Offer a leash below; it takes effect when the agent key accepts it.</div>`; }

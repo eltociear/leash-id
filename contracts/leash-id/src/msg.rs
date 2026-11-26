@@ -53,7 +53,7 @@ pub enum ExecuteMsg {
     LeaveLeash {},
     /// Owner changes the policy. Never lifts a revoke.
     UpdatePolicy { agent: String, policy: PolicyMsg },
-    /// Owner stops the agent; its pending payments are rejected.
+    /// Owner, or any one of the owner's co-approvers, stops the agent; its pending payments are rejected.
     RevokeAgent { agent: String },
     /// Owner lifts a revoke.
     ResumeAgent { agent: String },
@@ -78,6 +78,12 @@ pub enum ExecuteMsg {
     /// Owner: co-approvers (each with a live ME ID, up to 5) and how many signatures, the owner's included,
     /// release a held payment. Any one of them can reject. `threshold: 1` with no approvers = owner alone.
     SetApprovers { approvers: Vec<String>, threshold: u8 },
+    /// While two or more signatures are needed, changes that loosen control (higher limits, a higher or no
+    /// approval line, new vendors, a later expiry, a resume, fewer or other co-approvers, a withdrawal) wait 24 hours
+    /// under a key (`policy:<agent>`, `resume:<agent>`, `approvers`, `withdraw`). Anyone applies one after that.
+    ApplyChange { owner: String, key: String },
+    /// The owner, or any one co-approver, drops a waiting change.
+    CancelChange { owner: String, key: String },
 }
 
 #[cw_serde]
@@ -152,6 +158,9 @@ pub enum QueryMsg {
     /// The owners whose held payments this address can co-approve.
     #[returns(Vec<String>)]
     ApproverOf { approver: String },
+    /// Changes waiting out the review delay: `(key, change)`.
+    #[returns(Vec<(String, crate::state::Change)>)]
+    Changes { owner: String },
 }
 
 #[cw_serde]
@@ -195,6 +204,12 @@ pub struct WhoisResponse {
     /// Could this agent pay anything at all right now? If not, `blocked_by` says why.
     pub can_pay_now: bool,
     pub blocked_by: Option<String>,
+    /// Set while a leash accepted under co-signing waits out its review delay (unix seconds it starts).
+    #[serde(default)]
+    pub active_from: Option<u64>,
+    /// A loosening of this leash waiting out the review delay, if any.
+    #[serde(default)]
+    pub pending_change: Option<crate::state::Change>,
 }
 
 #[cw_serde]

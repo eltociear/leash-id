@@ -179,11 +179,12 @@ is in `examples/paid-api`.
 | `revoke_agent` / `resume_agent` | owner | stop the agent and reject its held payments / lift the revoke |
 | `pay {vendor, amount, invoice, memo}` | agent | pay within the leash |
 | `pay_batch {payments}` | agent | up to 20 payments via ME `multi_send`, all or nothing |
-| `approve {id}` / `reject {id}` | owner | settle held payments (approve re-checks ME ID, vendor, and age ≤ 7 days) |
+| `approve {id}` / `reject {id}` | owner or co-approver | settle held payments (approve re-checks ME IDs, that the vendor is still allowed and still a payee, that the leash hasn't expired, and age ≤ 7 days) |
 | `release_invoice {vendor, invoice}` | owner | let a handled invoice number be paid again |
 | `register_sub_account {sub, main}` | anyone | record an EVM sub-account x/did binds to `main`'s ME ID |
 | `set_bond {deposit_ids}` | owner (ME ID) | show ME Hub fixed deposits as a bond |
-| `set_approvers {approvers, threshold}` | owner (ME ID) | N-of-M approval for held payments (owner + up to 5 co-approvers); any signer can reject |
+| `set_approvers {approvers, threshold}` | owner (ME ID) | N-of-M approval for held payments (owner + up to 5 co-approvers); any signer can reject, and revoke the owner's agents |
+| `apply_change {owner, key}` / `cancel_change {owner, key}` | anyone after 24 h / owner or any co-approver | with 2+ signatures, a change that loosens control waits 24 h (see below) |
 
 | Query | |
 |---|---|
@@ -193,10 +194,18 @@ is in `examples/paid-api`.
 | `pending {owner}`, `invoice {owner, vendor, invoice}` | approval queue; "was this invoice handled?" |
 | `identity {address}` | ME ID (direct or via main account) and bond of any address |
 | `approvers {owner}`, `approver_of {approver}` | an owner's signers; the owners an address co-signs for |
+| `changes {owner}` | loosening changes waiting out their 24 h review |
 | `owner`, `offers`, `payment`, `payments`, `config`, `version`, `me_id` | state |
 
 Policy: `per_tx_limit`, `daily_limit` (any 24 hours: hourly buckets, each counted for 25 h), `approve_above` (< `per_tx_limit`), `vendors`
 (≤ 32), `any_verified_vendor`, `expires_at` (≤ 366 days). Limits per owner: 50 agents, 50 held payments.
+
+**Two signatures mean the owner can't go around them alone.** While an owner needs 2+ signatures, anything that
+loosens control waits 24 hours and any one co-approver can cancel it: a higher limit, a higher or no approval
+line, a new vendor, a later expiry, resuming a revoked agent, fewer or other co-approvers, a withdrawal (with the
+owner key alone, that is where a thief would send the budget), and a new agent's leash (it pays nothing for its
+first 24 h). Tightening is immediate, and any co-approver can revoke the owner's agents at once.
+`an_owner_alone_cannot_loosen_a_co_signed_leash`.
 
 ## On ME Hub testnet, with a real ME ID
 
@@ -248,7 +257,7 @@ client (`runs/devnet-obey-*.txt`) and agent-to-agent commerce (`runs/devnet-comm
 
 ```bash
 npm ci
-npm test          # 39 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 26 JS tests (amounts, send outcomes, RPC failover, MCP, paywall, SSRF, CLI, fixed-deposit encoding)
+npm test          # 41 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 26 JS tests (amounts, send outcomes, RPC failover, MCP, paywall, SSRF, CLI, fixed-deposit encoding)
 npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmwasm-check 1.5.8)
 npm run judge     # verify + JS tests + run records + every linked testnet tx, read-only, one line each
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it

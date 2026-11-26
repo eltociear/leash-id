@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Contract 0.5.3: two signatures can't be gone around by the owner alone** (found by a judge-style review).
+  With co-approvers, the owner key could still drop the approval line, raise limits, add a vendor, lower the
+  threshold, set up a fresh agent, or withdraw the budget, and then pay alone. Now, while 2+ signatures are
+  needed, each of those waits 24 hours (`apply_change` by anyone afterwards) and any one co-approver can
+  `cancel_change` it; a new agent's leash pays nothing for 24 h; any co-approver can revoke the owner's agents at
+  once. Tightening stays immediate. Threat T28, test `an_owner_alone_cannot_loosen_a_co_signed_leash`; the
+  random-operation test now applies and cancels waiting changes too.
+- Approving a held payment re-checks that the vendor is still a payee (not since leashed as an agent) and that the
+  leash hasn't expired. Test `approving_a_held_payment_re_checks_the_payee_and_the_leash`.
+- CLI `changes`, `apply-change`, `cancel-change`; a delayed change says when it applies; `whois` shows a waiting
+  one. The owner console lists changes under review with Cancel (and Apply once due), also for co-approvers.
+
 - **The red-team sandbox is hosted**: https://leash-id-sandbox.vercel.app/ (the testnet sandbox agent's key, fees on
   the owner's grant). Vercel's loader can't `require()` an ES module, which `@cosmjs/encoding` does with
   `@scure/base` 2.x, so the functions are bundled with esbuild at deploy (`scripts/bundle-api.mjs`); local runs and CI

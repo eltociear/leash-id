@@ -12,9 +12,9 @@ use crate::msg::{
     Output, OwnerResponse, PayItem, PaymentsResponse, PolicyMsg, QueryMsg, WhoisResponse,
 };
 use crate::state::{
-    AgentRec, Approvers, Config, ContractVersion, Offer, OwnerAcct, PayStatus, Payment, Policy, AGENTS, APPROVERS, APPROVER_OF, BONDS, SUB_ACCOUNTS,
+    AgentRec, Approvers, Change, ChangeKind, Config, ContractVersion, Offer, OwnerAcct, PayStatus, Payment, Policy, AGENTS, APPROVERS, APPROVER_OF, BONDS, SUB_ACCOUNTS,
     AGENT_PAYMENTS, CONFIG, INVOICES, NEXT_ID, OFFERS, OWNERS, OWNER_AGENTS, OWNER_PAYMENTS,
-    OWNER_PENDING, PAYMENTS, VERSION,
+    OWNER_PENDING, PAYMENTS, VERSION, CHANGES,
 };
 
 pub type Res = Result<Response<MeMsg>, ContractError>;
@@ -38,6 +38,8 @@ const MAX_INVOICE: usize = 64;
 const MAX_MEMO: usize = 256;
 const MAX_BONDS: usize = 5;
 const MAX_APPROVERS: usize = 5;
+/// How long a change that loosens control waits while the owner needs two or more signatures.
+pub const CHANGE_DELAY: u64 = 86400;
 
 pub fn instantiate(deps: DepsMut, _env: Env, info: MessageInfo, msg: InstantiateMsg) -> Res {
     nonpayable(&info)?;
@@ -104,14 +106,14 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> R
     }
     match msg {
         ExecuteMsg::Deposit {} => deposit(deps, info),
-        ExecuteMsg::Withdraw { amount } => withdraw(deps, info, amount),
+        ExecuteMsg::Withdraw { amount } => withdraw(deps, env, info, amount),
         ExecuteMsg::RegisterAgent { agent, policy } => offer(deps, env, info, agent, policy),
         ExecuteMsg::CancelOffer { agent } => cancel_offer(deps, info, agent),
         ExecuteMsg::AcceptLeash { owner } => accept(deps, env, info, owner),
         ExecuteMsg::LeaveLeash {} => leave(deps, env, info),
         ExecuteMsg::UpdatePolicy { agent, policy } => update_policy(deps, env, info, agent, policy),
         ExecuteMsg::RevokeAgent { agent } => revoke(deps, env, info, agent),
-        ExecuteMsg::ResumeAgent { agent } => resume(deps, info, agent),
+        ExecuteMsg::ResumeAgent { agent } => resume(deps, env, info, agent),
         ExecuteMsg::Pay {
             vendor,
             amount,
@@ -124,7 +126,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> R
         ExecuteMsg::ReleaseInvoice { vendor, invoice } => release_invoice(deps, info, vendor, invoice),
         ExecuteMsg::RegisterSubAccount { sub, main } => register_sub(deps, sub, main),
         ExecuteMsg::SetBond { deposit_ids } => set_bond(deps, env, info, deposit_ids),
-        ExecuteMsg::SetApprovers { approvers, threshold } => set_approvers(deps, info, approvers, threshold),
+        ExecuteMsg::SetApprovers { approvers, threshold } => set_approvers(deps, env, info, approvers, threshold),
+        ExecuteMsg::ApplyChange { owner, key } => apply_change(deps, env, owner, key),
+        ExecuteMsg::CancelChange { owner, key } => cancel_change(deps, info, owner, key),
     }
 }
 
@@ -277,25 +281,37 @@ fn deposit(deps: DepsMut, info: MessageInfo) -> Res {
         .add_attribute("balance", acct.balance))
 }
 
-fn withdraw(deps: DepsMut, info: MessageInfo, amount: Uint128) -> Res {
-    let cfg = CONFIG.load(deps.storage)?;
+fn withdraw(deps: DepsMut, env: Env, info: MessageInfo, amount: Uint128) -> Res {
     // Only an owner who deposited can withdraw. An agent (or anyone else) gets a plain refusal.
-    let mut acct = OWNERS
+    let acct = OWNERS
         .may_load(deps.storage, &info.sender)?
         .ok_or(ContractError::Unauthorized {})?;
     let available = acct.balance - acct.reserved;
     if amount.is_zero() || amount > available {
         return Err(ContractError::InsufficientBudget { available, amount });
     }
+    if guarded(deps.storage, &info.sender)? {
+        return delay(deps.storage, &env, &info.sender, "withdraw", ChangeKind::Withdraw { amount }, "withdraw");
+    }
+    pay_out(deps, &info.sender, amount)
+}
+
+fn pay_out(deps: DepsMut, owner: &Addr, amount: Uint128) -> Res {
+    let cfg = CONFIG.load(deps.storage)?;
+    let mut acct = OWNERS.load(deps.storage, owner)?;
+    let available = acct.balance - acct.reserved;
+    if amount.is_zero() || amount > available {
+        return Err(ContractError::InsufficientBudget { available, amount });
+    }
     acct.balance -= amount;
-    OWNERS.save(deps.storage, &info.sender, &acct)?;
+    OWNERS.save(deps.storage, owner, &acct)?;
     Ok(Response::new()
         .add_message(BankMsg::Send {
-            to_address: info.sender.to_string(),
+            to_address: owner.to_string(),
             amount: coins(amount.u128(), cfg.denom),
         })
         .add_attribute("action", "withdraw")
-        .add_attribute("owner", info.sender)
+        .add_attribute("owner", owner)
         .add_attribute("amount", amount)
         .add_attribute("balance", acct.balance))
 }
@@ -485,6 +501,7 @@ fn accept(deps: DepsMut, env: Env, info: MessageInfo, owner: String) -> Res {
     if count >= MAX_AGENTS_PER_OWNER {
         return Err(invalid("this owner already has 50 agents"));
     }
+    let active_from = if guarded(deps.storage, &owner)? { env.block.time.seconds() + CHANGE_DELAY } else { 0 };
     AGENTS.save(
         deps.storage,
         &agent,
@@ -493,6 +510,7 @@ fn accept(deps: DepsMut, env: Env, info: MessageInfo, owner: String) -> Res {
             policy: off.policy,
             spend: vec![],
             revoked: false,
+            active_from,
         },
     )?;
     OFFERS.remove(deps.storage, (&agent, &owner));
@@ -522,8 +540,12 @@ fn owned(deps: Deps, info: &MessageInfo, agent: &str) -> Result<(Addr, AgentRec)
 
 fn update_policy(deps: DepsMut, env: Env, info: MessageInfo, agent: String, p: PolicyMsg) -> Res {
     let (agent, mut rec) = owned(deps.as_ref(), &info, &agent)?;
+    let new = build_policy(deps.as_ref(), &env, &agent, p)?;
+    if guarded(deps.storage, &rec.owner)? && loosens(&rec.policy, &new) {
+        return delay(deps.storage, &env, &rec.owner, &format!("policy:{agent}"), ChangeKind::Policy(new), "update_policy");
+    }
     // Only the policy changes: a revoked agent stays revoked, and the 24h spend window is kept.
-    rec.policy = build_policy(deps.as_ref(), &env, &agent, p)?;
+    rec.policy = new;
     AGENTS.save(deps.storage, &agent, &rec)?;
     Ok(Response::new()
         .add_attribute("action", "update_policy")
@@ -572,9 +594,17 @@ fn close_pending(storage: &mut dyn Storage, acct: &mut OwnerAcct, p: &mut Paymen
 }
 
 fn revoke(deps: DepsMut, env: Env, info: MessageInfo, agent: String) -> Res {
-    let (agent, mut rec) = owned(deps.as_ref(), &info, &agent)?;
+    // Stopping money never waits for anyone: the owner, or any one of the owner's co-approvers, can revoke.
+    let agent = deps.api.addr_validate(&agent)?;
+    let mut rec = load_agent(deps.as_ref(), &agent)?;
+    if rec.owner != info.sender && !approvers_of(deps.storage, &rec.owner)?.list.contains(&info.sender) {
+        return Err(ContractError::Unauthorized {});
+    }
     rec.revoked = true;
     AGENTS.save(deps.storage, &agent, &rec)?;
+    // A revoke also drops whatever loosening of this leash was waiting.
+    CHANGES.remove(deps.storage, (&rec.owner, &format!("policy:{agent}")));
+    CHANGES.remove(deps.storage, (&rec.owner, &format!("resume:{agent}")));
     let events = reject_pending_of(deps.storage, &env, &rec.owner, &agent)?;
     Ok(Response::new()
         .add_attribute("action", "revoke_agent")
@@ -584,10 +614,13 @@ fn revoke(deps: DepsMut, env: Env, info: MessageInfo, agent: String) -> Res {
         .add_events(events))
 }
 
-fn resume(deps: DepsMut, info: MessageInfo, agent: String) -> Res {
+fn resume(deps: DepsMut, env: Env, info: MessageInfo, agent: String) -> Res {
     let (agent, mut rec) = owned(deps.as_ref(), &info, &agent)?;
     if !rec.revoked {
         return Err(invalid("agent is not revoked"));
+    }
+    if guarded(deps.storage, &rec.owner)? {
+        return delay(deps.storage, &env, &rec.owner, &format!("resume:{agent}"), ChangeKind::Resume {}, "resume_agent");
     }
     rec.revoked = false;
     AGENTS.save(deps.storage, &agent, &rec)?;
@@ -749,6 +782,9 @@ fn evaluate(
     }
     if env.block.time.seconds() >= rec.policy.expires_at {
         return Err(ContractError::Expired {});
+    }
+    if env.block.time.seconds() < rec.active_from {
+        return Err(ContractError::NotActiveYet { at: rec.active_from });
     }
     if amount.is_zero() {
         return Err(invalid("amount must be > 0"));
@@ -1011,26 +1047,56 @@ fn approvers_of(storage: &dyn Storage, owner: &Addr) -> StdResult<Approvers> {
     Ok(APPROVERS.may_load(storage, owner)?.unwrap_or(Approvers { list: vec![], threshold: 1 }))
 }
 
-fn set_approvers(deps: DepsMut, info: MessageInfo, list: Vec<String>, threshold: u8) -> Res {
-    let cfg = CONFIG.load(deps.storage)?;
+fn set_approvers(deps: DepsMut, env: Env, info: MessageInfo, list: Vec<String>, threshold: u8) -> Res {
     let owner = info.sender;
+    let new = checked_approvers(deps.as_ref(), &owner, list.iter().map(|a| deps.api.addr_validate(a)).collect::<StdResult<_>>()?, threshold)?;
+    let old = approvers_of(deps.storage, &owner)?;
+    // Fewer signatures, or a co-approver dropped or swapped, is a loosening: while two or more signatures
+    // are needed it waits, and any current co-approver can cancel it.
+    if old.threshold >= 2 && (new.threshold < old.threshold || old.list.iter().any(|a| !new.list.contains(a))) {
+        return delay(deps.storage, &env, &owner, "approvers", ChangeKind::Approvers(new), "set_approvers");
+    }
+    store_approvers(deps.storage, &owner, &old, &new)?;
+    Ok(Response::new()
+        .add_attribute("action", "set_approvers")
+        .add_attribute("owner", owner)
+        .add_attribute("approvers", new.list.len().to_string())
+        .add_attribute("threshold", new.threshold.to_string()))
+}
+
+fn store_approvers(storage: &mut dyn Storage, owner: &Addr, old: &Approvers, new: &Approvers) -> StdResult<()> {
+    for a in &old.list {
+        APPROVER_OF.remove(storage, (a, owner));
+    }
+    for a in &new.list {
+        APPROVER_OF.save(storage, (a, owner), &())?;
+    }
+    if new.list.is_empty() && new.threshold == 1 {
+        APPROVERS.remove(storage, owner);
+    } else {
+        APPROVERS.save(storage, owner, new)?;
+    }
+    Ok(())
+}
+
+fn checked_approvers(deps: Deps, owner: &Addr, list: Vec<Addr>, threshold: u8) -> Result<Approvers, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
     // Two-person approval means two people: every signer must hold a different ME ID. An owner's own EVM
     // sub-account resolves to the owner's ME ID, so it can't be the owner's co-approver.
-    let mut dids = vec![verified(deps.as_ref(), &cfg, &owner)?.did];
+    let mut dids = vec![verified(deps, &cfg, owner)?.did];
     if list.len() > MAX_APPROVERS {
         return Err(invalid("at most 5 co-approvers"));
     }
     let mut addrs: Vec<Addr> = vec![];
     for a in list {
-        let a = deps.api.addr_validate(&a)?;
-        if a == owner || addrs.contains(&a) {
+        if a == *owner || addrs.contains(&a) {
             continue;
         }
         if AGENTS.has(deps.storage, &a) {
             return Err(invalid("an agent key cannot be a co-approver"));
         }
         // Each co-approver is a verified human too, checked now and again whenever they sign.
-        let did = verified(deps.as_ref(), &cfg, &a)?.did;
+        let did = verified(deps, &cfg, &a)?.did;
         if dids.contains(&did) {
             return Err(invalid(&format!(
                 "{a} holds ME ID {did}, the same person as you or another co-approver; each signer needs their own ME ID"
@@ -1042,23 +1108,117 @@ fn set_approvers(deps: DepsMut, info: MessageInfo, list: Vec<String>, threshold:
     if threshold == 0 || threshold as usize > addrs.len() + 1 {
         return Err(invalid("threshold must be between 1 and the number of signers (co-approvers + you)"));
     }
-    let old = approvers_of(deps.storage, &owner)?;
-    for a in &old.list {
-        APPROVER_OF.remove(deps.storage, (a, &owner));
-    }
-    for a in &addrs {
-        APPROVER_OF.save(deps.storage, (a, &owner), &())?;
-    }
-    if addrs.is_empty() && threshold == 1 {
-        APPROVERS.remove(deps.storage, &owner);
-    } else {
-        APPROVERS.save(deps.storage, &owner, &Approvers { list: addrs.clone(), threshold })?;
-    }
+    Ok(Approvers { list: addrs, threshold })
+}
+
+// ---------------- the review delay for loosening changes ----------------
+
+/// Does this owner need two or more signatures? Then changes that loosen control wait `CHANGE_DELAY`.
+fn guarded(storage: &dyn Storage, owner: &Addr) -> StdResult<bool> {
+    Ok(approvers_of(storage, owner)?.threshold >= 2)
+}
+
+/// Would `new` let the agent move money that `old` wouldn't? Any one of these makes the whole change wait.
+fn loosens(old: &Policy, new: &Policy) -> bool {
+    let hold_loosened = match (old.approve_above, new.approve_above) {
+        (Some(a), Some(b)) => b > a,
+        (Some(_), None) => true,
+        (None, _) => false,
+    };
+    new.per_tx_limit > old.per_tx_limit
+        || new.daily_limit > old.daily_limit
+        || hold_loosened
+        || new.vendors.iter().any(|v| !old.vendors.contains(v))
+        || (new.any_verified_vendor && !old.any_verified_vendor)
+        || new.expires_at > old.expires_at
+}
+
+fn delay(storage: &mut dyn Storage, env: &Env, owner: &Addr, key: &str, kind: ChangeKind, action: &str) -> Res {
+    let now = env.block.time.seconds();
+    let at = now + CHANGE_DELAY;
+    CHANGES.save(storage, (owner, key), &Change { kind, proposed_at: now, effective_at: at })?;
     Ok(Response::new()
-        .add_attribute("action", "set_approvers")
+        .add_attribute("action", action)
         .add_attribute("owner", owner)
-        .add_attribute("approvers", addrs.len().to_string())
-        .add_attribute("threshold", threshold.to_string()))
+        .add_attribute("delayed", key)
+        .add_attribute("effective_at", at.to_string()))
+}
+
+/// Anyone may apply a change once its delay is over; it is checked again as if it were made now.
+fn apply_change(deps: DepsMut, env: Env, owner: String, key: String) -> Res {
+    let owner = deps.api.addr_validate(&owner)?;
+    let c = CHANGES
+        .may_load(deps.storage, (&owner, &key))?
+        .ok_or_else(|| invalid(&format!("no change {key} waiting for {owner}")))?;
+    if env.block.time.seconds() < c.effective_at {
+        return Err(invalid(&format!("change {key} can be applied from {} (unix s)", c.effective_at)));
+    }
+    CHANGES.remove(deps.storage, (&owner, &key));
+    if let ChangeKind::Withdraw { amount } = c.kind {
+        // the budget is re-checked now: what's reserved for held payments since then stays put
+        return Ok(pay_out(deps, &owner, amount)?.add_attribute("key", key));
+    }
+    let res = Response::new()
+        .add_attribute("action", "apply_change")
+        .add_attribute("owner", &owner)
+        .add_attribute("key", &key);
+    match c.kind {
+        ChangeKind::Withdraw { .. } => unreachable!(),
+        ChangeKind::Approvers(a) => {
+            let new = checked_approvers(deps.as_ref(), &owner, a.list, a.threshold)?;
+            let old = approvers_of(deps.storage, &owner)?;
+            store_approvers(deps.storage, &owner, &old, &new)?;
+            Ok(res.add_attribute("threshold", new.threshold.to_string()))
+        }
+        ChangeKind::Policy(pol) => {
+            let agent = agent_of_key(deps.as_ref(), &key, "policy:")?;
+            let mut rec = load_agent(deps.as_ref(), &agent)?;
+            if rec.owner != owner {
+                return Err(invalid("that agent has another owner now"));
+            }
+            if env.block.time.seconds() >= pol.expires_at {
+                return Err(ContractError::Expired {});
+            }
+            for v in &pol.vendors {
+                vendor_sane(deps.as_ref(), &env, &agent, v)?;
+            }
+            rec.policy = pol;
+            AGENTS.save(deps.storage, &agent, &rec)?;
+            Ok(res.add_attribute("agent", agent))
+        }
+        ChangeKind::Resume {} => {
+            let agent = agent_of_key(deps.as_ref(), &key, "resume:")?;
+            let mut rec = load_agent(deps.as_ref(), &agent)?;
+            if rec.owner != owner {
+                return Err(invalid("that agent has another owner now"));
+            }
+            rec.revoked = false;
+            AGENTS.save(deps.storage, &agent, &rec)?;
+            Ok(res.add_attribute("agent", agent))
+        }
+    }
+}
+
+fn agent_of_key(deps: Deps, key: &str, prefix: &str) -> Result<Addr, ContractError> {
+    let a = key.strip_prefix(prefix).ok_or_else(|| invalid("bad change key"))?;
+    Ok(deps.api.addr_validate(a)?)
+}
+
+/// The owner, or any one of the owner's current co-approvers, can cancel a waiting change.
+fn cancel_change(deps: DepsMut, info: MessageInfo, owner: String, key: String) -> Res {
+    let owner = deps.api.addr_validate(&owner)?;
+    if info.sender != owner && !approvers_of(deps.storage, &owner)?.list.contains(&info.sender) {
+        return Err(ContractError::Unauthorized {});
+    }
+    if !CHANGES.has(deps.storage, (&owner, &key)) {
+        return Err(invalid(&format!("no change {key} waiting for {owner}")));
+    }
+    CHANGES.remove(deps.storage, (&owner, &key));
+    Ok(Response::new()
+        .add_attribute("action", "cancel_change")
+        .add_attribute("owner", owner)
+        .add_attribute("key", key)
+        .add_attribute("by", info.sender))
 }
 
 fn settle(deps: DepsMut, env: Env, info: MessageInfo, id: u64, approve: bool) -> Res {
@@ -1132,8 +1292,13 @@ fn settle(deps: DepsMut, env: Env, info: MessageInfo, id: u64, approve: bool) ->
         PAYMENTS.save(deps.storage, id, &p)?;
         return Ok(res.add_event(payment_event("approval", &p)));
     }
-    // The vendor must still be one this leash may pay (a "verified vendor" may have lost its ME ID).
+    // The vendor must still be one this leash may pay (a "verified vendor" may have lost its ME ID), and still
+    // a payee at all: not since leashed as an agent, not the agent's own address. An expired leash pays nothing.
     let rec = load_agent(deps.as_ref(), &p.agent)?;
+    if env.block.time.seconds() >= rec.policy.expires_at {
+        return Err(ContractError::Expired {});
+    }
+    vendor_sane(deps.as_ref(), &env, &p.agent, &p.vendor)?;
     let vid = me_id_of(deps.as_ref(), p.vendor.as_str());
     if !vendor_allowed(&cfg, &rec.policy, &p.vendor, vid.as_ref()) {
         return Err(ContractError::VendorNotAllowed {
@@ -1269,6 +1434,15 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         }
         QueryMsg::MeId { address } => to_json_binary(&me_id_of(deps, &address)),
         QueryMsg::Approvers { owner } => to_json_binary(&approvers_of(deps.storage, &deps.api.addr_validate(&owner)?)?),
+        QueryMsg::Changes { owner } => {
+            let owner = deps.api.addr_validate(&owner)?;
+            let list = CHANGES
+                .prefix(&owner)
+                .range(deps.storage, None, None, Order::Ascending)
+                .take(MAX_LIMIT as usize)
+                .collect::<StdResult<Vec<(String, Change)>>>()?;
+            to_json_binary(&list)
+        }
         QueryMsg::ApproverOf { approver } => {
             let a = deps.api.addr_validate(&approver)?;
             let owners = APPROVER_OF
@@ -1316,10 +1490,15 @@ fn whois(deps: Deps, env: &Env, agent: String) -> StdResult<WhoisResponse> {
     let acct = OWNERS.may_load(deps.storage, &rec.owner)?.unwrap_or_default();
     let available = acct.balance - acct.reserved;
     let expired = env.block.time.seconds() >= rec.policy.expires_at;
+    let now = env.block.time.seconds();
+    let pending_change = CHANGES.may_load(deps.storage, (&rec.owner, &format!("policy:{agent}")))?
+        .or(CHANGES.may_load(deps.storage, (&rec.owner, &format!("resume:{agent}")))?);
     let blocked_by = if rec.revoked {
-        Some("revoked by the owner".to_string())
+        Some("revoked by the owner or a co-approver".to_string())
     } else if expired {
         Some("leash expired".to_string())
+    } else if now < rec.active_from {
+        Some(ContractError::NotActiveYet { at: rec.active_from }.to_string())
     } else if let Err(e) = &id_check {
         Some(e.to_string())
     } else if available.is_zero() {
@@ -1345,6 +1524,8 @@ fn whois(deps: Deps, env: &Env, agent: String) -> StdResult<WhoisResponse> {
         approvals_needed: approvers_of(deps.storage, &rec.owner)?.threshold,
         can_pay_now: blocked_by.is_none(),
         blocked_by,
+        active_from: (now < rec.active_from).then_some(rec.active_from),
+        pending_change,
         policy: rec.policy,
     })
 }

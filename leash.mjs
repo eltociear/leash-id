@@ -72,7 +72,10 @@ const HELP = {
   owner: ["owner [owner]", "an owner's budget, reserved funds and agents"],
   history: ["history [--agent a | --owner o] [--limit 20] [--before id] [--csv]", "payments, newest first (--csv: every payment, for accounting)"],
   invoice: ["invoice <vendor> <invoice> [--owner o]", "was this invoice already handled?"],
-  approvers: ["approvers <addr,…> --threshold N [--as owner]", "co-approvers for held payments: N signatures (yours included) release one; any one can reject"],
+  approvers: ["approvers <addr,…> --threshold N [--as owner]", "co-approvers for held payments: N signatures (yours included) release one; any one can reject or revoke"],
+  changes: ["changes [owner]", "loosening changes waiting out the 24 h review (only when 2+ signatures are needed)"],
+  "apply-change": ["apply-change <key> [--owner <owner>]", "apply a waiting change once its 24 h are over (anyone may)"],
+  "cancel-change": ["cancel-change <key> [--owner <owner>] [--as <co-approver>]", "drop a waiting change (the owner or any co-approver)"],
   "gas-grant": ["gas-grant <agent> --limit <MEC> [--days 30] [--as owner]", "pay an agent's fees from your wallet (contract calls only, capped), so the agent key can hold no MEC at all"],
   "gas-revoke": ["gas-revoke <agent> [--as owner]", "stop paying an agent's fees"],
   "link-sub": ["link-sub <sub-account> <main>", "record an EVM-form sub-account of an ME ID (anyone can; the contract checks x/did)"],
@@ -125,6 +128,11 @@ function outcome(r) {
   const a = r.attrs ?? {};
   switch (r.status) {
     case "ok":
+      if (a.delayed) {
+        console.log(`ok   ${a.action} WAITS 24 h: you need co-signatures, so a change that loosens control is held for review  ${r.link}`);
+        console.log(`     any co-approver can cancel it until ${when(Number(a.effective_at))}; after that anyone applies it: leash apply-change ${a.delayed}`);
+        return 0;
+      }
       console.log(`ok   ${a.action ?? "done"}${a.status ? ` (${a.status})` : ""}${a.payment_id ? ` payment #${a.payment_id}` : ""}  ${r.link}`);
       const rest = Object.entries(a).filter(([k]) => k !== "action").map(([k, v]) => `${k}=${v}`).join(" ");
       if (rest) console.log("     " + rest);
@@ -306,7 +314,11 @@ const cmds = {
       const g = await feeGrant(agent, w.owner).catch(() => null);
       const own = fmt(await balance(agent));
       console.log(`gas        ${g ? `paid by the owner's fee grant: ${g.spend_limit ? fmt(g.spend_limit) : "no cap"} left${g.expiration ? `, until ${g.expiration.slice(0, 10)}` : ""}${g.allowed_messages ? ` (${g.allowed_messages.map((m) => m.split(".").pop()).join(", ")} only)` : ""}; the agent's own wallet holds ${own}` : `from the agent's own wallet: ${own}`}`);
-      console.log(`can pay    ${w.can_pay_now ? "yes" : `NO: ${w.blocked_by}`}`);
+      console.log(`can pay    ${w.can_pay_now ? "yes" : `NO: ${mecAmounts(w.blocked_by)}`}`);
+      if (w.pending_change) {
+        const c = w.pending_change, k = Object.keys(c.kind)[0];
+        console.log(`waiting    ${k === "resume" ? "a resume" : "a looser policy"}, applies from ${when(c.effective_at)} unless a co-approver cancels it`);
+      }
       console.log(`limits     ≤ ${fmt(p.per_tx_limit)} per payment, ≤ ${fmt(p.daily_limit)} per 24h, approval above ${p.approve_above ? fmt(p.approve_above) : "never"}`);
       console.log(`24h spend  ${fmt(w.spent_24h)} (remaining ${fmt(w.remaining_24h)}); owner budget ${fmt(w.owner_balance)}; ${w.pending_count} held, ${w.approvals_needed} signature(s) release one`);
       // the most it can move before anyone signs: what's left of the 24h limit, out of the owner's free budget
@@ -390,6 +402,24 @@ cmds.watch = async () => {
     await new Promise((res) => setTimeout(res, every));
   }
 };
+cmds.changes = async () => {
+  const owner = await addrOf(args[0] ?? "owner");
+  const list = await q({ changes: { owner } });
+  if (o.json) return print(list), 0;
+  if (!list.length) { console.log("(nothing waiting)"); return 0; }
+  for (const [key, c] of list) {
+    const k = Object.keys(c.kind)[0], v = c.kind[k];
+    const what = k === "policy" ? `per payment ${fmt(v.per_tx_limit)}, per 24h ${fmt(v.daily_limit)}, approval above ${v.approve_above ? fmt(v.approve_above) : "never"}, vendors ${v.vendors.length}${v.any_verified_vendor ? " + any verified" : ""}, until ${when(v.expires_at)}`
+      : k === "approvers" ? `${v.threshold} signature(s), co-approvers ${v.list.join(", ") || "(none)"}`
+      : k === "withdraw" ? `withdraw ${fmt(v.amount)}` : "lift the revoke";
+    console.log(`${key.padEnd(20)} ${what}
+${"".padEnd(20)} applies from ${when(c.effective_at)}`);
+  }
+  return 0;
+};
+const changeOwner = async () => addrOf(o.owner ?? "owner");
+cmds["apply-change"] = async () => send(as("owner"), { apply_change: { owner: await changeOwner(), key: need(args[0], "key") } });
+cmds["cancel-change"] = async () => send(as("owner"), { cancel_change: { owner: await changeOwner(), key: need(args[0], "key") } });
 cmds.approvers = async () => {
   if (!args.length && !o.threshold) { print(await q({ approvers: { owner: await addrOf(o.owner ?? "owner") } })); return 0; }
   const list = await Promise.all((args[0] ?? "").split(",").filter(Boolean).map(addrOf));

@@ -27,6 +27,9 @@ pub enum ContractError {
     #[error("unauthorized: only the owner can do this")]
     Unauthorized {},
 
+    #[error("this leash starts working at {at} (unix s): its owner needs co-signatures, so co-approvers get 24 hours to revoke a leash set up alone")]
+    NotActiveYet { at: u64 },
+
     #[error("agent revoked")]
     Revoked {},
 

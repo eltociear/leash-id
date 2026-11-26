@@ -34,6 +34,10 @@ pub struct AgentRec {
     /// Spend per hour, `(unix_hour, amount)`, only the last 24 hours are kept.
     pub spend: Vec<(u64, Uint128)>,
     pub revoked: bool,
+    /// A leash accepted while its owner needs co-signatures starts working only after the review delay, so a
+    /// co-approver can revoke a leash the owner set up alone before it pays anything. 0 = from the start.
+    #[serde(default)]
+    pub active_from: u64,
 }
 
 /// A leash the owner offered; it only takes effect once the agent key accepts it.
@@ -115,3 +119,28 @@ pub struct Approvers {
 pub const APPROVERS: Map<&Addr, Approvers> = Map::new("approvers");
 /// (approver, owner): lets an approver find the owners whose payments wait on them.
 pub const APPROVER_OF: Map<(&Addr, &Addr), ()> = Map::new("approver_of");
+
+/// A change that loosens control while an owner needs two or more signatures. It waits `CHANGE_DELAY`, during
+/// which any co-approver (or the owner) can cancel it; after that anyone can apply it. Tightening is never delayed.
+#[cw_serde]
+pub enum ChangeKind {
+    /// The agent's new policy (key `policy:<agent>`).
+    Policy(Policy),
+    /// Lift the agent's revoke (key `resume:<agent>`).
+    Resume {},
+    /// New co-approvers and threshold (key `approvers`).
+    Approvers(Approvers),
+    /// Take budget back to the owner's wallet (key `withdraw`): with the owner key alone, that is where a
+    /// thief would send it.
+    Withdraw { amount: Uint128 },
+}
+
+#[cw_serde]
+pub struct Change {
+    pub kind: ChangeKind,
+    pub proposed_at: u64,
+    pub effective_at: u64,
+}
+
+/// (owner, key) -> a loosening change waiting out the review delay.
+pub const CHANGES: Map<(&Addr, &str), Change> = Map::new("changes");

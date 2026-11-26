@@ -52,15 +52,16 @@ doesn't cover. With an owner fee grant (T27) it can be empty.
 | T22 | An agent pays an API run by nobody verified | an API asks for payment to an anonymous address | the leash refuses vendors without an ME ID unless allow-listed; `pay_for_api` also caps the price | commerce run steps 6-7 |
 | T23 | Front-running a payment | someone watching the chain sends another agent's tx hash to the API first | redemption needs the paying agent key's ADR-36 signature over (tx, invoice) | commerce run step 4 |
 | T24 | One insider moves money alone | a single compromised approver key approves a large held payment | `set_approvers`: N signatures from N **different** ME IDs (an owner's or co-approver's EVM sub-account is the same person, 0.5.0), each live, re-counted at release, one per ME ID; any one can reject; no self-approval, also not to the signer's own sub-account; agents can't be approvers | `held_payments_can_need_two_signatures`, `two_signatures_must_come_from_two_me_ids`; devnet step 8; `npm run e2e:owner` |
+| T28 | The owner goes around the co-approvers | with 2 signatures required, the owner key (or a thief holding it) drops the approval line, raises limits, adds its own vendor, lowers the threshold, sets up a fresh agent, or just withdraws the budget, then pays alone | while 2+ signatures are needed, every loosening change waits 24 h and any one co-approver can cancel it (0.5.3); a new agent's leash pays nothing for 24 h; any co-approver can revoke the owner's agents at once; tightening is immediate | `an_owner_alone_cannot_loosen_a_co_signed_leash` |
 | T25 | The agent fetches internal URLs (SSRF) | an injected email makes the agent call `pay_for_api` on cloud metadata or a LAN admin page | public https only; the resolved address must be public and the request connects to that same address (no DNS-rebinding window); no redirects; 64 KB cap | `test/mcp.test.mjs` |
 | T26 | Paying itself through its own EVM form | an agent key that also holds an ME ID links its EVM sub-account and pays it | `vendor_sane` checks the main account behind any registered sub-account | `an_evm_sub_account_counts_as_its_main_me_id` |
 | T27 | The agent key's own wallet | a stolen agent key sends away whatever MEC it holds for gas | the owner pays the agent's fees through x/feegrant (contract calls only, capped, expiring), so the key can hold 0 MEC | `runs/devnet-killswitch-*.txt` step 9; SECURITY.md §4 |
 
 ## What Leash ID does *not* protect against
 
-- **The owner key.** Whoever holds it can change the leash, approve, withdraw and revoke. Keep it off the
-  agent's machine. A multisig owner is a natural next step; today the owner must itself hold an ME ID, so it
-  has to be a person's key.
+- **The owner key, with no co-approvers.** Whoever holds it can change the leash, approve, withdraw and revoke.
+  Keep it off the agent's machine. With co-approvers (2+ signatures) it can still do all of that, but every
+  loosening waits 24 hours for anyone of them to cancel it (T28); it can't move money alone sooner.
 - **Payments the leash allows.** A legitimate-looking 0.012 MEC invoice from an allow-listed vendor will be
   paid. Leash ID limits how much can go wrong. Judging whether the invoice is right is still the model's job
   (see `runs/devnet-claude-*.jsonl`, where Claude declines m3 and m4 before the chain ever sees them).
