@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Link previews: every page (verifier, owner console, about, tx, sandbox) has Open Graph / Twitter tags and a
+  1120×630 card (`docs/og.jpg`), so a link pasted in Telegram, X or Discord shows the project, not a bare URL.
+
 - Sends check the chain is moving before broadcasting. When the latest block is over 3 minutes old
   (`LEASH_MAX_BLOCK_AGE_S`, 0 turns it off), the CLI, the MCP server and the sandbox answer NOT SENT, "ME Hub isn't
   producing blocks (the latest, #5523300, is 7.8 h old) … safe to retry", in under a second. Before, the tx went into
