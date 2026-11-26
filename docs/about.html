@@ -14,7 +14,7 @@
   .cta a { display: inline-block; padding: 10px 16px; border-radius: 6px; font-weight: 600; text-decoration: none; border: 1px solid var(--accent); }
   .cta a.primary { background: var(--accent); color: #fff; }
   .cta a.ghostlink { color: var(--accent); }
-  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .steps { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .steps .card h3, .grid3 .card h3 { margin: 0 0 6px; font-size: 16px; }
   .steps .card p, .grid3 .card p { margin: 0; font-size: 14px; color: var(--muted); }
   .num { font-size: 30px; font-weight: 700; }
@@ -54,6 +54,7 @@
       <div class="card"><h3>1 · The owner sets a leash</h3><p>An owner with an ME ID (KYC level ≥ 2) offers a leash to an agent key: per-payment and 24-hour limits, which vendors, when a payment waits for approval (by one or two signers), when it expires. The agent key accepts it.</p></div>
       <div class="card"><h3>2 · The agent pays</h3><p>Claude, or any agent, works an invoice inbox through our MCP server. Each payment is a transaction from the agent key, and nothing else it holds can touch the budget.</p></div>
       <div class="card"><h3>3 · The contract checks</h3><p>Is the owner's ME ID still active? Is the vendor allowed or verified? Within limits? Paid before? Over the threshold? Every check runs on chain, in one transaction, with no oracle.</p></div>
+      <div class="card"><h3>4 · Two people mean two</h3><p>With a co-approver (a different ME ID), the owner alone can't go around them: raising limits, dropping the approval line, adding a vendor, a new agent or a withdrawal waits 24 hours, and either person can cancel it. Tightening, and stopping an agent, are instant.</p></div>
     </div>
   </section>
 
