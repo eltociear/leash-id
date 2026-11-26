@@ -202,7 +202,7 @@ Policy: `per_tx_limit`, `daily_limit` (any 24 hours: hourly buckets, each counte
 
 **Two signatures mean the owner can't go around them alone.** While an owner needs 2+ signatures, anything that
 loosens control waits 24 hours and any one co-approver can cancel it: a higher limit, a higher or no approval
-line, a new vendor, a later expiry, resuming a revoked agent, fewer or other co-approvers, a withdrawal (with the
+line, a new vendor, a later expiry, resuming a revoked agent, fewer or other co-approvers (or one more at the same threshold), a withdrawal (with the
 owner key alone, that is where a thief would send the budget), and a new agent's leash (it pays nothing for its
 first 24 h). Tightening is immediate, and any co-approver can revoke the owner's agents at once.
 `an_owner_alone_cannot_loosen_a_co_signed_leash`.

@@ -1051,9 +1051,13 @@ fn set_approvers(deps: DepsMut, env: Env, info: MessageInfo, list: Vec<String>, 
     let owner = info.sender;
     let new = checked_approvers(deps.as_ref(), &owner, list.iter().map(|a| deps.api.addr_validate(a)).collect::<StdResult<_>>()?, threshold)?;
     let old = approvers_of(deps.storage, &owner)?;
-    // Fewer signatures, or a co-approver dropped or swapped, is a loosening: while two or more signatures
-    // are needed it waits, and any current co-approver can cancel it.
-    if old.threshold >= 2 && (new.threshold < old.threshold || old.list.iter().any(|a| !new.list.contains(a))) {
+    // While two or more signatures are needed, a new signer set must still need the old one's agreement:
+    // nobody removed, and the threshold up by at least as many signers as are added (so any signatures that
+    // meet the new rule include enough old signers to meet the old one). Anything else, e.g. fewer signatures,
+    // or a friendly co-approver added at the same threshold, waits, and any current co-approver can cancel it.
+    let added = new.list.iter().filter(|a| !old.list.contains(a)).count();
+    let removed = old.list.iter().any(|a| !new.list.contains(a));
+    if old.threshold >= 2 && (removed || (new.threshold as usize) < old.threshold as usize + added) {
         return delay(deps.storage, &env, &owner, "approvers", ChangeKind::Approvers(new), "set_approvers");
     }
     store_approvers(deps.storage, &owner, &old, &new)?;

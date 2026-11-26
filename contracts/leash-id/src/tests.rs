@@ -1264,6 +1264,15 @@ fn an_owner_alone_cannot_loosen_a_co_signed_leash() {
     t.exec(&o, ExecuteMsg::Approve { id: 1 }, &[]).unwrap();
     assert_eq!(t.payment(1).status, PayStatus::Pending, "still two signatures");
     t.exec(&cfo, cancel("approvers"), &[]).unwrap();
+    // adding a friendly second co-approver at the same threshold would let owner + friend pay without the CFO
+    let friend = t.deps.api.addr_make("friend");
+    t.dids.borrow_mut().insert(friend.to_string(), ("1000000000008".into(), "DID_STATUS_ACTIVE", "KYC_LEVEL_TWO"));
+    assert!(delayed(&t.owner_does(ExecuteMsg::SetApprovers { approvers: vec![cfo.to_string(), friend.to_string()], threshold: 2 }).unwrap()));
+    t.exec(&cfo, cancel("approvers"), &[]).unwrap();
+    // ...but adding one and raising the threshold to match still needs the CFO: immediate
+    assert!(!delayed(&t.owner_does(ExecuteMsg::SetApprovers { approvers: vec![cfo.to_string(), friend.to_string()], threshold: 3 }).unwrap()));
+    assert_eq!(t.whois().approvals_needed, 3);
+    t.owner_waits(ExecuteMsg::SetApprovers { approvers: vec![cfo.to_string()], threshold: 2 }, "approvers");
 
     // 4. a withdrawal is where a thief with the owner key would send the budget: it waits, then pays out
     let r = t.owner_does(ExecuteMsg::Withdraw { amount: Uint128::new(500) }).unwrap();

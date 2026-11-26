@@ -4,7 +4,8 @@
 
 - **Contract 0.5.3: two signatures can't be gone around by the owner alone** (found by a judge-style review).
   With co-approvers, the owner key could still drop the approval line, raise limits, add a vendor, lower the
-  threshold, set up a fresh agent, or withdraw the budget, and then pay alone. Now, while 2+ signatures are
+  threshold (or add a friendly co-approver at the same one), set up a fresh agent, or withdraw the budget, and
+  then pay alone. Now, while 2+ signatures are
   needed, each of those waits 24 hours (`apply_change` by anyone afterwards) and any one co-approver can
   `cancel_change` it; a new agent's leash pays nothing for 24 h; any co-approver can revoke the owner's agents at
   once. Tightening stays immediate. Threat T28, test `an_owner_alone_cannot_loosen_a_co_signed_leash`; the
