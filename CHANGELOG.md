@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The tx page says what the contract did, from its own event: "held for review, not applied … applies from … unless a
+  co-approver cancels it", "signature 1 of 2: not paid yet", "applied now … with 2 people agreeing", "cancelled … by",
+  "revoked by a co-approver". A held change no longer reads as just "accepted".
 - The verifier and tx pages no longer retry a 500 that carries the contract's own answer (an address with no leash
   answered after three tries and ~2 s of waiting; now at once).
 - New demo video (4:51): https://www.youtube.com/watch?v=bCiRf8DFEjM, cut from the contract 0.5.3 testnet records, with the

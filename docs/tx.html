@@ -135,6 +135,23 @@ function payments(events) {
   </dl>`).join("");
 }
 
+// What the contract's own event says happened, in a sentence: a change held for review, signatures so far, …
+function effects(events) {
+  const when = (sec) => new Date(Number(sec) * 1000).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  const change = (k) => (k ?? "").replace(/^policy:(.*)$/, "the leash of $1").replace(/^resume:(.*)$/, "resuming $1").replace(/^approvers$/, "the co-approver rule").replace(/^withdraw$/, "a withdrawal");
+  return events.filter((e) => e.type === "wasm" && contractOf(attrs(e)._contract_address)).map(attrs).map((a) => {
+    if (a.delayed) return `<b>Held for review, not applied.</b> With co-approvers, a change that loosens control waits 24 hours: ${esc(change(a.delayed))} applies from ${esc(when(a.effective_at))} unless a co-approver cancels it first.`;
+    if (a.action === "approve" && a.needed) return Number(a.approvals) >= Number(a.needed)
+      ? `<b>Signature ${esc(a.approvals)} of ${esc(a.needed)}: paid.</b> Signed by ${who(a.signer)}.`
+      : `<b>Signature ${esc(a.approvals)} of ${esc(a.needed)}: not paid yet.</b> Signed by ${who(a.signer)}; it waits for another co-approver.`;
+    if (a.action === "apply_change") return `<b>Applied now:</b> ${esc(change(a.key))}${a.threshold ? ` (signatures needed: ${esc(a.threshold)})` : ""}${a.approvals ? `, with ${esc(a.approvals)} people agreeing` : ", after its 24-hour review"}.`;
+    if (a.action === "approve_change") return `<b>Agreed, not applied yet:</b> ${esc(change(a.key))} has ${esc(a.approvals)} of ${esc(a.needed)} signatures.`;
+    if (a.action === "cancel_change") return `<b>Cancelled:</b> the waiting change to ${esc(change(a.key))}, by ${who(a.by)}.`;
+    if (a.action === "revoke_agent" && a.by && a.by !== a.owner) return `<b>Revoked by a co-approver</b> (${who(a.by)}), not the owner: the agent can't pay until the owner resumes it.`;
+    return "";
+  }).filter(Boolean).map((x) => `<p>${x}</p>`).join("");
+}
+
 async function show(hash) {
   hash = hash.trim().toUpperCase();
   if (!/^[0-9A-F]{64}$/.test(hash)) { $("out").innerHTML = `<div class="card"><span class="err">That isn't a transaction hash (64 hex characters).</span></div>`; return; }
@@ -149,7 +166,9 @@ async function show(hash) {
   const leash = msgs.filter((m) => contractOf(m.contract));
   const reason = t.code ? contractReason(t.raw_log) : null;
   const [cls, title, line] = t.code === 0
-    ? ["ok", "Executed", leash.length ? "The Leash ID contract accepted this." : "Included in a block and executed."]
+    ? ["ok", "Executed", !leash.length ? "Included in a block and executed."
+      : (t.events ?? []).some((e) => e.type === "wasm" && attrs(e).delayed) ? "The Leash ID contract accepted the request and held it for review: nothing has changed yet (see below)."
+      : "The Leash ID contract accepted this."]
     : reason && leash.length ? ["bad", "Refused by the Leash ID contract", `<p class="reason">“${esc(mecReason(reason))}”</p>`
       + `<p class="note">The transaction was included in block ${esc(t.height)} and failed, so nothing moved; the sender paid only the fee. Leash ID's demo scripts broadcast refusals on purpose, so each one is on chain for anyone to look up.</p>`]
     : ["bad", "Failed", `<p class="reason">${esc(String(t.raw_log).slice(0, 400))}</p>`];
@@ -177,6 +196,8 @@ async function show(hash) {
     }
     out.push(`<div class="card"><h2>Message ${i + 1}: ${who(m.sender ?? m.from_address ?? m.granter ?? "")} ${what}</h2><dl>${detail}</dl></div>`);
   });
+  const eff = t.code === 0 ? effects(t.events ?? []) : "";
+  if (eff) out.splice(1, 0, `<div class="card"><h2>What happened</h2>${eff}</div>`);
   const pays = payments(t.events ?? []);
   if (pays) out.push(`<div class="card"><h2>What the contract recorded</h2>${pays}</div>`);
   const sent = (t.events ?? []).filter((e) => e.type === "transfer").map(attrs)
