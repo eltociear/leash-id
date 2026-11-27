@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- An independent audit of JUDGES/README against the records: the sandbox leash now has its own record
+  (`runs/testnet-sandbox-*.txt`); "since contract 0.5.1" corrected to 0.5.0 where that's when the fix landed; the
+  advisory CI job named (`testnet`, not `contract`); release vs contract version numbers told apart; every cosign tx
+  cited; Claude's run described as recorded (no "confirm the credits" note); the devnet Claude run dated (contract 0.4).
 - `leash gas-grant` / `gas-revoke` say what they did ("fee grant: you pay …'s fees up to … until …, contract calls only") instead of "ok done".
 - The zero-balance demo agent's leash and fee grant now run to 2027-02-10 too, past Demo Day.
 

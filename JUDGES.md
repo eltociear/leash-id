@@ -41,7 +41,8 @@ Everything below can be checked without trusting us: each claim links to code, a
 - `npm run verify` (and the `testnet` CI job on every push): the wasm on chain is byte-for-byte
   `artifacts/leash_id.wasm`, and the contract has no admin. The `contract` CI job rebuilds that file from source on
   every push (Rust 1.81, `wasm-opt`, `cosmwasm-check`) and fails unless the sha256 matches, so chain == committed ==
-  built from this source (the CI job is advisory, so a testnet outage can't fail the build).
+  built from this source. (The `testnet` job is advisory, so a testnet outage can't fail the build; the `contract`
+  job is not.)
 - **Real x/did records, real transactions** ([`runs/testnet-identity-*.txt`](runs/)): another user's ME ID
   binds an EVM sub-account through `MsgCreateSubAccount`. The contract refuses a false link
   ([tx](https://eltociear.github.io/leash-id/tx.html#D2A40AFCD4FD24CBFBDE06C95D06477E7345503A3D54EC30D3370DE49EF696EB)),
@@ -52,14 +53,14 @@ Everything below can be checked without trusting us: each claim links to code, a
   issuer) in [`runs/testnet-payments-2026-11-27T06-37-34Z.txt`](runs/testnet-payments-2026-11-27T06-37-34Z.txt), 20+ transactions anyone can look up:
   - A second real ME ID, at KYC level 1, tries to fund agents and is refused on chain
     ([tx](https://eltociear.github.io/leash-id/tx.html#FCC4AB24E4B24396B3F81CBB46A9835AB83AFCF56FED5A26F4D55FA5A3B01B63): `has KYC level 1, need 2`).
-  - Paid inside the leash; refused: the same invoice spelled differently, over the limit, a vendor with no ME ID, a
-    vendor at KYC level 1. Each refusal is a failed tx with its reason.
+  - Paid inside the leash; refused, each as a failed tx with its reason: the same invoice spelled differently, over
+    the limit, and vendors outside the leash (one with no ME ID, one at KYC level 1, below the "any verified vendor" floor).
   - Paid to an **EVM sub-account** of another user's KYC 2 ME ID: the receipt names that ME ID
     ([tx](https://eltociear.github.io/leash-id/tx.html#AAC747DA0DABDE761A41A67505970FC69A8F4887697FA5FC69B50D4E8C8ACD92)).
     The same invoice at that ME ID's main account is refused as already paid: one vendor, two addresses, one invoice
-    ([tx](https://eltociear.github.io/leash-id/tx.html#86C01FFA2417C165F909ED75773420F10EE7A323F0857673A356ED602D9CEC5D), since contract 0.5.1).
+    ([tx](https://eltociear.github.io/leash-id/tx.html#86C01FFA2417C165F909ED75773420F10EE7A323F0857673A356ED602D9CEC5D), since contract 0.5.0; 0.5.1 also covers a link recorded afterwards).
   - Two-person approval needs two people: naming that main account and its sub-account as two co-approvers is
-    refused, `holds ME ID …, the same person` ([tx](https://eltociear.github.io/leash-id/tx.html#CF9E21C1BD9F91808B3CF95B63DB93424D62710BAF4F532895A71B1B0EB0F8ED), since contract 0.5.1).
+    refused, `holds ME ID …, the same person` ([tx](https://eltociear.github.io/leash-id/tx.html#CF9E21C1BD9F91808B3CF95B63DB93424D62710BAF4F532895A71B1B0EB0F8ED), since contract 0.5.0).
   - Held above the threshold; the agent can't release it; the owner approves. A `multi_send` batch. Revoke → refused,
     resume → paid.
   - An agent key that **never held MEC** pays on the owner's fee grant (the tx's fee granter is the owner:
@@ -82,19 +83,23 @@ Everything below can be checked without trusting us: each claim links to code, a
   ([tx](https://eltociear.github.io/leash-id/tx.html#9C96151DB9EB1A250A9FE4B56F850F6AF7E4AA781DA6948CE95E395355484A15): `approvals=1 needed=2`)
   and is paid on the CFO's ([tx](https://eltociear.github.io/leash-id/tx.html#EADF691746DF6C10617CFA5A67E15F85A24B0A2C6E43D535EE7DC9376804C725)). The owner key alone then
   tries to drop the approval line and to withdraw: both wait 24 h
-  ([tx](https://eltociear.github.io/leash-id/tx.html#4C8D2DD37D30D1388C7940FE84EC452A7258A47125237DCCFA66318B6CAF54DD)), the CFO cancels both and revokes the agent at once
+  ([tx](https://eltociear.github.io/leash-id/tx.html#4C8D2DD37D30D1388C7940FE84EC452A7258A47125237DCCFA66318B6CAF54DD),
+  [tx](https://eltociear.github.io/leash-id/tx.html#48183AD7EF4A63A86D5BBEB2C4DFF5A1015A363479253AB4961A3AB3CE594A80)). The CFO cancels both
+  ([tx](https://eltociear.github.io/leash-id/tx.html#DCE5E2AB8BA1010C0CBB82899578E87157A1095366AA079C4B2C3771B3947D8F),
+  [tx](https://eltociear.github.io/leash-id/tx.html#0AD2152FDD3945D018CF98682BE011694D8E79EB4B7738BF95986A67629306EF)) and revokes the agent at once
   ([tx](https://eltociear.github.io/leash-id/tx.html#901FAADECF42CBB530A64478A636CA7D1791B8C52A54651BCE546DD000C62728)). Going back to one signature takes both of them, and then applies at once
   ([tx](https://eltociear.github.io/leash-id/tx.html#8282DED9A790B06E018C093366C473B64BB294A8B0B338AD1A7C8BEE903B85B9)). The CFO's key holds no MEC: its fees are on the owner's grant.
 - **A bond in x/wstaking, on testnet** ([`runs/testnet-bond-2026-11-27T06-42-24Z.txt`](runs/testnet-bond-2026-11-27T06-42-24Z.txt)): 0.02 MEC locked in an ME Hub fixed deposit
   (`MsgDoFixedDeposit`) and shown as the owner's bond, which the contract reads live from x/wstaking; someone
   else's deposit can't be claimed (refused on chain).
-- **The red-team sandbox's leash is live on testnet** (agent `me15xd643xjukalnklc5jqvqnp36sc0yrz2wxnfan`, holds
-  0 MEC, fees on the owner's grant).
+- **The red-team sandbox's leash is live on testnet** ([`runs/testnet-sandbox-2026-11-27T08-11-24Z.txt`](runs/testnet-sandbox-2026-11-27T08-11-24Z.txt); agent
+  `me15xd643xjukalnklc5jqvqnp36sc0yrz2wxnfan`, holds 0 MEC, fees on the owner's grant, valid to 2027-02-10). It was set
+  up after the recorded runs (the bond record still shows it unleashed); `leash whois me15xd643…` shows it live.
 
 The kill switch needs the global DAO's key to suspend an ME ID, so it is shown on a **local ME Hub node built from
-`openmetaearth/me-hub`** (see below), with repeats of the obey-everything, Claude and commerce runs. CI repeats the
-obey-everything, kill-switch and commerce runs on a fresh node on every push; the Claude run is recorded once and
-committed.
+`openmetaearth/me-hub`** (see below), with repeats of the obey-everything and commerce runs, and a Claude run
+recorded there on contract 0.4 (11-24). CI repeats the obey-everything, kill-switch and commerce runs on a fresh node
+on every push; Claude runs are recorded once and committed.
 
 ## By judging criterion
 
@@ -118,8 +123,8 @@ committed.
     code is the one the next block's `last_results_hash` commits to. A reset testnet can't erase the records; an edited
     snapshot fails (`test/txproof.test.mjs`). Not covered offline: the log text, which CometBFT doesn't hash.
 - Nine independent reviews so far, each finding listed with its fix and a test in [CHANGELOG.md](CHANGELOG.md):
-  adversarial reviews of the contract (0.2.0, 0.4.0, 0.6.0, 0.6.1), a fresh-eyes accounting review (0.7.0, the
-  daily window), an injection review of the pages (0.7.0), a judge-style review that found the owner alone could
+  adversarial reviews of the contract (in releases 0.2.0, 0.4.0, 0.6.0 and 0.6.1), a fresh-eyes accounting review
+  (release 0.7.0, contract 0.5.2: the daily window), an injection review of the pages (release 0.7.0), a judge-style review that found the owner alone could
   go around two signatures and a second review of that fix before deploying it (contract 0.5.3), and a review of
   the off-chain code: MCP server, paywall, CLI, sandbox. Nothing found has been left unfixed without being written down in
   [THREAT_MODEL.md](THREAT_MODEL.md).
@@ -139,8 +144,8 @@ committed.
 - EVM sub-accounts (x/kyc `MsgCreateSubAccount`) resolve to their ME ID. This is shown on testnet with real
   records (above) and on the node (step 7).
 - Payments and fees are in MEC, and receipts store the owner's and the vendor's ME ID numbers.
-- Two-person approval means two ME IDs: co-approvers are counted one per ME ID, so an owner's own EVM sub-account
-  can't be their second signature (refused on testnet, `runs/testnet-payments-*.txt` 5b).
+- Two-person approval means two ME IDs: co-approvers are counted one per ME ID, so two addresses of one ME ID
+  (a main account and its EVM sub-account) can't be two signatures (refused on testnet, `runs/testnet-payments-*.txt` 5b).
 - `leash lock` makes the bond with ME Hub's own `MsgDoFixedDeposit` (x/wstaking, hand-encoded: cosmjs has no type
   for it), in the owner's KYC region's term.
 

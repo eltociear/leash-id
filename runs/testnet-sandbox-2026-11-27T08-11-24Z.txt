@@ -1,0 +1,15 @@
+The red-team sandbox's leash on ME Hub testnet (mechain_400-1), contract me1kxmldervpq3w4gyyh98tt8eueap5npdqn4ssw70lcurug0stjcsqhjq3wt
+set up by the re-record after the deploy: deposit, offer_leash, accept_leash (agent key holds 0 MEC, fees on the owner's grant), fee grant, a seed payment
+
+$ node leash.mjs whois sandbox-agent
+agent      me15xd643xjukalnklc5jqvqnp36sc0yrz2wxnfan "sandbox"
+owner      me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq
+ME ID      2611255912050 active KYC 2 (needs KYC ≥ 2) → verified true
+bond       0.02 MEC locked in 1 ME Hub fixed deposit(s), first unlocks 2026-11-28 06:42 UTC
+gas        paid by the owner's fee grant: 0.29765348 MEC left, until 2027-02-10 (MsgExecuteContract only); the agent's own wallet holds 0 MEC
+can pay    yes
+limits     ≤ 0.02 MEC per payment, ≤ 0.05 MEC per 24h, approval above 0.015 MEC
+24h spend  0.0372 MEC (remaining 0.0128 MEC); owner budget 0.3688 MEC; 2 held, 1 signature(s) release one
+unsigned   at most 0.0128 MEC more before the owner signs anything (payments of ≤ 0.015 MEC each)
+vendors    me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q
+expires    2027-02-10 06:42 UTC
