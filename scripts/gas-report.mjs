@@ -32,7 +32,7 @@ await measure("set_approvers (1 co-approver)", "owner", { set_approvers: { appro
 await measure("revoke_agent", "owner", { revoke_agent: { agent } });
 await measure("resume_agent", "owner", { resume_agent: { agent } });
 
-console.log(`# Gas per operation\n\nMeasured on a local ME Hub node (me-hub ${process.env.ME_HUB_REF ?? "v2.0.18.rc1"}, wasmd 0.43) with the canonical wasm, ${new Date().toISOString().slice(0, 10)}.`);
+console.log(`# Gas per operation\n\nMeasured on a local ME Hub node (me-hub ${process.env.ME_HUB_REF ?? "v2.0.18-5-g4826eefb"}, wasmd 0.43) with the canonical wasm, ${new Date().toISOString().slice(0, 10)}.`);
 console.log(`Fee = gas × ${NET.gasPrice} (testnet's price). The chain charges for the gas a tx *requests*; our senders request simulated gas × 1.4, so the fee actually paid is about 1.4× the column.\n`);
 console.log("| Operation | Gas used | Fee |\n|---|---:|---:|");
 for (const [what, gas] of rows) console.log(`| ${what} | ${gas.toLocaleString("en-US")} | ${fmt(Math.ceil(gas * price))} |`);

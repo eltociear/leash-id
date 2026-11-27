@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The "halt" was the public endpoint, not the chain. ME Hub testnet passed its upgrade height within minutes
+  (5,523,301 is stamped 07:10:01 on 11-26). The node at beta-hub-1317/26657 that every page and tool reads stayed
+  at 5,523,300 until about 06:15 UTC on 11-27. The halt messages now say "stopped at the height of its scheduled
+  upgrade … until the network, and the node we read, run the new release", which fits either case. The READMEs'
+  halt banner is gone, and JUDGES' known limits tell what happened.
+- The testnet came back on me-hub `v2.0.18-5-g4826eefb` ("v2.0.18 handler for beta"): CI's devnet now builds that
+  commit. Against rc1 it changes x/regiongov, x/wstaking validator resets and x/wdistri migration only.
 - The testnet evidence outlives the testnet. `runs/chain-snapshot.json` keeps every cited tx's bytes, merkle proof,
   block header and results, the next header, and the validators' signatures. `check-chain --offline`
   (`lib/txproof.mjs`, in CI and as the fifth `npm run judge` check) proves with no network that each tx is in its

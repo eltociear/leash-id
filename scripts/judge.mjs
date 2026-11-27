@@ -24,7 +24,7 @@ try {
     const plan = await fetch(`${REST}/cosmos/upgrade/v1beta1/current_plan`, { signal: AbortSignal.timeout(8000) })
       .then((r) => r.json()).then((x) => x.plan).catch(() => null);
     why = plan && Math.abs(Number(plan.height) - Number(b.height)) <= 1
-      ? `  (NOT producing blocks: halted at the scheduled upgrade to ${plan.name}, voted by governance, until validators switch releases.` +
+      ? `  (NOT producing blocks: stopped at the height of the scheduled upgrade to ${plan.name}, voted by governance, until the network, and the node we read, run the new release.` +
         ` The checks below read what is already on chain and still apply; CI re-runs the kill-switch, obey-every-order and agent-to-agent flows on a local ${plan.name} chain)`
       : "  (NOT producing blocks right now; the checks below read what is already on chain and still apply)";
   }
