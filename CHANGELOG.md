@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `npm run judge` names the halt as the scheduled upgrade, and the three READMEs open with a note on reading the
+  pages while the testnet is halted.
 - The testnet halt at 5,523,300 is the scheduled me-hub `v2.0.18.rc1` upgrade (gov proposal 11). Its diff touches
   x/regiongov (and wstaking validator resets) only: nothing Leash ID calls. CI's devnet job now builds that exact
   release (`a5b287db`), so every devnet run is on the binary testnet will run. The pages, the sandbox, the CLI and
