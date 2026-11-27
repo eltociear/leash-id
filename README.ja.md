@@ -6,6 +6,22 @@
 
 [![ci](https://github.com/eltociear/leash-id/actions/workflows/ci.yml/badge.svg)](https://github.com/eltociear/leash-id/actions/workflows/ci.yml)
 
+**30 秒で**
+
+- **何をするか:** AI エージェントは ME Hub 上で請求書を支払えます。ただし、オーナーが決めた上限の範囲内で、
+  しかもオーナーの **ME ID**（ME Network の KYC 済み ID）が有効な間だけです。コントラクトは支払いのたびに、
+  x/did からその ME ID を読み直します。
+- **なぜ ME Network でしかできないか:** 誰が KYC 済みかをチェーン自身が知っているので、オラクルは要りません。
+  ME ID を停止すれば、その下のエージェントは全部、次のブロックから止まります（ローカルの ME Hub ノードで実演。テストネットの ME ID を停止できるのは ME Hub の DAO だけ）。
+- **何が証明済みか:** テストネットで、本物の ME ID を使って記録しました。
+  - Claude は本物の請求書を支払い、詐欺は断りました。
+  - 埋め込まれた指示に全部従うクライアントの攻撃は、8 件中 0 件しか通りませんでした。
+  - CFO を共同署名者にすると、オーナーの鍵だけではリードを緩めることも予算を持ち出すこともできません。
+
+  `npm ci && npm run judge` で、これらをチェーンと照合し直せます。コミット済みのスナップショットを使えばオフラインでも確認できます。
+- **1 分で試せます（ウォレット不要）:** [動いているエージェントを攻撃する](https://leash-id-sandbox.vercel.app/) ·
+  [エージェントを確認する](https://eltociear.github.io/leash-id/) · [4 分 51 秒のデモを見る](https://www.youtube.com/watch?v=bCiRf8DFEjM)
+
 **デモ動画（4分51秒、英語・字幕付き）:** https://www.youtube.com/watch?v=bCiRf8DFEjM ·
 **エージェントを確認:** https://eltociear.github.io/leash-id/ （ME Hub テストネットをその場で読み込み、ウォレット不要）·
 **オーナー用コンソール:** https://eltociear.github.io/leash-id/owner.html （Keplr。[ウォレットなしの閲覧専用](https://eltociear.github.io/leash-id/owner.html#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq)も）·

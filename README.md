@@ -7,6 +7,21 @@
 [![ci](https://github.com/eltociear/leash-id/actions/workflows/ci.yml/badge.svg)](https://github.com/eltociear/leash-id/actions/workflows/ci.yml)
 Release 0.8.0 · contract 0.5.3 live on ME Hub testnet (code 47, no admin)
 
+**In 30 seconds**
+
+- **What it does:** an AI agent pays invoices on ME Hub only inside the limits its owner set, and only while the
+  owner's **ME ID** (ME Network's KYC identity) is live. The contract re-reads that ME ID from x/did on every payment.
+- **Why only ME Network:** the chain itself knows who is KYC-verified, so there's no oracle. Suspend the ME ID and every
+  agent under it stops in the next block (shown on a local ME Hub node: only ME Hub's DAO can suspend a testnet ME ID).
+- **What's proven:** on testnet, with real ME IDs:
+  - Claude paid the real invoices and declined the scams.
+  - A client that obeys every injected email got 0 of 8 attacks through.
+  - With a CFO as co-signer, the owner's key alone can't loosen the leash or take the budget.
+
+  `npm ci && npm run judge` re-checks all of it against the chain, and offline from a committed snapshot.
+- **Try it in a minute, no wallet:** [attack a live agent](https://leash-id-sandbox.vercel.app/) ·
+  [check an agent](https://eltociear.github.io/leash-id/) · [watch the 4:51 demo](https://www.youtube.com/watch?v=bCiRf8DFEjM)
+
 **Demo video (4:51):** https://www.youtube.com/watch?v=bCiRf8DFEjM ·
 **Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet) ·
 **Owner console:** https://eltociear.github.io/leash-id/owner.html (Keplr; or [read-only, no wallet](https://eltociear.github.io/leash-id/owner.html#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq)) ·
