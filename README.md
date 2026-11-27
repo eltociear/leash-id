@@ -254,13 +254,14 @@ client (`runs/devnet-obey-*.txt`) and agent-to-agent commerce (`runs/devnet-comm
 
 ```bash
 npm ci
-npm test          # 39 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 29 JS tests (amounts, send outcomes incl. a halted chain, RPC failover, MCP, paywall, SSRF, CLI, fixed-deposit encoding)
+npm test          # 39 contract tests (incl. a random-operation accounting test and garbage-input parser checks) + 33 JS tests (amounts, send outcomes incl. a halted chain, offline tx proofs, RPC failover, MCP, paywall, SSRF, CLI, fixed-deposit encoding)
 npm run build     # reproducible wasm (needs Rust 1.81 + wasm32, binaryen, cosmwasm-check 1.5.8)
 npm run judge     # verify + JS tests + run records + every linked testnet tx, read-only, one line each
 npm run verify    # deployed code == artifacts/leash_id.wasm, and no admin can swap it
 npm run devnet    # local ME Hub node: Claude over MCP, obey-everything, kill switch, commerce → runs/
 node scripts/check-runs.mjs        # asserts what those records must show (CI re-runs all but the Claude run on a fresh node)
 npm run check:chain                # fetches every testnet tx the records link to: outcome and reason must match
+npm run check:chain:offline        # the same with no network, from runs/chain-snapshot.json (each tx proven into its signed block)
 npm run docs & npm run e2e:owner   # drives the owner console in a real browser against that node
 ```
 
