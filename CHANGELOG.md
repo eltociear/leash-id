@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The testnet evidence outlives the testnet. `runs/chain-snapshot.json` keeps every cited tx's bytes, merkle proof,
+  block header and results, the next header, and the validators' signatures. `check-chain --offline`
+  (`lib/txproof.mjs`, in CI and as the fifth `npm run judge` check) proves with no network that each tx is in its
+  signed block, with the paid/refused outcome the next block commits to, then runs the same record checks. Four new
+  tests show that edited bytes, outcomes, headers or proofs fail. `npm run snapshot:chain` adds new records.
 - `npm run judge` names the halt as the scheduled upgrade, and the three READMEs open with a note on reading the
   pages while the testnet is halted.
 - The testnet halt at 5,523,300 is the scheduled me-hub `v2.0.18.rc1` upgrade (gov proposal 11). Its diff touches

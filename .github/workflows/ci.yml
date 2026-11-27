@@ -36,6 +36,8 @@ jobs:
         run: for f in leash.mjs lib/*.mjs mcp/*.mjs scripts/*.mjs test/*.mjs web/*.mjs; do node --check "$f"; done
       - name: JS tests (amounts, error reading, MCP tool set, key isolation, CLI)
         run: npm run test:js
+      - name: Every cited testnet tx is in runs/chain-snapshot.json, proven into its signed block (no network)
+        run: node scripts/check-chain.mjs --offline
       - name: The browser bundle (docs/vendor/cosmjs.js) is rebuilt byte for byte from the lockfile
         run: |
           cp docs/vendor/cosmjs.js /tmp/committed-cosmjs.js

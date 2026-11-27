@@ -6,10 +6,16 @@
 //   - every contract call went to the deployed Leash ID contract (deployment.json)
 // So the records can't have been edited after the fact without this failing.
 //   node scripts/check-chain.mjs [runs-dir]        (needs network; read-only, no keys)
+//   node scripts/check-chain.mjs --offline         (no network: the same checks against runs/chain-snapshot.json,
+//                                                   each tx first proven into its signed block by lib/txproof.mjs)
 import fs from "node:fs";
 import path from "node:path";
+import { decodeTxRaw } from "@cosmjs/proto-signing";
+import { MsgExecuteContract } from "cosmjs-types/cosmwasm/wasm/v1/tx";
+import { verifyTx } from "../lib/txproof.mjs";
 
-const dir = process.argv[2] ?? new URL("../runs", import.meta.url).pathname;
+const offline = process.argv.includes("--offline");
+const dir = process.argv.slice(2).find((a) => !a.startsWith("--")) ?? new URL("../runs", import.meta.url).pathname;
 const REST = process.env.ME_REST_TESTNET ?? "https://beta-hub-1317.explorer-testnet.me";
 const CONTRACT = JSON.parse(fs.readFileSync(new URL("../deployment.json", import.meta.url), "utf8")).contract;
 
@@ -30,7 +36,20 @@ for (const f of files) {
   }
 }
 
+let snap;
+const fromSnapshot = async (h) => {
+  snap ??= JSON.parse(fs.readFileSync(path.join(dir, "chain-snapshot.json"), "utf8"));
+  const e = snap.txs[h];
+  if (!e) return null;
+  const proof = verifyTx(h, snap);
+  if (proof.length) throw new Error(`${h.slice(0, 12)}… fails its proof in the snapshot: ${proof.join("; ")}`);
+  // the messages come from the proven bytes themselves, not from anything the node said
+  const messages = decodeTxRaw(Buffer.from(e.tx, "base64")).body.messages.map((m) =>
+    m.typeUrl === "/cosmwasm.wasm.v1.MsgExecuteContract" ? { contract: MsgExecuteContract.decode(m.value).contract } : {});
+  return { code: e.code, raw_log: e.log, tx: { body: { messages } } };
+};
 const get = async (h) => {
+  if (offline) return fromSnapshot(h);
   for (let i = 0; i < 4; i++) {
     const r = await fetch(`${REST}/cosmos/tx/v1beta1/txs/${h}`).catch(() => null);
     if (r?.ok) return (await r.json()).tx_response;
@@ -61,5 +80,6 @@ for (const [h, c] of claims) {
   if (problems.length) { bad++; perFile[c.file].bad++; console.log(`FAIL  ${h.slice(0, 12)}… (${c.file}): ${problems.join("; ")}`); }
 }
 for (const [f, s] of Object.entries(perFile)) console.log(`${s.bad ? "FAIL" : "ok  "}  ${f}: ${s.n - s.bad}/${s.n} transactions match the chain`);
-console.log(bad ? `\n${bad} of ${n} transactions don't match` : `\nall ${n} linked testnet transactions match what the records say`);
+const where = offline ? ` (offline: each proven into its signed block from ${path.basename(dir)}/chain-snapshot.json)` : "";
+console.log(bad ? `\n${bad} of ${n} transactions don't match${where}` : `\nall ${n} linked testnet transactions match what the records say${where}`);
 process.exit(bad || n === 0 ? 1 : 0);

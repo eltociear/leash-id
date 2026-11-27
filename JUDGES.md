@@ -100,6 +100,12 @@ committed.
     asserts each outcome, and the owner console is driven in Chrome.
   - `testnet`: `verify`, and `check:chain`: every testnet tx the committed records link to is fetched from the
     chain and must show the outcome (paid / refused, with the contract's reason) and the contract the record says.
+  - `contract` also runs `check:chain --offline`, so the evidence outlives the testnet: [`runs/chain-snapshot.json`](runs/chain-snapshot.json)
+    keeps each cited tx's bytes, its merkle proof, its block header and results and the next header, with the
+    validators' signatures. [`lib/txproof.mjs`](lib/txproof.mjs) checks, with no network, that the bytes hash to the
+    cited hash, sit in the block's `data_hash`, that the header hashes to the signed block ID, and that the paid/refused
+    code is the one the next block's `last_results_hash` commits to. A reset testnet can't erase the records; an edited
+    snapshot fails (`test/txproof.test.mjs`). Not covered offline: the log text, which CometBFT doesn't hash.
 - Nine independent reviews so far, each finding listed with its fix and a test in [CHANGELOG.md](CHANGELOG.md):
   adversarial reviews of the contract (0.2.0, 0.4.0, 0.6.0, 0.6.1), a fresh-eyes accounting review (0.7.0, the
   daily window), an injection review of the pages (0.7.0), a judge-style review that found the owner alone could
@@ -172,11 +178,12 @@ committed.
 
 ```bash
 git clone https://github.com/eltociear/leash-id && cd leash-id && npm ci   # npm audit: 0 vulnerabilities
-npm run judge                     # all four checks below in one go (~40 s, read-only), one line each
+npm run judge                     # all five checks below in one go (~40 s, read-only), one line each
 npm run verify                    # testnet: deployed code == this repo's build, no admin
-npm run test:js                   # 29 JS tests, no chain needed
+npm run test:js                   # 33 JS tests, no chain needed
 node scripts/check-runs.mjs       # the committed run records say what we claim
 npm run check:chain               # ...and every testnet tx they link to says the same on chain (read-only)
+npm run check:chain:offline       # the same, with no network: from runs/chain-snapshot.json, each tx proven into its signed block
 cat runs/testnet-claude-*.jsonl | jq -r 'select(.type=="result").result'  # Claude's own report (testnet)
 ```
 

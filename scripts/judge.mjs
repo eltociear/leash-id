@@ -9,6 +9,7 @@ const checks = [
   ["JS tests (amounts, send outcomes, MCP server, paywall), no chain needed", "node", ["--test", "test/"]],
   ["The committed run records say what the README and video claim", "node", ["scripts/check-runs.mjs"]],
   ["Every testnet tx those records link to says the same on chain", "node", ["scripts/check-chain.mjs"]],
+  ["The same txs, proven offline from the committed chain snapshot (survives a testnet reset)", "node", ["scripts/check-chain.mjs", "--offline"]],
 ];
 const t0 = Date.now();
 // Is the testnet moving? A halted chain doesn't fail any check (they read history), but it's worth knowing first.
