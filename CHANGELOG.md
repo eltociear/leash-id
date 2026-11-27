@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `leash gas-grant` / `gas-revoke` say what they did ("fee grant: you pay …'s fees up to … until …, contract calls only") instead of "ok done".
+- The zero-balance demo agent's leash and fee grant now run to 2027-02-10 too, past Demo Day.
+
 ## 0.8.0 (contract 0.5.3, deployed on testnet: code 47, `me1kxmlde…hjq3wt`, no admin)
 
 - Contract 0.5.3 is live on ME Hub testnet (store `3AC19A10…B625`, instantiate `25BD4361…62DD`; wasm

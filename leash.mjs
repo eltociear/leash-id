@@ -123,8 +123,8 @@ const print = (x) => console.log(o.json ? JSON.stringify(x, null, 2) : x);
 const when = (s) => new Date(s * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC";
 const payLine = (p) => `#${String(p.id).padEnd(5)} ${p.status.padEnd(8)} ${fmt(p.amount).padStart(14)}  ${p.vendor}  ${JSON.stringify(p.invoice)}  ${when(p.created_at)}`;
 
-/** Prints a send outcome; exit code 0 only when it went through. */
-function outcome(r) {
+/** Prints a send outcome; exit code 0 only when it went through. `label` names a tx that isn't a contract call. */
+function outcome(r, label) {
   if (o.json) { console.log(JSON.stringify({ ...r, events: undefined }, null, 2)); return r.status === "ok" ? 0 : r.status === "unknown" ? 3 : 1; }
   const a = r.attrs ?? {};
   switch (r.status) {
@@ -134,7 +134,7 @@ function outcome(r) {
         console.log(`     any co-approver can cancel it until ${when(Number(a.effective_at))}; after that anyone applies it: leash apply-change ${a.delayed}`);
         return 0;
       }
-      console.log(`ok   ${a.action ?? "done"}${a.status ? ` (${a.status})` : ""}${a.payment_id ? ` payment #${a.payment_id}` : ""}  ${r.link}`);
+      console.log(`ok   ${a.action ?? label ?? "done"}${a.status ? ` (${a.status})` : ""}${a.payment_id ? ` payment #${a.payment_id}` : ""}  ${r.link}`);
       const rest = Object.entries(a).filter(([k]) => k !== "action").map(([k, v]) => `${k}=${v}`).join(" ");
       if (rest) console.log("     " + rest);
       return 0;
@@ -449,13 +449,14 @@ cmds["gas-grant"] = async () => {
   const until = Math.floor(Date.now() / 1000) + intArg(o.days ?? "30", "--days") * 86400;
   const old = await feeGrant(agent, addr);
   const msgs = [...(old ? [revokeGasMsg(addr, agent)] : []), grantGasMsg(addr, agent, toUmec(need(o.limit, "--limit")), until)];
-  return outcome(await sendTx(as("owner"), msgs, { file: o["key-file"], granter: null }));
+  return outcome(await sendTx(as("owner"), msgs, { file: o["key-file"], granter: null }),
+    `fee grant${old ? " (replaces the old one)" : ""}: you pay ${agent}'s fees up to ${o.limit} MEC until ${when(until)}, contract calls only`);
 };
 cmds["gas-revoke"] = async () => {
   const agent = await addrOf(need(args[0], "agent"));
   const { addr } = await signer(as("owner"), o["key-file"]);
   if (!(await feeGrant(agent, addr))) { console.error(`nothing to stop: you don't pay ${agent}'s fees`); return 1; }
-  return outcome(await sendTx(as("owner"), [revokeGasMsg(addr, agent)], { file: o["key-file"], granter: null }));
+  return outcome(await sendTx(as("owner"), [revokeGasMsg(addr, agent)], { file: o["key-file"], granter: null }), `fee grant ended: ${agent} pays its own fees now`);
 };
 cmds["link-sub"] = async () => send(as("owner"), { register_sub_account: { sub: await addrOf(need(args[0], "sub-account")), main: await addrOf(need(args[1], "main account")) } });
 cmds.bond = async () => send(as("owner"), { set_bond: { deposit_ids: (args[0] ?? "").split(",").filter(Boolean).map((x) => intArg(x, "deposit id")) } });
