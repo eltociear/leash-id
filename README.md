@@ -7,7 +7,7 @@
 [![ci](https://github.com/eltociear/leash-id/actions/workflows/ci.yml/badge.svg)](https://github.com/eltociear/leash-id/actions/workflows/ci.yml)
 Release 0.8.0 · contract 0.5.3 live on ME Hub testnet (code 47, no admin)
 
-**Demo video (4:48):** https://www.youtube.com/watch?v=vySdFuWiGho ·
+**Demo video (4:51):** https://www.youtube.com/watch?v=bCiRf8DFEjM ·
 **Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet) ·
 **Owner console:** https://eltociear.github.io/leash-id/owner.html (Keplr; or [read-only, no wallet](https://eltociear.github.io/leash-id/owner.html#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq)) ·
 **Red-team it:** https://leash-id-sandbox.vercel.app/ (attack a live testnet agent's key; [`sandbox/`](sandbox/README.md), or `node scripts/sandbox-dev.mjs` with no key) ·

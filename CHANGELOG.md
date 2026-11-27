@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New demo video (4:51): https://www.youtube.com/watch?v=bCiRf8DFEjM, cut from the contract 0.5.3 testnet records, with the
+  two-signature run and live testnet captures of the verifier, owner console and `leash watch`.
 - An independent audit of JUDGES/README against the records: the sandbox leash now has its own record
   (`runs/testnet-sandbox-*.txt`); "since contract 0.5.1" corrected to 0.5.0 where that's when the fix landed; the
   advisory CI job named (`testnet`, not `contract`); release vs contract version numbers told apart; every cosign tx

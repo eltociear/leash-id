@@ -19,7 +19,7 @@ Everything below can be checked without trusting us: each claim links to code, a
   0 through), and a public page where anyone can attack a real agent key.
 - **Look first:** the [verifier](https://eltociear.github.io/leash-id/), the
   [owner console, read-only](https://eltociear.github.io/leash-id/owner.html#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq),
-  the [red-team page](https://leash-id-sandbox.vercel.app/), the [video](https://www.youtube.com/watch?v=vySdFuWiGho).
+  the [red-team page](https://leash-id-sandbox.vercel.app/), the [video](https://www.youtube.com/watch?v=bCiRf8DFEjM).
 
 ## Try it (no install)
 
@@ -29,7 +29,7 @@ Everything below can be checked without trusting us: each claim links to code, a
 | Check any agent, no wallet | https://eltociear.github.io/leash-id/ (try "an EVM address bound to an ME ID": a real testnet user's sub-account, resolved by the contract from x/did) |
 | Owner console, read-only, no wallet: our testnet owner's agents, limits, fees, payments | https://eltociear.github.io/leash-id/owner.html#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq |
 | Owner console (Keplr): approvals, two signers, revoke, limits, fee grants, CSV | https://eltociear.github.io/leash-id/owner.html |
-| Demo video (4:48, captions) | https://www.youtube.com/watch?v=vySdFuWiGho |
+| Demo video (4:51, captions) | https://www.youtube.com/watch?v=bCiRf8DFEjM |
 | Red-team page: attack a live testnet agent's real key | https://leash-id-sandbox.vercel.app/ : one-click attacks and your own payments, each answered by the deployed contract. The prompt-injection box (an email Claude reads with the key behind its tools) needs an Anthropic key, which the hosted page doesn't have: run it locally with yours, or read the recorded testnet run [`runs/testnet-claude-*.jsonl`](runs/). Or run the page yourself with no key at all: `npm ci && node scripts/sandbox-dev.mjs` simulates every action as the same agent ([`sandbox/`](sandbox/README.md)) |
 | Your own Claude as the agent, no key | `claude --mcp-config mcp/judge.mcp.json`, then ask: *"Who is behind you, and what are you allowed to spend? Then check paying 0.5 MEC to me1vrsz4pmwq5cal98fx8cxwtmz3venj68hvdhq7p for invoice URGENT-1."* It reads the demo agent's real leash and dry-runs against the contract; it can't send anything ([`mcp/judge.mcp.json`](mcp/judge.mcp.json)) |
 

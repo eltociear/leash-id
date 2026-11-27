@@ -2,7 +2,7 @@
 
 [English](README.md) · **简体中文** · [日本語](README.ja.md)
 
-**演示视频（4:48，英文字幕）：** https://www.youtube.com/watch?v=vySdFuWiGho · **查询代理（无需钱包）：** https://eltociear.github.io/leash-id/ ·
+**演示视频（4:51，英文字幕）：** https://www.youtube.com/watch?v=bCiRf8DFEjM · **查询代理（无需钱包）：** https://eltociear.github.io/leash-id/ ·
 **所有者控制台（Keplr）：** https://eltociear.github.io/leash-id/owner.html ·
 **[威胁模型](THREAT_MODEL.md)** · **[安全与部署](SECURITY.md)**
 
