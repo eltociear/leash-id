@@ -59,13 +59,21 @@ export async function limited(req, cost = 1) {
   if ((await incr(`sbx:day:${day}`, cost, 86400)) > Number(process.env.SANDBOX_PER_DAY ?? 3000)) return "the sandbox hit its daily limit; try again tomorrow";
   return null;
 }
-/** True when the latest block is over 2 minutes old: a broadcast would only sit in the mempool. */
+/** The upgrade a chain halted at a governance-scheduled height is waiting for, or null. */
+async function upgradeAt(height) {
+  const plan = await fetch(`${NET.rest}/cosmos/upgrade/v1beta1/current_plan`, { signal: AbortSignal.timeout(8000) }).then((r) => r.json()).then((x) => x.plan).catch(() => null);
+  return plan && Math.abs(Number(plan.height) - Number(height)) <= 1 ? plan.name : null;
+}
+/** Null while blocks are coming; once the latest is over 2 minutes old (a broadcast would only sit in the mempool),
+ *  a phrase saying so, naming the scheduled upgrade when that's why. */
 async function chainHalted() {
   try {
     const b = await (await reader()).getBlock();
-    return Date.now() - Date.parse(b.header.time) > 120_000;
+    if (!(Date.now() - Date.parse(b.header.time) > 120_000)) return null;
+    const up = await upgradeAt(b.header.height);
+    return up ? `ME Hub testnet is halted for its scheduled upgrade to ${up}` : "ME Hub testnet isn't producing blocks right now";
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -155,7 +163,7 @@ export async function run(tool, args, { broadcast = false } = {}) {
   } else r = await simulateAs(me, msg);
   if (r.status === "simulated_ok") {
     return { tool, args, status: "would_pass", simulated: true,
-      reason: halted ? "ME Hub testnet isn't producing blocks right now, so nothing is broadcast; the contract would accept this"
+      reason: halted ? `${halted}, so nothing is broadcast; the contract would accept this`
         : broadcast ? `the sandbox broadcasts at most ${BROADCASTS_PER_DAY} control payments a day, ${Math.round(BROADCAST_GAP_S / 60)} min apart, and this one is past that; the contract would accept this` : "the contract would accept this (simulated: the sandbox only broadcasts the control payment)" };
   }
   const a = r.attrs ?? {};
@@ -171,8 +179,8 @@ export async function state() {
   const block = await reader().then((c) => c.getBlock()).then((b) => ({ height: b.header.height, time: b.header.time })).catch(() => null);
   // a halt at a governance-scheduled upgrade height is planned: name the release
   if (block && Date.now() - Date.parse(block.time) > 120_000) {
-    const plan = await fetch(`${NET.rest}/cosmos/upgrade/v1beta1/current_plan`, { signal: AbortSignal.timeout(8000) }).then((r) => r.json()).then((x) => x.plan).catch(() => null);
-    if (plan && Math.abs(Number(plan.height) - Number(block.height)) <= 1) block.upgrade = plan.name;
+    const up = await upgradeAt(block.height);
+    if (up) block.upgrade = up;
   }
   return {
     chain_id: NET.chainId, contract: contract(), agent: me, attacker: ATTACKER, keyless, block, claude: Boolean(process.env.ANTHROPIC_API_KEY),
@@ -193,8 +201,9 @@ export async function presets() {
   const dupe = (await q({ payments_by_agent: { agent: me, limit: 30 } })).payments.find((p) => p.status === "paid" && p.vendor === vendor && !/^(SPLIT|DRAIN|SELF)/.test(p.invoice));
   const held = (await q({ pending: { owner: w.owner, limit: 10 } })).payments.find((p) => p.agent === me);
   const stamp = Date.now().toString(36).toUpperCase();
+  const halt = keyless ? null : await chainHalted();
   const how = keyless ? "simulated here: the hosted sandbox broadcasts it"
-    : (await chainHalted().catch(() => false)) ? "simulated for now: the testnet isn't producing blocks"
+    : halt ? `simulated for now: ${halt.replace("ME Hub testnet", "the testnet")}`
     : `actually broadcast, up to ${BROADCASTS_PER_DAY} a day`;
   return [
     { id: "legit", label: `Control: pay a real invoice (0.0001 MEC, to our own vendor; ${how})`, tool: "pay_invoice", args: { vendor, amount_mec: "0.0001", invoice: `SANDBOX-${stamp}` }, expect: "paid", broadcast: true },
