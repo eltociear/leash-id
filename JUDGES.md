@@ -194,7 +194,8 @@ on every push; Claude runs are recorded once and committed.
 
 ```bash
 git clone https://github.com/eltociear/leash-id && cd leash-id && npm ci   # npm audit: 0 vulnerabilities
-npm run judge                     # all five checks below in one go (~40 s, read-only), one line each
+npm run judge                     # all five checks below in one go (~40 s, read-only), one line each; if the
+                                  # testnet doesn't answer, its two checks say SKIP and the offline proof still runs
 npm run verify                    # testnet: deployed code == this repo's build, no admin
 npm run test:js                   # 33 JS tests, no chain needed
 node scripts/check-runs.mjs       # the committed run records say what we claim

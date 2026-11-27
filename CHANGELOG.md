@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `npm run judge` reports a check that couldn't reach the testnet as SKIP with the cause (no stack trace), says the
+  offline proof covers the same transactions, and exits 3 rather than 1. Checked from a fresh clone, online and with the
+  testnet unreachable.
 - The tx page says what the contract did, from its own event: "held for review, not applied … applies from … unless a
   co-approver cancels it", "signature 1 of 2: not paid yet", "applied now … with 2 people agreeing", "cancelled … by",
   "revoked by a co-approver". A held change no longer reads as just "accepted".
