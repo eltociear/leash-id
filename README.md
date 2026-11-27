@@ -5,7 +5,7 @@
 ![Leash ID: every agent payment re-checks the owner's live ME ID on ME Hub](assets/cover.png)
 
 [![ci](https://github.com/eltociear/leash-id/actions/workflows/ci.yml/badge.svg)](https://github.com/eltociear/leash-id/actions/workflows/ci.yml)
-Release 0.7.0 · contract 0.5.2 live on ME Hub testnet (code 46, no admin)
+Release 0.8.0 · contract 0.5.3 live on ME Hub testnet (code 47, no admin)
 
 **Demo video (4:48):** https://www.youtube.com/watch?v=vySdFuWiGho ·
 **Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet) ·
@@ -167,7 +167,7 @@ is in `examples/paid-api`.
 
 ## Contract
 
-`contracts/leash-id` (Rust, cosmwasm-std 1.5, built with Rust 1.81 for wasmvm 1.4). Contract 0.5.2.
+`contracts/leash-id` (Rust, cosmwasm-std 1.5, built with Rust 1.81 for wasmvm 1.4). Contract 0.5.3.
 
 | Execute | Who | What |
 |---|---|---|
@@ -214,7 +214,7 @@ hostile co-approver can't hold a 2-of-3 owner hostage. `an_owner_alone_cannot_lo
 ## On ME Hub testnet, with a real ME ID
 
 Our owner holds a testnet ME ID (`2611255912050`, KYC level 2, issued by the testnet KYC issuer).
-`scripts/testnet-pay.sh` records the payment flows against it in [`runs/testnet-payments-2026-11-26T06-16-31Z.txt`](runs/testnet-payments-2026-11-26T06-16-31Z.txt), every step a transaction:
+`scripts/testnet-pay.sh` records the payment flows against it in [`runs/testnet-payments-2026-11-27T06-37-34Z.txt`](runs/testnet-payments-2026-11-27T06-37-34Z.txt), every step a transaction:
 
 - A second real ME ID at KYC level 1 tries to fund agents: refused on chain, `has KYC level 1, need 2`.
 - The agent pays inside the leash. The same invoice spelled differently, an over-limit amount, a vendor with no ME ID
@@ -225,16 +225,21 @@ Our owner holds a testnet ME ID (`2611255912050`, KYC level 2, issued by the tes
 - A held payment the agent can't release and the owner approves; a `multi_send` batch; revoke → refused, resume → paid.
 - An agent key that never held any MEC pays on the owner's fee grant, and can't send anything else.
 
-**Claude Code as the agent, on testnet** ([`runs/testnet-claude-2026-11-26T06-19-06Z.jsonl`](runs/testnet-claude-2026-11-26T06-19-06Z.jsonl)): it paid Acme's invoice, sent the GPU invoice for the
+**Claude Code as the agent, on testnet** ([`runs/testnet-claude-2026-11-27T06-39-58Z.jsonl`](runs/testnet-claude-2026-11-27T06-39-58Z.jsonl)): it paid Acme's invoice, sent the GPU invoice for the
 owner's approval, and declined the duplicate, the fake CEO wire and the invoice with hidden instructions. It paid the
 small API-credits invoice after checking on chain that the merchant holds a live, KYC-verified ME ID, and flagged that
 someone should confirm the credits were ordered.
-**The obey-everything client, on testnet** ([`runs/testnet-obey-2026-11-26T06-20-59-836Z.txt`](runs/testnet-obey-2026-11-26T06-20-59-836Z.txt)), on the same leash right after Claude: all 8
+**The obey-everything client, on testnet** ([`runs/testnet-obey-2026-11-27T06-41-51-035Z.txt`](runs/testnet-obey-2026-11-27T06-41-51-035Z.txt)), on the same leash right after Claude: all 8
 attacks were refused on chain, the split drain by the 24-hour limit. Below the approval threshold that limit is the
 bound, not a stop: an earlier run with a 0.2 MEC limit paid the same split to the owner's own vendor
 ([THREAT_MODEL T6](THREAT_MODEL.md)), so set it to what you can afford to lose.
-**Agent-to-agent commerce, on testnet** ([`runs/testnet-commerce-2026-11-26T06-21-04Z.txt`](runs/testnet-commerce-2026-11-26T06-21-04Z.txt)): a paid API sells to our agent, and replay, front-running,
+**Agent-to-agent commerce, on testnet** ([`runs/testnet-commerce-2026-11-27T06-41-56Z.txt`](runs/testnet-commerce-2026-11-27T06-41-56Z.txt)): a paid API sells to our agent, and replay, front-running,
 unissued invoices and a seller with no ME ID all fail.
+
+**Two signatures, on testnet** ([`runs/testnet-cosign-2026-11-27T06-43-15Z.txt`](runs/testnet-cosign-2026-11-27T06-43-15Z.txt)): with the CFO's real KYC-2 ME ID as co-approver, a held
+payment needs both signatures; the owner key alone can't drop the approval line or withdraw (both wait 24 h, and
+the CFO cancels them); the CFO can revoke the agent at once. **A bond, on testnet** ([`runs/testnet-bond-2026-11-27T06-42-24Z.txt`](runs/testnet-bond-2026-11-27T06-42-24Z.txt)): an
+ME Hub fixed deposit the contract reads live from x/wstaking.
 
 ## The kill switch, on a real ME Hub node
 
@@ -282,7 +287,7 @@ explorer `https://www.explorer-testnet.me`.
 
 ## Status
 
-Release 0.7.0 (contract 0.5.2), testnet, with payment flows recorded against a real testnet ME ID. Built for the MetaEarth Hackathon 2026 "Harbor" (AI & Trust Infrastructure). The design ideas
+Release 0.8.0 (contract 0.5.3), testnet, with payment flows recorded against a real testnet ME ID. Built for the MetaEarth Hackathon 2026 "Harbor" (AI & Trust Infrastructure). The design ideas
 (agent spending leashes, attack replays, MCP-driven agents) come from our earlier project
 [Invoice Leash](https://github.com/eltociear/invoice-leash), which ran on another chain. See
 [CHANGELOG.md](CHANGELOG.md).

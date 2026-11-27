@@ -1,14 +1,20 @@
 {
   "chainId": "mechain_400-1",
-  "codeId": 46,
-  "contract": "me1dsl645wcgyf5cckkrrcmxsa255r5xve80nm95v8azmc3hnk5uwrqvwsrnp",
+  "codeId": 47,
+  "contract": "me1kxmldervpq3w4gyyh98tt8eueap5npdqn4ssw70lcurug0stjcsqhjq3wt",
   "admin": null,
-  "version": "0.5.2",
-  "storeTx": "D1560CC90EDC47A7ACC967D3DBCA6929FC5CCE24EB571E860F5D1580BBAA954E",
-  "instantiateTx": "C494CA4C146E346A3B4739EB4391198E842A9DC2A7CC0B4CA756667E983564A2",
-  "wasmSha256": "0ccea71e4c8c62ba6e622e6d72b286ed854deb2366ad0ed61a3f3c363d0016fa",
-  "deployedAt": "2026-11-26T06:15:06.171Z",
+  "version": "0.5.3",
+  "storeTx": "3AC19A100DC9883FB2B9FA86750713EE8E8CFB67445B3E984FAE9E6BF027B625",
+  "instantiateTx": "25BD43612ADC24D1024C164A7E3015FE25A6A56AF98FC540943557E2C3A562DD",
+  "wasmSha256": "5ca3f4e0961d00c9a74b200da781abef4ab81ee3c7194f0dd0e043d30d76e671",
+  "deployedAt": "2026-11-27T06:34:44.997Z",
   "superseded": [
+    {
+      "codeId": 46,
+      "contract": "me1dsl645wcgyf5cckkrrcmxsa255r5xve80nm95v8azmc3hnk5uwrqvwsrnp",
+      "version": "0.5.2",
+      "why": "v0.5.2: with co-approvers, the owner key alone could still loosen the leash (drop the approval line, raise limits, add a vendor or a friendly co-approver, set up a fresh agent, withdraw) and then pay alone; an agent could pay its own owner (superseded by 0.5.3, where loosening a co-signed leash waits 24 h and any co-approver can cancel it)"
+    },
     {
       "codeId": 44,
       "contract": "me1rmqthdyqs03faugttrt6kkm2u73pwfr86aqe6s6jvlwq4wqdp6vq4066gc",

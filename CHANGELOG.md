@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 (contract 0.5.3, deployed on testnet: code 47, `me1kxmlde…hjq3wt`, no admin)
+
+- Contract 0.5.3 is live on ME Hub testnet (store `3AC19A10…B625`, instantiate `25BD4361…62DD`; wasm
+  `5ca3f4e0…e671`, the CI build). 0.5.2 (code 46) is superseded: with co-approvers, the owner key alone could
+  still loosen the leash and pay alone. Its records are in `runs/superseded-v0.5.2/`.
+- Every testnet flow is re-recorded on 0.5.3: identity, payments, Claude Code, obey-everything (8 attacks, 0
+  through), commerce. Two flows are new on testnet. **Two signatures with two real KYC-2 ME IDs**
+  (`scripts/testnet-cosign.sh`): the owner's signature alone doesn't pay, the CFO's completes it, an owner-alone
+  loosening and a withdrawal both wait 24 h and the CFO cancels them, the CFO revokes at once, and going back to one
+  signature takes both. **A bond** (`scripts/testnet-bond.sh`). `check-runs` asserts each.
+- The sandbox agent's leash and fee grant run 75 days, past Demo Day.
 
 - The "halt" was the public endpoint, not the chain. ME Hub testnet passed its upgrade height within minutes
   (5,523,301 is stamped 07:10:01 on 11-26). The node at beta-hub-1317/26657 that every page and tool reads stayed

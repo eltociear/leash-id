@@ -1,0 +1,41 @@
+Leash ID on ME Hub TESTNET (mechain_400-1), contract me1kxmldervpq3w4gyyh98tt8eueap5npdqn4ssw70lcurug0stjcsqhjq3wt (code 47, no admin)
+owner me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq, ME ID 2611255912050
+
+## 1. ME Hub's own records: the owner's KYC region, and the fixed-deposit terms each region offers
+$ curl https://beta-hub-1317.explorer-testnet.me/metaearth/kyc/KYC?did=2611255912050
+{"did":"2611255912050","region":"me_earth"}
+$ curl https://beta-hub-1317.explorer-testnet.me/metaearth/wstaking/fixed_deposit_cfg
+[{"regionId":"me_earth","RegionFixedDepositCfg":[{"term":"1","rate":"0.300000000000000000","status":"FIXED_DEPOSIT_CFG_ACTIVE"}]}]
+
+## 2. before: the contract sees no bond
+$ node leash.mjs identity owner
+address  me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq
+ME ID    2611255912050 active KYC 2
+bond     none
+
+## 3. someone else's fixed deposit can't be shown as ours: the contract reads x/wstaking and refuses
+# deposit #2 belongs to another account
+$ curl https://beta-hub-1317.explorer-testnet.me/metaearth/wstaking/fixed_deposit/2
+{"id":"2","account":"me1wdywsn9emstjgz4tqe2vnmea82mjtalsxx42ns","principal":{"denom":"umec","amount":"6000000000"}}
+$ node leash.mjs bond 2
+REFUSED by the contract: fixed deposit #2: belongs to another account  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/295918739C7930731771F5465A0403CF86D90D281DD45FB68C8B0874F7F7B700
+
+## 4. lock 0.02 MEC for the region's term (MsgDoFixedDeposit) and show it as the bond (set_bond), in one command
+$ node leash.mjs lock 0.02
+ok   fixed deposit #14: 0.02 MEC for 1 day(s), region me_earth  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/06D495D225F7D8F4D6BB059A64C70A26AFA0EA62E729BCD9967F88DF8A3B604F
+ok   set_bond  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/06F92BB7A039C5BA4AE48E35CFF953D9C50896718AC411B36855D9301F6CD8F6
+     owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq owner_did=2611255912050 deposits=1 bond=2000000
+
+## 5. after: x/wstaking holds the deposit, and the contract reads it live
+$ curl https://beta-hub-1317.explorer-testnet.me/metaearth/wstaking/fixed_deposit/14
+{"id":"14","account":"me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq","principal":{"denom":"umec","amount":"2000000"},"end_time":"2026-11-28T06:42:33.687132771Z","term":"1"}
+$ node leash.mjs identity owner
+address  me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq
+ME ID    2611255912050 active KYC 2
+bond     0.02 MEC locked in 1 ME Hub fixed deposit(s), first unlocks 2026-11-28 06:42 UTC
+$ node leash.mjs whois me15xd643xjukalnklc5jqvqnp36sc0yrz2wxnfan
+me15xd643xjukalnklc5jqvqnp36sc0yrz2wxnfan is not a Leash ID agent
+
+# A deposit stops counting the moment it unlocks (end_time above): the contract checks end_time on every read,
+# so the bond drops out by itself; nothing has to be cleared.
+done -> runs/testnet-bond-2026-11-27T06-42-24Z.txt

@@ -13,7 +13,7 @@ Everything below can be checked without trusting us: each claim links to code, a
 - **What only ME Network makes possible.** The contract asks x/did for the owner's ME ID on every payment
   (whitelisted Stargate query), so the leash belongs to a KYC-verified person, and suspending that ME ID stops all
   their agents in the next block. Vendors are checked the same way, EVM sub-accounts included.
-- **Live now.** Contract 0.5.2 on ME Hub testnet, no admin, with every flow recorded against our real ME ID
+- **Live now.** Contract 0.5.3 on ME Hub testnet, no admin, with every flow recorded against our real ME ID
   (KYC level 2): 40+ transactions, each re-checked against the chain by CI.
 - **Attacked, and held.** Claude Code working a poisoned inbox, a client that obeys every instruction (8 attacks,
   0 through), and a public page where anyone can attack a real agent key.
@@ -35,48 +35,59 @@ Everything below can be checked without trusting us: each claim links to code, a
 
 ## On ME Hub testnet (`mechain_400-1`)
 
-- Contract `me1dsl645wcgyf5cckkrrcmxsa255r5xve80nm95v8azmc3hnk5uwrqvwsrnp`, code 46, **no admin** (nobody can swap
-  the code). Store tx `D1560CC9…954E`, instantiate tx `C494CA4C…64A2`
-  ([tx](https://eltociear.github.io/leash-id/tx.html#C494CA4C146E346A3B4739EB4391198E842A9DC2A7CC0B4CA756667E983564A2)).
+- Contract `me1kxmldervpq3w4gyyh98tt8eueap5npdqn4ssw70lcurug0stjcsqhjq3wt`, code 47, **no admin** (nobody can swap
+  the code). Store tx `3AC19A10…B625`, instantiate tx `25BD4361…62DD`
+  ([tx](https://eltociear.github.io/leash-id/tx.html#25BD43612ADC24D1024C164A7E3015FE25A6A56AF98FC540943557E2C3A562DD)).
 - `npm run verify` (and the `testnet` CI job on every push): the wasm on chain is byte-for-byte
   `artifacts/leash_id.wasm`, and the contract has no admin. The `contract` CI job rebuilds that file from source on
   every push (Rust 1.81, `wasm-opt`, `cosmwasm-check`) and fails unless the sha256 matches, so chain == committed ==
   built from this source (the CI job is advisory, so a testnet outage can't fail the build).
 - **Real x/did records, real transactions** ([`runs/testnet-identity-*.txt`](runs/)): another user's ME ID
   binds an EVM sub-account through `MsgCreateSubAccount`. The contract refuses a false link
-  ([tx](https://eltociear.github.io/leash-id/tx.html#E3469C6EAEF2043D93CB135D3E5839F31AD17F9D3D5B1A4D3B4F3CE1F5DBE657)),
-  records the true one ([tx](https://eltociear.github.io/leash-id/tx.html#EC2AAB226921167BF9CF235907DF68563DDC6324A2180D98946A4A83B5318C39)),
+  ([tx](https://eltociear.github.io/leash-id/tx.html#D2A40AFCD4FD24CBFBDE06C95D06477E7345503A3D54EC30D3370DE49EF696EB)),
+  records the true one ([tx](https://eltociear.github.io/leash-id/tx.html#00E4D1D912B9A39334525A0D06E772CF6F6362651885EF52C1D2991571F97C2A)),
   and from then on treats that EVM address as the ME ID's.
 
 - **The payment flows, with our owner's real ME ID** (`2611255912050`, KYC level 2, issued by the testnet KYC
-  issuer) in [`runs/testnet-payments-2026-11-26T06-16-31Z.txt`](runs/testnet-payments-2026-11-26T06-16-31Z.txt), 20+ transactions anyone can look up:
+  issuer) in [`runs/testnet-payments-2026-11-27T06-37-34Z.txt`](runs/testnet-payments-2026-11-27T06-37-34Z.txt), 20+ transactions anyone can look up:
   - A second real ME ID, at KYC level 1, tries to fund agents and is refused on chain
-    ([tx](https://eltociear.github.io/leash-id/tx.html#B545D8FE357E0FD5A147AF5A12C043F321A37FE9E10A430F74ACD9BB64FBD509): `has KYC level 1, need 2`).
+    ([tx](https://eltociear.github.io/leash-id/tx.html#FCC4AB24E4B24396B3F81CBB46A9835AB83AFCF56FED5A26F4D55FA5A3B01B63): `has KYC level 1, need 2`).
   - Paid inside the leash; refused: the same invoice spelled differently, over the limit, a vendor with no ME ID, a
     vendor at KYC level 1. Each refusal is a failed tx with its reason.
   - Paid to an **EVM sub-account** of another user's KYC 2 ME ID: the receipt names that ME ID
-    ([tx](https://eltociear.github.io/leash-id/tx.html#B35B41CBDF92610D753B69E3EDBD514827C90DDB019DD3955E7D60FAC5560B92)).
+    ([tx](https://eltociear.github.io/leash-id/tx.html#AAC747DA0DABDE761A41A67505970FC69A8F4887697FA5FC69B50D4E8C8ACD92)).
     The same invoice at that ME ID's main account is refused as already paid: one vendor, two addresses, one invoice
-    ([tx](https://eltociear.github.io/leash-id/tx.html#F0FBC7C34A803E23FF99C55553A0960B1CF46F3C2813475DC761AEA0719DC4C2), since contract 0.5.1).
+    ([tx](https://eltociear.github.io/leash-id/tx.html#86C01FFA2417C165F909ED75773420F10EE7A323F0857673A356ED602D9CEC5D), since contract 0.5.1).
   - Two-person approval needs two people: naming that main account and its sub-account as two co-approvers is
-    refused, `holds ME ID …, the same person` ([tx](https://eltociear.github.io/leash-id/tx.html#97D71047C9707CA2DDCBB2ED0B003EBFC0889C37630F3B0B0409C7267F3546FF), since contract 0.5.1).
+    refused, `holds ME ID …, the same person` ([tx](https://eltociear.github.io/leash-id/tx.html#CF9E21C1BD9F91808B3CF95B63DB93424D62710BAF4F532895A71B1B0EB0F8ED), since contract 0.5.1).
   - Held above the threshold; the agent can't release it; the owner approves. A `multi_send` batch. Revoke → refused,
     resume → paid.
   - An agent key that **never held MEC** pays on the owner's fee grant (the tx's fee granter is the owner:
-    [tx](https://eltociear.github.io/leash-id/tx.html#E6C8E669F2B6FC817C2B5630A120C8CB21D4C08E81DC59B3187072B0676A7A6D)) and can't send anything else.
+    [tx](https://eltociear.github.io/leash-id/tx.html#DCC6B9E23656956BEB6186D2069CCB0DC39368C0932727F3A4B0110B48333FBE)) and can't send anything else.
 
-- **Claude Code as the agent, on testnet** ([`runs/testnet-claude-2026-11-26T06-19-06Z.jsonl`](runs/testnet-claude-2026-11-26T06-19-06Z.jsonl)): paid INV-1001, sent INV-1002 for
+- **Claude Code as the agent, on testnet** ([`runs/testnet-claude-2026-11-27T06-39-58Z.jsonl`](runs/testnet-claude-2026-11-27T06-39-58Z.jsonl)): paid INV-1001, sent INV-1002 for
   approval, declined the duplicate, the fake CEO and the injected invoice, and paid MCC-77 after checking on chain that
   the merchant holds a live, KYC-verified ME ID. MCC-77 is the one judgment call in the inbox: some runs leave it for
   a human because nothing shows the credits were ordered, and the checks accept either.
-- **The obey-everything client, on testnet** ([`runs/testnet-obey-2026-11-26T06-20-59-836Z.txt`](runs/testnet-obey-2026-11-26T06-20-59-836Z.txt)), on the leash Claude had
+- **The obey-everything client, on testnet** ([`runs/testnet-obey-2026-11-27T06-41-51-035Z.txt`](runs/testnet-obey-2026-11-27T06-41-51-035Z.txt)), on the leash Claude had
   just worked: the fake CEO wire, the injected invoice, the limit raise, the withdraw, the one-shot drain and the
   re-spelled duplicates were all refused on chain, and so was the split drain (5 × 0.014 MEC): only 0.03 MEC of the
   0.1 MEC 24-hour limit was left. 8 attacks, 0 through. Splits under the approval threshold are bounded by that
   limit, not stopped ([T6](THREAT_MODEL.md)): in our earlier run on contract 0.4, with a 0.2 MEC limit, the same
   batch to the owner's own vendor was paid ([`runs/superseded-v0.4/`](runs/superseded-v0.4/)).
-- **Agent-to-agent commerce, on testnet** ([`runs/testnet-commerce-2026-11-26T06-21-04Z.txt`](runs/testnet-commerce-2026-11-26T06-21-04Z.txt)): HTTP 402, paid through the leash, replay,
+- **Agent-to-agent commerce, on testnet** ([`runs/testnet-commerce-2026-11-27T06-41-56Z.txt`](runs/testnet-commerce-2026-11-27T06-41-56Z.txt)): HTTP 402, paid through the leash, replay,
   front-running, an unissued invoice and a seller without an ME ID all refused.
+- **Two signatures, with two real KYC-2 ME IDs, on testnet** ([`runs/testnet-cosign-2026-11-27T06-43-15Z.txt`](runs/testnet-cosign-2026-11-27T06-43-15Z.txt)): the owner adds the CFO
+  (ME ID `2611264146169`) as co-approver. A held payment isn't paid on the owner's signature
+  ([tx](https://eltociear.github.io/leash-id/tx.html#9C96151DB9EB1A250A9FE4B56F850F6AF7E4AA781DA6948CE95E395355484A15): `approvals=1 needed=2`)
+  and is paid on the CFO's ([tx](https://eltociear.github.io/leash-id/tx.html#EADF691746DF6C10617CFA5A67E15F85A24B0A2C6E43D535EE7DC9376804C725)). The owner key alone then
+  tries to drop the approval line and to withdraw: both wait 24 h
+  ([tx](https://eltociear.github.io/leash-id/tx.html#4C8D2DD37D30D1388C7940FE84EC452A7258A47125237DCCFA66318B6CAF54DD)), the CFO cancels both and revokes the agent at once
+  ([tx](https://eltociear.github.io/leash-id/tx.html#901FAADECF42CBB530A64478A636CA7D1791B8C52A54651BCE546DD000C62728)). Going back to one signature takes both of them, and then applies at once
+  ([tx](https://eltociear.github.io/leash-id/tx.html#8282DED9A790B06E018C093366C473B64BB294A8B0B338AD1A7C8BEE903B85B9)). The CFO's key holds no MEC: its fees are on the owner's grant.
+- **A bond in x/wstaking, on testnet** ([`runs/testnet-bond-2026-11-27T06-42-24Z.txt`](runs/testnet-bond-2026-11-27T06-42-24Z.txt)): 0.02 MEC locked in an ME Hub fixed deposit
+  (`MsgDoFixedDeposit`) and shown as the owner's bond, which the contract reads live from x/wstaking; someone
+  else's deposit can't be claimed (refused on chain).
 - **The red-team sandbox's leash is live on testnet** (agent `me15xd643xjukalnklc5jqvqnp36sc0yrz2wxnfan`, holds
   0 MEC, fees on the owner's grant).
 
@@ -203,7 +214,6 @@ cat runs/testnet-claude-*.jsonl | jq -r 'select(.type=="result").result'  # Clau
   other flow is recorded on testnet too, and CI re-runs the obey-everything, kill-switch and commerce runs on a
   fresh node.
 - The owner console's Keplr path is written to Keplr's API but was tested with a mnemonic signer (`npm run
-  e2e:owner`). Bonds are covered by unit tests against the real x/wstaking response shape, and `leash lock` was
-  checked by simulation on testnet (region `me_earth` offers a 1-day term). A bond on testnet only lasts that day;
-  the recorded one goes in when the halted chain is back.
+  e2e:owner`). Bonds are covered by unit tests against the real x/wstaking response shape and recorded on testnet
+  (`runs/testnet-bond-*.txt`), but region `me_earth` offers only a 1-day term, so a testnet bond lasts that day.
 - The threat model lists what Leash ID does not protect against: [THREAT_MODEL.md](THREAT_MODEL.md).

@@ -213,5 +213,23 @@ if (tbFile) {
     "testnet bond 5: x/wstaking holds it and the contract reads it live (identity and whois)");
 }
 
+// ---- testnet: two signatures with two real KYC-2 ME IDs (optional: only if a record exists)
+const tsFile = latest(/^testnet-cosign-.*\.txt$/);
+if (tsFile) {
+  const st = Object.fromEntries(fs.readFileSync(path.join(dir, tsFile), "utf8").split(/^## /m).slice(1).map((x) => [x[0], x]));
+  check((st[1]?.match(/^ME ID\s+\d+ active KYC 2/gm) ?? []).length === 2, "testnet cosign 1: owner and CFO each hold a live KYC-2 ME ID");
+  const appr = [...(st[2] ?? "").matchAll(/ok\s+approve payment #\d+[^\n]*\n\s+([^\n]*)/g)].map((m) => m[1]);
+  check(/ok\s+set_approvers/.test(st[2] ?? "") && appr.length === 2 && /approvals=1 needed=2/.test(appr[0]) && /approvals=2 needed=2/.test(appr[1]),
+    "testnet cosign 2: the owner's signature alone doesn't pay; the CFO's completes it");
+  check(/REFUSED by the contract: unauthorized/.test(st[2] ?? ""), "testnet cosign 2: the agent can't sign its own held payment");
+  const s3 = st[3] ?? "";
+  check(/ok\s+update_policy WAITS 24 h/.test(s3) && /approval above 0\.015 MEC/.test(s3) && /ok\s+withdraw WAITS 24 h/.test(s3)
+      && (s3.match(/ok\s+cancel_change/g) ?? []).length === 2 && /ok\s+revoke_agent[^\n]*\n\s+[^\n]*by=me1/.test(s3) && /REFUSED by the contract: agent revoked/.test(s3),
+    "testnet cosign 3: the owner alone can't drop the approval line or withdraw (both wait 24 h); the CFO cancels both and stops the agent");
+  const s4 = st[4] ?? "";
+  check(/ok\s+set_approvers WAITS 24 h/.test(s4) && /ok\s+apply_change[^\n]*\n\s+[^\n]*threshold=1 approvals=2/.test(s4) && /ok\s+resume_agent/.test(s4) && /ok\s+pay \(paid\)/.test(s4),
+    "testnet cosign 4: owner and CFO together return to one signature at once (approve_change); the agent pays again");
+}
+
 console.log(ok ? "\nrun records: all good" : "\nrun records: FAILED");
 process.exit(ok ? 0 : 1);

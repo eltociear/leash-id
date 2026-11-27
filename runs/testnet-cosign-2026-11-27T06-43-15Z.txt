@@ -1,0 +1,86 @@
+Leash ID two-signature run on ME Hub testnet (mechain_400-1)
+contract me1kxmldervpq3w4gyyh98tt8eueap5npdqn4ssw70lcurug0stjcsqhjq3wt
+
+## 1. two real ME IDs at KYC level 2: the owner's and the CFO's (the CFO key holds no MEC)
+$ node leash.mjs identity owner
+address  me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq
+ME ID    2611255912050 active KYC 2
+bond     0.02 MEC locked in 1 ME Hub fixed deposit(s), first unlocks 2026-11-28 06:42 UTC
+$ node leash.mjs identity cfo
+address  me1twwg4sjfaknnxsan006stvkl6jn0fg8uc6ha78
+ME ID    2611264146169 active KYC 2
+bond     none
+$ node leash.mjs gas-grant me1twwg4sjfaknnxsan006stvkl6jn0fg8uc6ha78 --limit 0.05 --days 75
+ok   done  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/3E9852D3AD8CAF497801F30FB6B02F487F30D4D250EDA8D2C276D66F2D5A85CF
+
+## 2. the owner adds the CFO as co-approver: a held payment needs both signatures
+$ node leash.mjs approvers cfo --threshold 2
+ok   set_approvers  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/B2A55F49E3A89FA024149C2EA5346C392377111263DBA7A0A26B85A14DB9A399
+     owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq approvers=1 threshold=2
+$ node leash.mjs pay vendor 0.018 CS-1795761808-g --as agent
+ok   pay (pending) payment #15  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/1149D788E01F898FEF322D0B15EEEA02479F0FB1095947ED15DAB9C71B12E9DA
+     payment_id=15 agent=me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq owner_did=2611255912050 vendor=me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q amount=1800000 invoice=CS-1795761808-g status=pending
+$ node leash.mjs approve 15
+ok   approve payment #15  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/9C96151DB9EB1A250A9FE4B56F850F6AF7E4AA781DA6948CE95E395355484A15
+     payment_id=15 owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq signer=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq vendor=me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q amount=1800000 approvals=1 needed=2
+$ node leash.mjs approve 15 --as agent
+REFUSED by the contract: unauthorized: only the owner (or, to approve, reject or revoke, a co-approver) can do this  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/1EF77F43D6510C76901E13D9860AFFDCB5CA82EF50AB30AE48A46984965D993C
+$ node leash.mjs approve 15 --as cfo --fee-granter owner
+ok   approve payment #15  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/EADF691746DF6C10617CFA5A67E15F85A24B0A2C6E43D535EE7DC9376804C725
+     payment_id=15 owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq signer=me1twwg4sjfaknnxsan006stvkl6jn0fg8uc6ha78 vendor=me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q amount=1800000 approvals=2 needed=2
+
+## 3. with two signatures required, the owner key alone can't loosen the leash
+$ node leash.mjs policy agent --approve-above none
+ok   update_policy WAITS 24 h: you need co-signatures, so a change that loosens control is held for review  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/4C8D2DD37D30D1388C7940FE84EC452A7258A47125237DCCFA66318B6CAF54DD
+     any co-approver can cancel it until 2026-11-28 06:43 UTC; after that anyone applies it: leash apply-change policy:me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam
+$ node leash.mjs whois agent
+agent      me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam "ap-clerk"
+owner      me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq
+ME ID      2611255912050 active KYC 2 (needs KYC ≥ 2) → verified true
+bond       0.02 MEC locked in 1 ME Hub fixed deposit(s), first unlocks 2026-11-28 06:42 UTC
+gas        from the agent's own wallet: 0.39981932 MEC
+can pay    yes
+waiting    a looser policy, applies from 2026-11-28 06:43 UTC unless a co-approver cancels it
+limits     ≤ 0.02 MEC per payment, ≤ 0.1 MEC per 24h, approval above 0.015 MEC
+24h spend  0.091 MEC (remaining 0.009 MEC); owner budget 0.4069 MEC; 0 held, 2 signature(s) release one
+unsigned   at most 0.009 MEC more before the owner signs anything (payments of ≤ 0.015 MEC each)
+vendors    me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q, me1uj8yuu8zchw0gm5gw4w8qf3fzm5l8ctkps48zz + any verified ME ID holder
+expires    2027-02-10 06:39 UTC
+$ node leash.mjs changes
+policy:me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam per payment 0.02 MEC, per 24h 0.1 MEC, approval above never, vendors 2 + any verified, until 2027-02-10 06:39 UTC
+                     applies from 2026-11-28 06:43 UTC
+$ node leash.mjs cancel-change policy:me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam --owner me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq --as cfo --fee-granter owner
+ok   cancel_change  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/DCE5E2AB8BA1010C0CBB82899578E87157A1095366AA079C4B2C3771B3947D8F
+     owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq key=policy:me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam by=me1twwg4sjfaknnxsan006stvkl6jn0fg8uc6ha78
+$ node leash.mjs withdraw 0.01
+ok   withdraw WAITS 24 h: you need co-signatures, so a change that loosens control is held for review  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/48183AD7EF4A63A86D5BBEB2C4DFF5A1015A363479253AB4961A3AB3CE594A80
+     any co-approver can cancel it until 2026-11-28 06:44 UTC; after that anyone applies it: leash apply-change withdraw
+$ node leash.mjs changes
+withdraw             withdraw 0.01 MEC
+                     applies from 2026-11-28 06:44 UTC
+$ node leash.mjs cancel-change withdraw --owner me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq --as cfo --fee-granter owner
+ok   cancel_change  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/0AD2152FDD3945D018CF98682BE011694D8E79EB4B7738BF95986A67629306EF
+     owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq key=withdraw by=me1twwg4sjfaknnxsan006stvkl6jn0fg8uc6ha78
+$ node leash.mjs revoke agent --as cfo --fee-granter owner
+ok   revoke_agent  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/901FAADECF42CBB530A64478A636CA7D1791B8C52A54651BCE546DD000C62728
+     owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq by=me1twwg4sjfaknnxsan006stvkl6jn0fg8uc6ha78 agent=me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam rejected_pending=0
+$ node leash.mjs pay vendor 0.001 CS-1795761857-r --as agent
+REFUSED by the contract: agent revoked  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/84FFD2268140F2033035163F2A54A53BA8FE4E8962395B06E78B6E9AC6CF2B0D
+
+## 4. back to one signature, by both of them: approve_change applies it at once
+$ node leash.mjs approvers --threshold 1
+ok   set_approvers WAITS 24 h: you need co-signatures, so a change that loosens control is held for review  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/3296A4497EE17C874BECDA9C31FDC0811F956B2480F14D19FF2E545AAD1DE605
+     any co-approver can cancel it until 2026-11-28 06:44 UTC; after that anyone applies it: leash apply-change approvers
+$ node leash.mjs approve-change approvers --owner me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq --as cfo --fee-granter owner
+ok   apply_change  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/8282DED9A790B06E018C093366C473B64BB294A8B0B338AD1A7C8BEE903B85B9
+     owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq key=approvers threshold=1 approvals=2
+$ node leash.mjs approvers
+{ list: [], threshold: 1 }
+$ node leash.mjs resume agent
+ok   resume_agent  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/9D49BB170784A122903B6439AD6045B6C263326E388C50E1B820C96BE2364C68
+     owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq agent=me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam
+$ node leash.mjs pay vendor 0.001 CS-1795761877-b --as agent
+ok   pay (paid) payment #16  https://beta-hub-1317.explorer-testnet.me/cosmos/tx/v1beta1/txs/37DC8108EE19E2B8F57988F1C82F4D9D7E5AE06E1ACC45E80844678FCAECB8AB
+     payment_id=16 agent=me1m8tf94y2uxcmj4efk0tf5t4d335ge6dhgh9vam owner=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq owner_did=2611255912050 vendor=me1j64lzr00fnj8uxwy955au7ac2gzn07hf2qvc3q amount=100000 invoice=CS-1795761877-b status=paid
+
+done -> runs/testnet-cosign-2026-11-27T06-43-15Z.txt
