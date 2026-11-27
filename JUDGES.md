@@ -188,12 +188,15 @@ cat runs/testnet-claude-*.jsonl | jq -r 'select(.type=="result").result'  # Clau
 
 ## Known limits, stated plainly
 
-- ME Hub testnet halts now and then. It stopped at block 5,523,300 (07:09 UTC on 2026-11-26) for a scheduled
-  upgrade to me-hub `v2.0.18.rc1` (governance proposal 11; `/cosmos/upgrade/v1beta1/current_plan`) and waits there
-  until validators switch binaries. That release migrates x/regiongov only: x/did, x/kyc, the FixedDeposit query and
-  the CosmWasm bindings are unchanged, and CI's devnet job builds that same release. Every page shows
-  the latest block and its age and says so when the chain isn't moving: reads still work, and the CLI, MCP server and sandbox don't broadcast into it
-  (NOT SENT, safe to retry) so nothing lands hours later by surprise.
+- ME Hub testnet stops now and then. On 2026-11-26 it reached block 5,523,300 (07:09 UTC), the height governance
+  scheduled for the me-hub `v2.0.18.rc1` upgrade (proposal 11). The chain itself moved on within minutes (block
+  5,523,301 is stamped 07:10:01), but the public endpoint every page and tool reads stayed at 5,523,300 until about
+  06:15 UTC on 11-27, so for 23 hours nothing could be sent through it. The release now running
+  (`v2.0.18-5-g4826eefb`) changes x/regiongov, x/wstaking validator resets and x/wdistri only: x/did, x/kyc, the
+  FixedDeposit query and the CosmWasm bindings are unchanged, and CI's devnet job builds that commit. While the
+  endpoint stood still, every page showed the latest block, its age and the scheduled upgrade; reads kept working;
+  and the CLI, MCP server and sandbox didn't broadcast into it (NOT SENT, safe to retry), so nothing could land
+  hours later by surprise.
 - Suspending an ME ID needs the global DAO or the KYC issuer, so the kill switch is shown on a node we run, not on
   testnet (`scripts/testnet-killswitch.sh` waits for it on testnet and records the refusals when it happens). Every
   other flow is recorded on testnet too, and CI re-runs the obey-everything, kill-switch and commerce runs on a

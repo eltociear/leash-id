@@ -106,7 +106,7 @@ async function loadState() {
   if (s.error) { $("leash").innerHTML = `<span class="err">${esc(s.error)}</span>`; return; }
   const age = s.block ? Math.max(0, (Date.now() - Date.parse(s.block.time)) / 1000) : null;
   $("net").innerHTML = esc(`${s.chain_id} · contract ${short(s.contract)}`) + (s.block ? esc(` · block ${Number(s.block.height).toLocaleString("en-US")}, ${age < 90 ? `${Math.round(age)} s` : age < 5400 ? `${Math.round(age / 60)} min` : `${Math.round(age / 3600)} h`} ago`) : "") +
-    (age > 120 ? ` · <b style="color:var(--bad)">${s.block.upgrade ? `ME Hub testnet is halted for a scheduled upgrade (me-hub ${esc(s.block.upgrade)}, voted by governance)` : "ME Hub testnet isn't producing blocks right now"}</b>: the contract still answers every attack (simulated), but the control payment can't be confirmed until it moves again` : "");
+    (age > 120 ? ` · <b style="color:var(--bad)">${s.block.upgrade ? `ME Hub testnet is stopped at the height of a scheduled upgrade (me-hub ${esc(s.block.upgrade)}, voted by governance)` : "ME Hub testnet isn't producing blocks right now"}</b>: the contract still answers every attack (simulated), but the control payment can't be confirmed until it moves again` : "");
   const p = s.policy;
   $("leash").innerHTML = `<dl>
     <dt>${s.keyless ? "Agent (no key here: simulated as it)" : "Agent key (yours now)"}</dt><dd class="mono">${esc(s.agent)}</dd>

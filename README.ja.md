@@ -6,11 +6,6 @@
 
 [![ci](https://github.com/eltociear/leash-id/actions/workflows/ci.yml/badge.svg)](https://github.com/eltociear/leash-id/actions/workflows/ci.yml)
 
-> **ページに「ME Hub テストネットが停止中」と出たら:** 2026-11-26 07:09 UTC から、テストネットはブロック 5,523,300 で止まっています。
-> ガバナンス（提案 11）が `v2.0.18.rc1` へのアップグレード用に予定した高さで、バリデーターの切り替え待ちです。
-> チェーン上に記録済みのものはすべて確認できます（`npm run judge`）。新しい支払いは署名前に断り（「not sent」、何も使われません）、
-> CI は記録済みの流れをローカルの `v2.0.18.rc1` チェーンで毎回再実行しています。
-
 **デモ動画（4分48秒、英語・字幕付き）:** https://www.youtube.com/watch?v=vySdFuWiGho ·
 **エージェントを確認:** https://eltociear.github.io/leash-id/ （ME Hub テストネットをその場で読み込み、ウォレット不要）·
 **オーナー用コンソール:** https://eltociear.github.io/leash-id/owner.html （Keplr。[ウォレットなしの閲覧専用](https://eltociear.github.io/leash-id/owner.html#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq)も）·

@@ -71,7 +71,7 @@ async function chainHalted() {
     const b = await (await reader()).getBlock();
     if (!(Date.now() - Date.parse(b.header.time) > 120_000)) return null;
     const up = await upgradeAt(b.header.height);
-    return up ? `ME Hub testnet is halted for its scheduled upgrade to ${up}` : "ME Hub testnet isn't producing blocks right now";
+    return up ? `ME Hub testnet is stopped at the height of its scheduled upgrade to ${up}` : "ME Hub testnet isn't producing blocks right now";
   } catch {
     return null;
   }
