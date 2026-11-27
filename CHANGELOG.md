@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The verifier and tx pages no longer retry a 500 that carries the contract's own answer (an address with no leash
+  answered after three tries and ~2 s of waiting; now at once).
 - New demo video (4:51): https://www.youtube.com/watch?v=bCiRf8DFEjM, cut from the contract 0.5.3 testnet records, with the
   two-signature run and live testnet captures of the verifier, owner console and `leash watch`.
 - An independent audit of JUDGES/README against the records: the sandbox leash now has its own record
