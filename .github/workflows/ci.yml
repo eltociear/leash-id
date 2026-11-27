@@ -71,15 +71,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ME_HUB_DIR: ${{ github.workspace }}/me-hub
-      # the release ME Hub testnet upgraded to at height 5,523,300 (gov proposal 11), so the devnet runs what testnet runs
-      ME_HUB_REF: v2.0.18.rc1
+      # the build ME Hub testnet resumed on after its v2.0.18.rc1 upgrade at 5,523,300 (gov proposal 11; node_info
+      # reports v2.0.18-5-g4826eefb), so the devnet runs what testnet runs
+      ME_HUB_REF: v2.0.18-5-g4826eefb
       LEASH_HOME: ${{ github.workspace }}/.leash-ci
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: openmetaearth/me-hub
-          ref: a5b287db1a91ec125921883fbd75499b4afc7a5c # v2.0.18.rc1
+          ref: 4826eefbc510466bf85366ebe77b0068e314b9aa # v2.0.18-5-g4826eefb, "v2.0.18 handler for beta"
           path: me-hub
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:

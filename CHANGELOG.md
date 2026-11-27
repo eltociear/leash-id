@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The testnet came back on me-hub `v2.0.18-5-g4826eefb` ("v2.0.18 handler for beta"): CI's devnet now builds that
+  commit. Against rc1 it changes x/regiongov, x/wstaking validator resets and x/wdistri migration only.
 - The testnet evidence outlives the testnet. `runs/chain-snapshot.json` keeps every cited tx's bytes, merkle proof,
   block header and results, the next header, and the validators' signatures. `check-chain --offline`
   (`lib/txproof.mjs`, in CI and as the fifth `npm run judge` check) proves with no network that each tx is in its
