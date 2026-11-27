@@ -7,6 +7,11 @@
 [![ci](https://github.com/eltociear/leash-id/actions/workflows/ci.yml/badge.svg)](https://github.com/eltociear/leash-id/actions/workflows/ci.yml)
 Release 0.7.0 · contract 0.5.2 live on ME Hub testnet (code 46, no admin)
 
+> **If a page says ME Hub testnet is halted:** since 2026-11-26 07:09 UTC the testnet has stood at block 5,523,300,
+> the height governance scheduled for its upgrade to `v2.0.18.rc1` (proposal 11), waiting for validators to switch
+> releases. Everything already on chain still checks out (`npm run judge`). New payments are refused before signing
+> ("not sent", nothing spent). CI re-runs the recorded flows on a local `v2.0.18.rc1` chain.
+
 **Demo video (4:48):** https://www.youtube.com/watch?v=vySdFuWiGho ·
 **Check an agent:** https://eltociear.github.io/leash-id/ (reads ME Hub testnet live, no wallet) ·
 **Owner console:** https://eltociear.github.io/leash-id/owner.html (Keplr; or [read-only, no wallet](https://eltociear.github.io/leash-id/owner.html#view=me1r7ssfwrhreafc8fvctqewntmgf42djdk7ldhuq)) ·

@@ -2,6 +2,10 @@
 
 [English](README.md) · **简体中文** · [日本語](README.ja.md)
 
+> **如果页面显示 ME Hub 测试网已停止出块：** 自 2026-11-26 07:09 UTC 起，测试网停在区块 5,523,300，
+> 即治理（第 11 号提案）为升级到 `v2.0.18.rc1` 预定的高度，正在等待验证者切换版本。链上已有的一切仍可核验（`npm run judge`）；
+> 新的支付会在签名前被拒绝（"not sent"，不花任何费用）；CI 每次都在本地 `v2.0.18.rc1` 链上重跑已记录的流程。
+
 **演示视频（4:48，英文字幕）：** https://www.youtube.com/watch?v=vySdFuWiGho · **查询代理（无需钱包）：** https://eltociear.github.io/leash-id/ ·
 **所有者控制台（Keplr）：** https://eltociear.github.io/leash-id/owner.html ·
 **[威胁模型](THREAT_MODEL.md)** · **[安全与部署](SECURITY.md)**

@@ -17,7 +17,17 @@ try {
   const b = (await (await fetch(`${REST}/cosmos/base/tendermint/v1beta1/blocks/latest`, { signal: AbortSignal.timeout(15000) })).json()).block.header;
   const age = Math.round((Date.now() - Date.parse(b.time)) / 1000);
   const ago = age < 120 ? `${age} s ago` : age < 7200 ? `${Math.round(age / 60)} min ago` : `${(age / 3600).toFixed(1)} h ago`;
-  console.log(`ME Hub testnet: latest block ${b.height}, ${ago}${age > 120 ? "  (NOT producing blocks right now; the checks below read what is already on chain and still apply)" : ""}\n`);
+  let why = "";
+  if (age > 120) {
+    // a halt at the governance-scheduled upgrade height is planned: name the release
+    const plan = await fetch(`${REST}/cosmos/upgrade/v1beta1/current_plan`, { signal: AbortSignal.timeout(8000) })
+      .then((r) => r.json()).then((x) => x.plan).catch(() => null);
+    why = plan && Math.abs(Number(plan.height) - Number(b.height)) <= 1
+      ? `  (NOT producing blocks: halted at the scheduled upgrade to ${plan.name}, voted by governance, until validators switch releases.` +
+        ` The checks below read what is already on chain and still apply; CI re-runs the kill-switch, obey-every-order and agent-to-agent flows on a local ${plan.name} chain)`
+      : "  (NOT producing blocks right now; the checks below read what is already on chain and still apply)";
+  }
+  console.log(`ME Hub testnet: latest block ${b.height}, ${ago}${why}\n`);
 } catch (e) {
   console.log(`ME Hub testnet: couldn't read the latest block (${e.message}); the chain checks below may fail for that reason\n`);
 }
