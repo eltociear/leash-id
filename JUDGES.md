@@ -131,6 +131,7 @@ on every push; Claude runs are recorded once and committed.
 - Sends hash the tx before broadcasting. An unconfirmed send is reported as UNKNOWN with its hash, never as
   "not sent", so a retry can't double-pay. While the testnet is halted a send isn't broadcast at all: it comes back
   NOT SENT with the age of the latest block, in under a second, instead of waiting 60 s and then reporting UNKNOWN.
+  That happened for real when the public endpoint stood still for 23 hours on 11-26/27: nothing was sent into it.
 
 **Depth of ME Network integration (25)**
 - ME Hub opens three Stargate queries and one custom message to CosmWasm. Leash ID uses every one that carries
@@ -144,10 +145,14 @@ on every push; Claude runs are recorded once and committed.
 - EVM sub-accounts (x/kyc `MsgCreateSubAccount`) resolve to their ME ID. This is shown on testnet with real
   records (above) and on the node (step 7).
 - Payments and fees are in MEC, and receipts store the owner's and the vendor's ME ID numbers.
+- Two signatures, on testnet, by two real KYC-2 ME IDs ([`runs/testnet-cosign-2026-11-27T06-43-15Z.txt`](runs/testnet-cosign-2026-11-27T06-43-15Z.txt)): the owner's and a CFO's, each
+  re-read from x/did when they sign, so a co-approver whose ME ID lapses stops counting. With two signers the owner's
+  key alone can't loosen the leash or take the budget.
 - Two-person approval means two ME IDs: co-approvers are counted one per ME ID, so two addresses of one ME ID
   (a main account and its EVM sub-account) can't be two signatures (refused on testnet, `runs/testnet-payments-*.txt` 5b).
 - `leash lock` makes the bond with ME Hub's own `MsgDoFixedDeposit` (x/wstaking, hand-encoded: cosmjs has no type
-  for it), in the owner's KYC region's term.
+  for it), in the owner's KYC region's term. Recorded on testnet ([`runs/testnet-bond-2026-11-27T06-42-24Z.txt`](runs/testnet-bond-2026-11-27T06-42-24Z.txt)), where the contract also
+  refuses to count someone else's deposit.
 
 **Product value (20)**
 - The problem, with sources: [README → Why now](README.md). Business email compromise cost close to $2.8B in
@@ -174,8 +179,13 @@ on every push; Claude runs are recorded once and committed.
 
 **Innovation (15)**
 - The chain, not the prompt, is the safety layer. The MCP server even offers owner-only tools in the demo, and the
-  contract refuses them. See [`runs/devnet-obey-*.txt`](runs/): a client that obeys every email made 8 attacks
-  and none got through.
+  contract refuses them. A client that obeys every email made 8 attacks and none got through, on testnet
+  ([`runs/testnet-obey-2026-11-27T06-41-51-035Z.txt`](runs/testnet-obey-2026-11-27T06-41-51-035Z.txt)) and on a fresh node in CI on every push.
+- A stolen owner key isn't enough either. Once a leash is co-signed, every change that loosens it (higher limits, no
+  approval line, a new vendor or agent, a withdrawal, fewer signers) waits 24 hours, and any co-approver can cancel it.
+  Tightening is immediate, and enough signers agreeing apply a change at once. Recorded on testnet ([`runs/testnet-cosign-2026-11-27T06-43-15Z.txt`](runs/testnet-cosign-2026-11-27T06-43-15Z.txt)).
+- The evidence outlives the testnet: every cited transaction is proven into its signed block from a committed
+  snapshot, with no network (`npm run check:chain:offline`).
 - HTTP 402 with a verified human on both sides:
   - The buyer checks that the seller holds an ME ID.
   - The seller checks that a live ME ID answers for the buyer.
@@ -186,6 +196,11 @@ on every push; Claude runs are recorded once and committed.
 **User experience (10)**
 - A verifier with no wallet, an owner console (Keplr; tested end to end with a mnemonic signer), and a CLI with
   per-command help and exit codes (3 = "outcome unknown, look it up").
+- A red-team page anyone can use without a wallet or a key ([leash-id-sandbox.vercel.app](https://leash-id-sandbox.vercel.app/)):
+  one click per attack, each answered by the deployed contract.
+- A transaction page that says what happened in words, from the contract's own event: "held for review, not
+  applied …", "signature 1 of 2: not paid yet", "refused: vendor … is not allowed".
+- A 4:51 demo video with English captions, and `npm run judge`: one command, five one-line verdicts.
 - READMEs in [Japanese](README.ja.md) and [Chinese](README.zh-CN.md).
 - MCP results Claude can act on: `PAID`, `HELD FOR OWNER APPROVAL`, `REFUSED`, `UNKNOWN` (may have gone through:
   look it up) and `NOT SENT` (safe to retry), each with the reason and the tx link.
